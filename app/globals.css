@@ -1,26 +1,61 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #001633;
+  --foreground: #ffffff;
+  --accent: #FF6B00;
+  --surface: #0d2240;
+  --surface-light: #1e2f4d;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-accent: var(--accent);
+  --color-surface: var(--surface);
+  --color-surface-light: var(--surface-light);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  scroll-behavior: smooth;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
+
+/* Custom scrollbar for dark theme */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #001633;
+}
+::-webkit-scrollbar-thumb {
+  background: #1e2f4d;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #2a3f66;
+}
+
+/* Focus ring utility */
+.focus-ring:focus-visible {
+  outline: none;
+  ring: 2px;
+  ring-color: #FF6B00;
+  ring-offset: 2px;
+  ring-offset-color: #001633;
+}
+
+/* Input placeholder color */
+::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
