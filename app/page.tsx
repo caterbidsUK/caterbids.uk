@@ -1,6 +1,5 @@
 "use client"
 
-import { useRouter } from "next/navigation"
 import { useState, type ReactNode } from "react"
 import {
   Menu,
@@ -21,98 +20,65 @@ import {
   MapPin,
   Tag,
 } from "lucide-react"
-
-const categories = [
-  "All Categories",
-  "Cooking Equipment",
-  "Refrigeration",
-  "Food Preparation",
-  "Warewashing",
-  "Coffee & Bar",
-  "Display & Serving",
-  "Furniture & Front of House",
-  "Extraction & Ventilation",
-  "Food Vans & Trailers",
-  "Complete Catering Businesses",
-  "Parts & Spares",
-]
+import { CATEGORY_OPTIONS } from "@/lib/categories"
 
 export default function HomePage() {
-  const router = useRouter()
-
   const [search, setSearch] = useState("")
-  const [location, setLocation] = useState("All UK")
+  const [location, setLocation] = useState("")
   const [category, setCategory] = useState("All Categories")
 
-  function handleSearch() {
-    const query = search.trim() || "all"
-
-    router.push(
-      `/search?q=${encodeURIComponent(query)}&category=${encodeURIComponent(
-        category
-      )}&location=${encodeURIComponent(location)}`
-    )
-  }
-
-  function goToPostListing() {
-    router.push("/post-listing")
-  }
-
   return (
-    <main className="min-h-screen bg-[#001633] text-white pb-28">
+    <main className="app-bg min-h-screen text-white pb-28">
       <div className="mx-auto max-w-3xl px-4 sm:px-6">
         <header className="flex items-center justify-between py-5">
-          <button
-            type="button"
+          <a
+            href="/search?q=all&category=All%20Categories&location=All%20UK"
             aria-label="Open menu"
-            className="rounded-xl p-2 transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6B00]"
+            className="soft-button rounded-2xl p-2.5"
           >
             <Menu className="h-6 w-6" />
-          </button>
+          </a>
 
           <div className="flex flex-col items-center">
-            <img src="/logo.png" alt="CaterBids" className="h-[165px]" />
-            <span className="mt-0.5 text-[10px] font-bold tracking-[0.2em] text-[#FF6B00] uppercase">
+            <div className="flex h-14 w-56 items-center justify-center rounded-2xl border border-white/70 bg-white px-4 shadow-xl shadow-black/20 sm:h-16 sm:w-64">
+              <img
+                src="/caterbids-card-logo.png"
+                alt="CaterBids.uk"
+                className="h-full w-full object-contain"
+              />
+            </div>
+            <span className="mt-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-[#FF6B00]">
               Buy • Sell • Save
             </span>
           </div>
 
-          <button
-            type="button"
+          <a
+            href="/messages"
             aria-label="Notifications"
-            className="relative rounded-xl p-2 transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6B00]"
+            className="soft-button relative rounded-2xl p-2.5"
           >
             <Bell className="h-6 w-6" />
             <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#FF6B00] text-[10px] font-bold">
               3
             </span>
-          </button>
+          </a>
         </header>
 
-        <section className="relative mt-2 overflow-hidden rounded-3xl">
-          <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1556910103-1c02745aae4d?auto=format&fit=crop&w=1200&q=80')] bg-cover bg-center" />
-          <div className="absolute inset-0 bg-gradient-to-t from-[#001633] via-[#001633]/70 to-[#001633]/40" />
-
-          <div className="relative px-6 py-10 text-center sm:py-14">
-            <h1 className="text-3xl font-extrabold leading-tight tracking-tight sm:text-4xl">
-              The UK&apos;s #1 Hub for
-              <br />
-              <span className="text-[#FF6B00]">Catering Equipment</span>,
-              <br />
-              Vans & Businesses
-            </h1>
-
-            <p className="mx-auto mt-4 max-w-md text-base text-white/80 sm:text-lg">
-              One search. Every platform. The best deals in catering.
-            </p>
-          </div>
+        <section className="premium-shell relative mt-2 overflow-hidden rounded-[2rem]">
+          <div className="absolute inset-0 bg-[url('/home-header-2026.png')] bg-cover bg-center" />
+          <div className="relative h-[300px] sm:h-[420px]" />
         </section>
 
-        <div className="relative z-20 mx-auto -mt-6 w-full max-w-3xl rounded-2xl bg-white shadow-2xl border border-gray-200 overflow-hidden">
+        <form
+          action="/search"
+          method="get"
+          className="relative z-20 mx-auto -mt-6 w-full max-w-3xl overflow-hidden rounded-3xl border border-white/15 bg-white shadow-2xl shadow-black/30"
+        >
           <div className="flex items-center gap-3 px-5 py-5 border-b border-gray-200">
             <Search size={22} className="text-gray-400 shrink-0" />
 
             <input
+              name="q"
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -130,32 +96,27 @@ export default function HomePage() {
             <div className="flex items-center gap-3 border-b border-gray-200 px-5 py-4 md:border-b-0 md:border-r">
               <MapPin size={18} className="text-gray-400 shrink-0" />
 
-              <select
+              <input
+                name="location"
+                type="text"
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
-                className="w-full bg-white text-[#001633] outline-none"
+                placeholder="Postcode or city"
+                className="w-full bg-white text-[#001633] placeholder:text-gray-400 outline-none"
                 style={{
                   color: "#001633",
                   backgroundColor: "#ffffff",
                   WebkitTextFillColor: "#001633",
                 }}
-              >
-                <option>All UK</option>
-                <option>Birmingham</option>
-                <option>London</option>
-                <option>Manchester</option>
-                <option>Leeds</option>
-                <option>Bristol</option>
-                <option>Liverpool</option>
-                <option>Glasgow</option>
-                <option>Cardiff</option>
-              </select>
+              />
+              <input type="hidden" name="city" value={location} />
             </div>
 
             <div className="flex items-center gap-3 border-b border-gray-200 px-5 py-4 md:border-b-0 md:border-r">
               <Tag size={18} className="text-gray-400 shrink-0" />
 
               <select
+                name="category"
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
                 className="w-full bg-white text-[#001633] outline-none"
@@ -165,7 +126,7 @@ export default function HomePage() {
                   WebkitTextFillColor: "#001633",
                 }}
               >
-                {categories.map((item) => (
+                {CATEGORY_OPTIONS.map((item) => (
                   <option key={item} value={item}>
                     {item}
                   </option>
@@ -174,52 +135,39 @@ export default function HomePage() {
             </div>
 
             <button
-              type="button"
-              onClick={handleSearch}
-              className="m-3 rounded-xl bg-[#FF6B00] px-8 py-4 font-black text-white shadow-lg hover:bg-[#ff7d22]"
+              type="submit"
+              className="premium-button m-3 rounded-2xl px-8 py-4 font-black text-white"
             >
               Search
             </button>
           </div>
-        </div>
+        </form>
 
         <section className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
           <CategoryCard
             icon={<ChefHat className="h-6 w-6" />}
-            title="Equipment"
+            title="Catering Equipment"
             description="Ovens, fridges, fryers & more"
-            image="https://images.unsplash.com/photo-1556910103-1c02745aae4d?auto=format&fit=crop&w=900&q=80"
-            onClick={() =>
-              router.push(
-                "/search?q=commercial%20catering%20equipment&category=Cooking%20Equipment&location=All%20UK"
-              )
-            }
+            image="/home-equipment-card.png"
+            href="/category/catering-equipment"
           />
           <CategoryCard
             icon={<Truck className="h-6 w-6" />}
-            title="Catering Vans"
+            title="Catering Vans & Trailers"
             description="Vans, trailers, trucks & units"
-            image="https://images.unsplash.com/photo-1565123409695-7b5ef63a2efb?auto=format&fit=crop&w=900&q=80"
-            onClick={() =>
-              router.push(
-                "/search?q=van&category=Food%20Vans%20%26%20Trailers&location=All%20UK"
-              )
-            }
+            image="/home-van-card.png"
+            href="/category/catering-vans-trailers"
           />
           <CategoryCard
             icon={<Store className="h-6 w-6" />}
             title="Catering Businesses"
             description="Cafes, takeaways, restaurants & more"
-            image="https://images.unsplash.com/photo-1552566626-52f8b828add9?auto=format&fit=crop&w=900&q=80"
-            onClick={() =>
-              router.push(
-                "/search?q=business&category=Complete%20Catering%20Businesses&location=All%20UK"
-              )
-            }
+            image="/home-equipment-card.png"
+            href="/category/catering-businesses"
           />
         </section>
 
-        <section className="mt-6 rounded-2xl border border-[#FF6B00]/30 bg-gradient-to-r from-[#FF6B00]/10 to-transparent p-5">
+        <section className="premium-card mt-6 rounded-3xl p-5">
           <div className="flex flex-col items-center gap-4 sm:flex-row">
             <div className="text-3xl font-black tracking-tighter">
               <span className="text-red-500">e</span>
@@ -231,7 +179,7 @@ export default function HomePage() {
             <div className="hidden h-10 w-px bg-white/20 sm:block" />
 
             <div className="text-center sm:text-left">
-              <span className="inline-block rounded-md bg-[#FF6B00] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider">
+              <span className="premium-badge inline-block rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider">
                 Live Results
               </span>
               <div className="mt-1.5 text-lg font-bold">eBay Live Results</div>
@@ -242,10 +190,10 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] p-5 backdrop-blur-sm">
+        <section className="premium-card mt-6 rounded-3xl p-5">
           <div className="flex flex-col items-center gap-5 sm:flex-row sm:justify-between">
             <div className="flex items-center gap-4">
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[#FF6B00] shadow-lg shadow-orange-500/20">
+              <div className="orange-glow flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#FF6B00]">
                 <Plus className="h-7 w-7" />
               </div>
 
@@ -258,13 +206,12 @@ export default function HomePage() {
             </div>
 
             <div className="flex flex-col items-center gap-1 sm:items-end">
-              <button
-                type="button"
-                onClick={goToPostListing}
-                className="rounded-xl bg-[#FF6B00] px-6 py-3 text-sm font-bold text-white shadow-lg shadow-orange-500/30 transition-all hover:scale-[1.02] hover:shadow-orange-500/40 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6B00] focus-visible:ring-offset-2 focus-visible:ring-offset-[#001633]"
+              <a
+                href="/post-listing"
+                className="premium-button rounded-2xl px-6 py-3 text-sm font-bold text-white"
               >
                 Post Your Item
-              </button>
+              </a>
               <span className="text-xs font-semibold text-[#FF6B00]">
                 It&apos;s free to start
               </span>
@@ -296,41 +243,36 @@ export default function HomePage() {
         </section>
       </div>
 
-      <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-white/10 bg-[#03152B]/95 backdrop-blur-md">
+      <nav className="bottom-nav fixed bottom-0 left-0 right-0 z-50">
         <div className="mx-auto flex max-w-3xl items-end justify-around px-3 pb-4 pt-3">
           <NavButton
             icon={<Home className="h-5 w-5" />}
             label="Home"
             active
-            onClick={() => router.push("/")}
+            href="/"
           />
           <NavButton
             icon={<Search className="h-5 w-5" />}
             label="Search"
-            onClick={() =>
-              router.push(
-                "/search?q=all&category=All%20Categories&location=All%20UK"
-              )
-            }
+            href="/search?q=all&category=All%20Categories&location=All%20UK"
           />
-          <button
-            type="button"
+          <a
+            href="/post-listing"
             aria-label="Post listing"
-            onClick={goToPostListing}
-            className="-mt-8 flex h-14 w-14 items-center justify-center rounded-full bg-[#FF6B00] text-white shadow-xl shadow-orange-500/30 transition-all hover:scale-105 hover:shadow-orange-500/50 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6B00] focus-visible:ring-offset-2 focus-visible:ring-offset-[#001633]"
+            className="premium-button -mt-8 flex h-14 w-14 items-center justify-center rounded-full text-white"
           >
             <Plus className="h-7 w-7" />
-          </button>
+          </a>
           <NavButton
             icon={<MessageSquare className="h-5 w-5" />}
             label="Messages"
             badge={2}
-            onClick={() => router.push("/messages")}
+            href="/messages"
           />
           <NavButton
             icon={<UserCircle className="h-5 w-5" />}
             label="Account"
-            onClick={() => router.push("/account")}
+            href="/account"
           />
         </div>
       </nav>
@@ -343,19 +285,18 @@ function CategoryCard({
   title,
   description,
   image,
-  onClick,
+  href,
 }: {
   icon: ReactNode
   title: string
   description: string
   image: string
-  onClick: () => void
+  href: string
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="group overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] text-left transition-all hover:border-white/20 hover:bg-white/[0.06] hover:shadow-xl hover:shadow-black/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6B00] focus-visible:ring-offset-2 focus-visible:ring-offset-[#001633]"
+    <a
+      href={href}
+      className="premium-card premium-card-hover group overflow-hidden rounded-3xl text-left focus-visible:outline-none"
     >
       <div className="relative h-36 overflow-hidden sm:h-32">
         <img
@@ -364,20 +305,20 @@ function CategoryCard({
           className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-[#001633]/80 to-transparent" />
-        <div className="absolute left-3 top-3 flex h-10 w-10 items-center justify-center rounded-full bg-[#001633]/80 text-[#FF6B00] backdrop-blur-sm">
+        <div className="absolute left-3 top-3 flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-[#001633]/80 text-[#FF6B00] backdrop-blur-sm">
           {icon}
         </div>
       </div>
 
       <div className="p-4">
-        <div className="text-base font-bold">{title}</div>
+        <div className="text-base font-black text-[#FF6B00]">{title}</div>
         <div className="mt-1 text-sm text-white/70">{description}</div>
         <div className="mt-3 flex items-center gap-1 text-sm font-bold text-[#FF6B00] transition-colors group-hover:text-orange-400">
           Browse{" "}
           <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
         </div>
       </div>
-    </button>
+    </a>
   )
 }
 
@@ -391,8 +332,8 @@ function TrustItem({
   description: string
 }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-center backdrop-blur-sm transition-all hover:border-white/20 hover:bg-white/[0.06]">
-      <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-[#FF6B00]/10 text-[#FF6B00]">
+    <div className="premium-card rounded-2xl p-4 text-center transition-all hover:border-white/20">
+      <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-2xl bg-[#FF6B00]/10 text-[#FF6B00]">
         {icon}
       </div>
       <div className="mt-3 text-xs font-bold">{title}</div>
@@ -408,20 +349,19 @@ function NavButton({
   label,
   active = false,
   badge,
-  onClick,
+  href,
 }: {
   icon: ReactNode
   label: string
   active?: boolean
   badge?: number
-  onClick: () => void
+  href: string
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`relative flex flex-col items-center gap-1 rounded-lg px-3 py-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6B00] ${
-        active ? "text-[#FF6B00]" : "text-white/60 hover:text-white"
+    <a
+      href={href}
+      className={`relative flex min-w-14 flex-col items-center gap-1 rounded-2xl px-3 py-2 transition-colors focus-visible:outline-none ${
+        active ? "bg-[#FF6B00]/12 text-[#FF6B00]" : "text-white/60 hover:bg-white/5 hover:text-white"
       }`}
     >
       {icon}
@@ -431,8 +371,6 @@ function NavButton({
           {badge}
         </span>
       )}
-    </button>
+    </a>
   )
 }
-
-

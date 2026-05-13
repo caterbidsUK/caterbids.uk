@@ -1,0 +1,8 @@
+### Test CaterBids search API
+GET http://localhost:3000/api/search HTTP/1.1
+
+### Test eBay search API
+GET http://localhost:3000/api/ebay-search?q=fryer HTTP/1.1
+
+### Test account page
+GET http://localhost:3000/account HTTP/1.1

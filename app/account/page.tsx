@@ -1,49 +1,100 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
-import type { Database } from '@/types/supabase'
 import { cookies } from 'next/headers'
-
-type Profile = Database['public']['Tables']['profiles']['Row']
+import { createClient } from '@/lib/supabase/server'
+import { getCurrentUser } from '@/lib/supabase/auth'
+import AccountClient from './AccountClient'
 
 export default async function AccountPage() {
-  const cookieStore = await cookies()
   const supabase = await createClient()
-  const { data: { session } } = await supabase.auth.getSession()
+  const user = await getCurrentUser(supabase)
+  const cookieStore = await cookies()
+  const hasDevAuth =
+    process.env.NODE_ENV === 'development' && cookieStore.get('caterbids_dev_auth')?.value === '1'
 
-  if (!session) {
+  if (!user && !hasDevAuth) {
     redirect('/login')
   }
 
-  const { data: profileData, error } = await supabase
+  if (!user && hasDevAuth) {
+    return (
+      <AccountClient
+        profile={{
+          id: 'local-beta-preview',
+          name: 'Local Beta Preview',
+          business: 'CaterBidsUK',
+          location: 'UK',
+          phone: '',
+          avatar_url: '',
+          verified: false,
+          created_at: null,
+          updated_at: null,
+        }}
+        userEmail="local-beta@caterbids.uk"
+        createdAt={null}
+        userId="local-beta-preview"
+        stats={[
+          { label: 'Active Listings', value: 0 },
+          { label: 'Messages', value: 0 },
+          { label: 'Saved Items', value: 0 },
+          { label: 'Search Alerts', value: 0 },
+        ]}
+      />
+    )
+  }
+
+  if (!user) {
+    redirect('/login')
+  }
+
+  const authedUser = user
+
+  const { data: profileData } = await supabase
     .from('profiles')
     .select('*')
-    .eq('id', session.user.id)
-    .single()
+    .eq('id', authedUser.id)
+    .maybeSingle()
 
   const profile = profileData || {
-    name: session.user.email?.split('@')[0] || 'User',
+    id: authedUser.id,
+    name: authedUser.email?.split('@')[0] || 'User',
     business: '',
     location: '',
     phone: '',
     avatar_url: '',
-    verified: false
+    verified: false,
+    created_at: null,
+    updated_at: null
   }
 
+  // Fetch real stats
+  const { count: listingsCount } = await supabase
+    .from('listings')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', authedUser.id)
+    .or('status.is.null,status.eq.live,status.eq.payment_pending')
+
+  const { count: favouritesCount } = await supabase
+    .from('favourites')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', authedUser.id)
+
+  const messagesCount = 0
+  const alertsCount = 0
+
   const stats = [
-    { label: 'Active Listings', value: '3' },
-    { label: 'Messages', value: '12' },
-    { label: 'Saved Items', value: '8' },
-    { label: 'Search Alerts', value: '4' },
+    { label: 'Active Listings', value: listingsCount || 0 },
+    { label: 'Messages', value: messagesCount },
+    { label: 'Saved Items', value: favouritesCount || 0 },
+    { label: 'Search Alerts', value: alertsCount },
   ]
 
-  return <div className="p-8 text-center">
-    <h1 className="text-4xl font-black mb-4">Account</h1>
-    <p className="text-xl text-white/70 mb-8 max-w-md mx-auto">
-      Now powered by Supabase! Profile data: 
-      <pre className="mt-4 p-4 bg-[#0d213d] rounded-2xl text-left text-sm">{JSON.stringify(profile, null, 2)}</pre>
-    </p>
-    <a href="/settings" className="bg-[#FF6B00] px-8 py-4 rounded-2xl font-black text-white hover:bg-[#ff7d22]">
-      → Edit Profile in Settings
-    </a>
-  </div>
+  return (
+    <AccountClient 
+      profile={profile}
+      userEmail={authedUser.email || ''}
+      createdAt={profile.created_at || null}
+      userId={authedUser.id}
+      stats={stats}
+    />
+  )
 }

@@ -1,58 +1,142 @@
 "use client"
 
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useState, useEffect } from 'react'
+import Link from 'next/link'
+import { Suspense, useState, useEffect, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { getCurrentUser } from '@/lib/supabase/auth'
 import { ArrowLeft, Mail, Lock, UserPlus, LogIn, EyeOff, Loader2 } from 'lucide-react'
+import SocialLoginButtons from '@/components/auth/SocialLoginButtons'
 
-export default function LoginPage() {
+function isEmailNotConfirmed(message: string) {
+  return message.toLowerCase().includes('email not confirmed')
+}
+
+function authErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message) {
+    if (error.message.toLowerCase().includes('load failed')) {
+      return 'Could not reach the authentication service. Check your internet connection, then try again.'
+    }
+
+    return error.message
+  }
+
+  return 'Authentication is temporarily unavailable. Please try again.'
+}
+
+function LoginContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [mode, setMode] = useState<'signin' | 'signup'>('signin')
   const [loading, setLoading] = useState(false)
+  const [resendingConfirmation, setResendingConfirmation] = useState(false)
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   
-  const supabase = createClient()
-  const redirectTo = searchParams.get('redirect') || '/account'
+  const supabase = useMemo(() => createClient(), [])
+  const next = searchParams.get('next') || searchParams.get('redirect') || '/dashboard'
+  const callbackError = searchParams.get('error')
+  const isLocalDev = process.env.NODE_ENV === 'development'
+  const showConfirmationResend = isEmailNotConfirmed(error) && email.trim().length > 0
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError('')
+    setNotice('')
 
-    const { data, error: authError } = mode === 'signin' 
-      ? await supabase.auth.signInWithPassword({ email, password })
-      : await supabase.auth.signUp({ email, password })
+    try {
+      const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`
+      const { data, error: authError } = mode === 'signin'
+        ? await supabase.auth.signInWithPassword({ email, password })
+        : await supabase.auth.signUp({
+            email,
+            password,
+            options: {
+              emailRedirectTo: redirectTo,
+            },
+          })
 
-    if (authError) {
-      setError(authError.message)
-    } else if (data.user) {
-      router.push(redirectTo)
-      router.refresh()
+      if (authError) {
+        setError(
+          isEmailNotConfirmed(authError.message)
+            ? 'Email not confirmed. You can resend the confirmation email below, or continue with the local beta preview on this machine.'
+            : authError.message
+        )
+        return
+      }
+
+      if (data.session) {
+        router.push(next)
+        router.refresh()
+        return
+      }
+
+      if (data.user) {
+        setMode('signin')
+        setNotice('Account created. Please confirm your email address, then sign in.')
+      }
+    } catch (authError) {
+      setError(authErrorMessage(authError))
+    } finally {
+      setLoading(false)
     }
+  }
 
-    setLoading(false)
+  async function resendConfirmationEmail() {
+    const trimmedEmail = email.trim()
+    if (!trimmedEmail) return
+
+    setResendingConfirmation(true)
+    setError('')
+    setNotice('')
+
+    try {
+      const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`
+      const { error: resendError } = await supabase.auth.resend({
+        type: 'signup',
+        email: trimmedEmail,
+        options: {
+          emailRedirectTo: redirectTo,
+        },
+      })
+
+      if (resendError) {
+        setError(resendError.message)
+        return
+      }
+
+      setNotice('Confirmation email sent. Check your inbox and spam folder.')
+    } catch (resendError) {
+      setError(authErrorMessage(resendError))
+    } finally {
+      setResendingConfirmation(false)
+    }
   }
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        router.push(redirectTo)
+    async function redirectSignedInUser() {
+      const user = await getCurrentUser(supabase)
+
+      if (user) {
+        router.push(next)
       }
-    })
-  }, [router, redirectTo, supabase])
+    }
+
+    redirectSignedInUser()
+  }, [router, next, supabase])
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-[#001633] via-[#0d213d] to-[#001633] flex items-center justify-center p-4">
+    <main className="app-bg flex min-h-screen items-center justify-center p-4">
       <div className="w-full max-w-md">
         {/* Header */}
         <div className="text-center mb-8">
           <button 
             onClick={() => router.push('/')}
-            className="flex items-center gap-2 mx-auto mb-4 text-white/70 hover:text-white"
+            className="soft-button mx-auto mb-4 flex items-center gap-2 rounded-2xl px-3 py-2"
           >
             <ArrowLeft size={24} />
           </button>
@@ -65,14 +149,35 @@ export default function LoginPage() {
         </div>
 
         {/* Auth Card */}
-        <div className="bg-[#0d213d]/80 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl">
+        <div className="premium-shell rounded-[2rem] p-8">
+          <div className="mb-6 rounded-3xl border border-[#FF6B00]/25 bg-[#FF6B00]/10 p-4">
+            <h2 className="text-xl font-black text-white">Sign in to CaterBidsUK</h2>
+            <p className="mt-2 text-sm leading-relaxed text-white/70">
+              Create a free account to save favourites, save searches, message sellers, and manage listings.
+            </p>
+          </div>
+
+          {callbackError && (
+            <div className="mb-5 rounded-2xl border border-red-500/50 bg-red-500/15 p-4 text-sm font-semibold text-red-100">
+              Sign in could not be completed. Please try again.
+            </div>
+          )}
+
+          <SocialLoginButtons />
+
+          <div className="my-7 flex items-center gap-3 text-xs font-bold uppercase tracking-[0.2em] text-white/35">
+            <span className="h-px flex-1 bg-white/10" />
+            or use email
+            <span className="h-px flex-1 bg-white/10" />
+          </div>
+
           <div className="flex justify-center gap-2 mb-8">
             <button
               onClick={() => setMode('signin')}
               className={`flex-1 py-3 px-4 rounded-2xl font-black transition-all ${
                 mode === 'signin'
-                  ? 'bg-[#FF6B00] text-white shadow-lg shadow-[#FF6B00]/25'
-                  : 'bg-white/5 text-white/70 hover:bg-white/10'
+                  ? 'premium-button text-white'
+                  : 'soft-button text-white/70'
               }`}
             >
               <LogIn size={20} className="mx-auto mb-1" />
@@ -82,8 +187,8 @@ export default function LoginPage() {
               onClick={() => setMode('signup')}
               className={`flex-1 py-3 px-4 rounded-2xl font-black transition-all ${
                 mode === 'signup'
-                  ? 'bg-[#FF6B00] text-white shadow-lg shadow-[#FF6B00]/25'
-                  : 'bg-white/5 text-white/70 hover:bg-white/10'
+                  ? 'premium-button text-white'
+                  : 'soft-button text-white/70'
               }`}
             >
               <UserPlus size={20} className="mx-auto mb-1" />
@@ -92,9 +197,25 @@ export default function LoginPage() {
           </div>
 
           <form onSubmit={handleAuth} className="space-y-6">
+            {notice && (
+              <div className="rounded-2xl border border-green-400/40 bg-green-500/15 p-4 text-green-100">
+                {notice}
+              </div>
+            )}
+
             {error && (
-              <div className="bg-red-500/20 border border-red-500/50 rounded-2xl p-4 text-red-100">
+              <div className="rounded-2xl border border-red-500/50 bg-red-500/15 p-4 text-red-100">
                 {error}
+                {showConfirmationResend && (
+                  <button
+                    type="button"
+                    onClick={resendConfirmationEmail}
+                    disabled={resendingConfirmation}
+                    className="mt-3 flex min-h-10 w-full items-center justify-center rounded-xl border border-white/15 bg-white/10 px-4 py-2 text-sm font-black text-white transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {resendingConfirmation ? 'Sending...' : 'Resend confirmation email'}
+                  </button>
+                )}
               </div>
             )}
 
@@ -107,7 +228,7 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@example.com"
-                  className="w-full bg-white/5 border border-white/10 rounded-2xl pl-12 pr-4 py-4 text-white placeholder-white/40 focus:border-[#FF6B00] focus:outline-none transition-all"
+                  className="premium-input w-full rounded-2xl py-4 pl-12 pr-4 text-white placeholder-white/40"
                   required
                 />
               </div>
@@ -122,7 +243,7 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full bg-white/5 border border-white/10 rounded-2xl pl-12 pr-12 py-4 text-white placeholder-white/40 focus:border-[#FF6B00] focus:outline-none transition-all"
+                  className="premium-input w-full rounded-2xl py-4 pl-12 pr-12 text-white placeholder-white/40"
                   required
                 />
                 <button
@@ -138,7 +259,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-[#FF6B00] text-white py-5 rounded-2xl font-black text-lg shadow-lg hover:bg-[#ff7d22] hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="premium-button flex w-full items-center justify-center gap-2 rounded-2xl py-5 text-lg font-black text-white disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading ? (
                 <>
@@ -154,6 +275,15 @@ export default function LoginPage() {
             </button>
           </form>
 
+          {isLocalDev && (
+            <Link
+              href={`/api/dev-login?next=${encodeURIComponent('/dashboard')}`}
+              className="mt-4 flex min-h-12 w-full items-center justify-center rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-sm font-black text-white transition hover:bg-white/15"
+            >
+              Continue in local beta preview
+            </Link>
+          )}
+
           <p className="text-center mt-6 text-sm text-white/50">
             By signing up, you agree to our{' '}
             <span className="text-[#FF6B00] hover:underline cursor-pointer font-semibold">Terms of Service</span>
@@ -164,3 +294,16 @@ export default function LoginPage() {
   )
 }
 
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen bg-gradient-to-br from-[#001633] via-[#0d213d] to-[#001633] flex items-center justify-center p-4 text-white">
+          <Loader2 className="h-8 w-8 animate-spin text-[#FF6B00]" />
+        </main>
+      }
+    >
+      <LoginContent />
+    </Suspense>
+  )
+}
