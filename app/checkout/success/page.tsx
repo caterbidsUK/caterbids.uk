@@ -39,7 +39,8 @@ function money(value: number | null | undefined) {
 }
 
 function statusLabel(value: string | null | undefined) {
-  return (value || "booking_requested").replace(/_/g, " ")
+  const normalized = (value || "booking_requested").replace(/_/g, " ")
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1)
 }
 
 function CheckoutSuccessContent() {
@@ -164,6 +165,9 @@ function CheckoutSuccessContent() {
 
         <div className="mt-5 rounded-2xl border border-orange-200 bg-orange-50 p-4">
           <h2 className="font-black text-[#002E5D]">Delivery status: {statusLabel(visibleDeliveryStatus)}</h2>
+          <p className="mt-1 text-sm font-semibold leading-relaxed text-slate-700">
+            Your courier booking request has been received. Final confirmation and tracking will follow.
+          </p>
           <div className="mt-3 grid gap-2 text-sm">
             <div className="flex justify-between gap-3 rounded-xl bg-white px-3 py-2">
               <span className="font-semibold text-slate-600">Selected delivery</span>
