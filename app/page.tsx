@@ -9,9 +9,6 @@ import {
   Plus,
   MessageSquare,
   UserCircle,
-  ChefHat,
-  Truck,
-  Store,
   ShieldCheck,
   PoundSterling,
   Clock,
@@ -47,7 +44,7 @@ export default function HomePage() {
                 className="h-full w-full object-contain"
               />
             </div>
-            <span className="mt-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-[#FF6B00]">
+            <span className="mt-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-white/45">
               Buy • Sell • Save
             </span>
           </div>
@@ -64,18 +61,10 @@ export default function HomePage() {
           </a>
         </header>
 
-        <section className="premium-shell relative mt-2 overflow-hidden rounded-[2rem]">
-          <h1 className="sr-only">Buy and sell used catering equipment across the UK.</h1>
-          <div
-            aria-hidden="true"
-            className="min-h-[300px] bg-[url('/home-header-2026.png')] bg-cover bg-center sm:min-h-[420px]"
-          />
-        </section>
-
         <form
           action="/search"
           method="get"
-          className="relative z-20 mx-auto -mt-6 w-full max-w-3xl overflow-hidden rounded-3xl border border-white/15 bg-white shadow-2xl shadow-black/30"
+          className="relative z-20 mx-auto mt-1 w-full max-w-3xl overflow-hidden rounded-3xl border border-white/15 bg-white shadow-2xl shadow-black/25"
         >
           <div className="flex items-center gap-3 px-5 py-5 border-b border-gray-200">
             <Search size={22} className="text-gray-400 shrink-0" />
@@ -146,32 +135,44 @@ export default function HomePage() {
           </div>
         </form>
 
-        <section className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <section className="mt-5 rounded-[2rem] border border-white/10 bg-[#002E5D] p-5 shadow-2xl shadow-black/20 sm:p-7">
+          <h1 className="max-w-xl text-3xl font-black leading-tight text-white sm:text-5xl">
+            Buy and sell catering equipment across the UK.
+          </h1>
+          <p className="mt-3 max-w-xl text-base font-medium leading-relaxed text-white/72">
+            Equipment, vans, trailers and catering businesses in one place.
+          </p>
+          <a
+            href="/post-listing"
+            className="premium-button mt-5 inline-flex rounded-2xl px-5 py-3 text-sm font-black text-white"
+          >
+            Sell an item
+          </a>
+        </section>
+
+        <section className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
           <CategoryCard
-            icon={<ChefHat className="h-6 w-6" />}
             title="Catering Equipment"
-            description="Ovens, fridges, fryers & more"
+            description="Ovens, fridges and fryers"
             image="/home-equipment-card.png"
             href="/category/catering-equipment"
           />
           <CategoryCard
-            icon={<Truck className="h-6 w-6" />}
             title="Catering Vans & Trailers"
-            description="Vans, trailers, trucks & units"
+            description="Mobile catering units"
             image="/home-van-card.png"
             href="/category/catering-vans-trailers"
           />
           <CategoryCard
-            icon={<Store className="h-6 w-6" />}
             title="Catering Businesses"
-            description="Cafes, takeaways, restaurants & more"
+            description="Cafes, takeaways and restaurants"
             image="/home-equipment-card.png"
             href="/category/catering-businesses"
           />
         </section>
 
-        <section className="premium-card mt-6 rounded-3xl p-5">
-          <div className="flex flex-col items-center gap-4 sm:flex-row">
+        <section className="mt-5 rounded-3xl bg-white p-5 text-[#002E5D] shadow-xl shadow-black/15">
+          <div className="flex items-center gap-4">
             <div className="text-3xl font-black tracking-tighter">
               <span className="text-red-500">e</span>
               <span className="text-blue-500">b</span>
@@ -179,64 +180,47 @@ export default function HomePage() {
               <span className="text-green-500">y</span>
             </div>
 
-            <div className="hidden h-10 w-px bg-white/20 sm:block" />
-
-            <div className="text-center sm:text-left">
-              <span className="premium-badge inline-block rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider">
-                Live Results
-              </span>
-              <div className="mt-1.5 text-lg font-bold">Compare live eBay results</div>
+            <div>
+              <h2 className="text-lg font-black">Compare with live eBay prices</h2>
+              <p className="mt-1 text-sm font-medium text-slate-600">
+                Check wider market prices before you buy.
+              </p>
             </div>
           </div>
         </section>
 
-        <section className="premium-card mt-6 rounded-3xl p-5">
-          <div className="flex flex-col items-center gap-5 sm:flex-row sm:justify-between">
-            <div className="flex items-center gap-4">
-              <div className="orange-glow flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#FF6B00]">
-                <Plus className="h-7 w-7" />
-              </div>
-
-              <div>
-                <div className="text-xl font-bold">Ready to sell?</div>
-                <div className="text-sm text-white/70">Create a listing in minutes.</div>
-              </div>
+        <section className="mt-5 rounded-3xl bg-white p-5 text-[#002E5D] shadow-xl shadow-black/15">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-xl font-black">Sell catering equipment fast</h2>
+              <p className="mt-1 text-sm font-medium text-slate-600">Create a listing in minutes.</p>
             </div>
 
-            <div className="flex flex-col items-center gap-1 sm:items-end">
-              <a
-                href="/post-listing"
-                className="premium-button rounded-2xl px-6 py-3 text-sm font-bold text-white"
-              >
-                Sell an item
-              </a>
-              <span className="text-xs font-semibold text-[#FF6B00]">
-                It&apos;s free to start
-              </span>
-            </div>
+            <a
+              href="/post-listing"
+              className="premium-button inline-flex justify-center rounded-2xl px-6 py-3 text-sm font-black text-white"
+            >
+              List your item
+            </a>
           </div>
         </section>
 
-        <section className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <section className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <TrustItem
             icon={<ShieldCheck className="h-6 w-6" />}
             title="Verified sellers"
-            description="Clear seller profiles"
           />
           <TrustItem
             icon={<PoundSterling className="h-6 w-6" />}
             title="Secure checkout"
-            description="Pay with confidence"
           />
           <TrustItem
             icon={<Clock className="h-6 w-6" />}
             title="Delivery support"
-            description="Pallet options"
           />
           <TrustItem
             icon={<TrendingUp className="h-6 w-6" />}
             title="Engineer support"
-            description="Coming soon"
           />
         </section>
       </div>
@@ -279,13 +263,11 @@ export default function HomePage() {
 }
 
 function CategoryCard({
-  icon,
   title,
   description,
   image,
   href,
 }: {
-  icon: ReactNode
   title: string
   description: string
   image: string
@@ -294,7 +276,7 @@ function CategoryCard({
   return (
     <a
       href={href}
-      className="premium-card premium-card-hover group overflow-hidden rounded-3xl text-left focus-visible:outline-none"
+      className="group overflow-hidden rounded-3xl bg-white text-left text-[#002E5D] shadow-xl shadow-black/15 transition-transform focus-visible:outline-none active:scale-[0.99]"
     >
       <div className="relative h-36 overflow-hidden sm:h-32">
         <img
@@ -302,16 +284,13 @@ function CategoryCard({
           alt={title}
           className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#001633]/80 to-transparent" />
-        <div className="absolute left-3 top-3 flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-[#001633]/80 text-[#FF6B00] backdrop-blur-sm">
-          {icon}
-        </div>
+        <div className="absolute inset-0 bg-gradient-to-t from-[#001633]/35 to-transparent" />
       </div>
 
       <div className="p-4">
-        <div className="text-base font-black text-[#FF6B00]">{title}</div>
-        <div className="mt-1 text-sm text-white/70">{description}</div>
-        <div className="mt-3 flex items-center gap-1 text-sm font-bold text-[#FF6B00] transition-colors group-hover:text-orange-400">
+        <div className="text-base font-black">{title}</div>
+        <div className="mt-1 text-sm font-medium text-slate-600">{description}</div>
+        <div className="mt-3 flex items-center gap-1 text-sm font-black text-[#002E5D] transition-colors group-hover:text-[#FF6B00]">
           Browse{" "}
           <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
         </div>
@@ -323,21 +302,16 @@ function CategoryCard({
 function TrustItem({
   icon,
   title,
-  description,
 }: {
   icon: ReactNode
   title: string
-  description: string
 }) {
   return (
-    <div className="premium-card rounded-2xl p-4 text-center transition-all hover:border-white/20">
-      <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-2xl bg-[#FF6B00]/10 text-[#FF6B00]">
+    <div className="rounded-2xl bg-white p-4 text-center text-[#002E5D] shadow-lg shadow-black/10">
+      <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-2xl bg-[#002E5D]/10 text-[#002E5D]">
         {icon}
       </div>
-      <div className="mt-3 text-xs font-bold">{title}</div>
-      <div className="mt-1 text-xs leading-relaxed text-white/60">
-        {description}
-      </div>
+      <div className="mt-3 text-xs font-black">{title}</div>
     </div>
   )
 }
