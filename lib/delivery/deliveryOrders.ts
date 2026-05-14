@@ -29,6 +29,18 @@ export function numberFromMetadata(value: string | undefined | null) {
   return Number.isFinite(numberValue) ? numberValue : 0
 }
 
+function booleanFromMetadata(value: string | undefined | null) {
+  if (!value) return null
+  const normalized = value.trim().toLowerCase()
+  if (["true", "1", "yes", "y"].includes(normalized)) return true
+  if (["false", "0", "no", "n"].includes(normalized)) return false
+  return null
+}
+
+function booleanFromUnknown(value: unknown) {
+  return typeof value === "boolean" ? value : null
+}
+
 export function nullableUuid(value: string | undefined | null) {
   if (!value) return null
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
@@ -114,7 +126,7 @@ export async function createDeliveryOrderBeforePayment(
     .from("delivery_orders")
     .insert({
       ...payload,
-      status: "pending_payment",
+      delivery_status: "pending_payment",
       courier_provider: payload.courier_provider || "Interparcel",
       updated_at: new Date().toISOString(),
     })
@@ -161,7 +173,16 @@ export async function upsertDeliveryOrderAfterPayment({
     selected_service_price: numberFromMetadata(metadata.selected_service_price || metadata.deliveryPrice),
     estimated_delivery_time: metadata.estimated_delivery_time || metadata.deliveryEta || null,
     courier_provider: metadata.courier_provider || "Interparcel",
-    status: "paid",
+    delivery_status: "paid",
+    pallet_size_name: metadata.pallet_size_name || metadata.palletSizeName || null,
+    tail_lift_required: booleanFromMetadata(metadata.tailLiftRequired) ?? booleanFromUnknown(listingData?.tail_lift_required),
+    forklift_available: booleanFromUnknown(listingData?.forklift_available),
+    pallet_truck_available: booleanFromUnknown(listingData?.pallet_truck_available),
+    commercial_premises: booleanFromUnknown(listingData?.commercial_premises),
+    ground_floor_collection: booleanFromUnknown(listingData?.ground_floor_collection),
+    access_restrictions: metadata.buyerAccessRestrictions || String(listingData?.access_restrictions || "") || null,
+    access_notes: metadata.buyerAccessRestrictions || String(listingData?.delivery_notes || "") || null,
+    pallet_ready_confirmed: booleanFromMetadata(metadata.palletReady) ?? booleanFromUnknown(listingData?.pallet_ready),
     paid_at: now,
     updated_at: now,
   }
@@ -171,7 +192,7 @@ export async function upsertDeliveryOrderAfterPayment({
       .from("delivery_orders")
       .update({
         ...basePayload,
-        status: "paid",
+        delivery_status: "paid",
         paid_at: existing.data.paid_at || now,
         updated_at: now,
       })
@@ -182,7 +203,7 @@ export async function upsertDeliveryOrderAfterPayment({
     return supabase
       .from("delivery_orders")
       .update({
-        status: "booking_requested",
+        delivery_status: "booking_requested",
         requested_at: existing.data.requested_at || now,
         updated_at: now,
       })
@@ -195,7 +216,7 @@ export async function upsertDeliveryOrderAfterPayment({
     .from("delivery_orders")
     .insert({
       ...basePayload,
-      status: "paid",
+      delivery_status: "paid",
     })
     .select("*")
     .single()
@@ -205,7 +226,7 @@ export async function upsertDeliveryOrderAfterPayment({
   return supabase
     .from("delivery_orders")
     .update({
-      status: "booking_requested",
+      delivery_status: "booking_requested",
       requested_at: now,
       updated_at: now,
     })
@@ -227,7 +248,7 @@ export async function simulateCourierConfirmation(supabase: SupabaseAdmin, deliv
   return supabase
     .from("delivery_orders")
     .update({
-      status: "courier_confirmed",
+      delivery_status: "courier_confirmed",
       courier_name: "Interparcel Test Courier",
       courier_reference: "TEST-REFERENCE",
       tracking_number: "TEST-TRACKING-NUMBER",

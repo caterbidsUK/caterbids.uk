@@ -309,7 +309,7 @@ export async function POST(req: NextRequest) {
             itemPrice: finalOrder.item_price,
             totalPrice: finalOrder.total_price,
             paymentStatus: finalOrder.payment_status,
-            deliveryStatus: deliveryOrderResult.data?.status || finalOrder.delivery_status,
+            deliveryStatus: deliveryOrderResult.data?.delivery_status || finalOrder.delivery_status,
             deliveryName: deliveryOrderResult.data?.selected_service_name || finalOrder.delivery_name,
             deliveryPrice: deliveryOrderResult.data?.selected_service_price || finalOrder.delivery_price,
             collectionPostcode: deliveryOrderResult.data?.collection_postcode || finalOrder.collection_postcode,
@@ -319,7 +319,7 @@ export async function POST(req: NextRequest) {
       deliveryOrder: deliveryOrderResult.data
         ? {
             id: deliveryOrderResult.data.id,
-            status: deliveryOrderResult.data.status,
+            status: deliveryOrderResult.data.delivery_status,
             selectedServiceName: deliveryOrderResult.data.selected_service_name,
             selectedServicePrice: deliveryOrderResult.data.selected_service_price,
             collectionPostcode: deliveryOrderResult.data.collection_postcode,

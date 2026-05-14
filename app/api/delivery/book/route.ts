@@ -177,7 +177,7 @@ async function saveBooking(session: Stripe.Checkout.Session, payload: BookingPay
   await supabase
     .from("delivery_orders")
     .update({
-      status: deliveryStatus,
+      delivery_status: deliveryStatus,
       courier_name: booking.provider,
       courier_reference: booking.bookingReference,
       tracking_number: booking.trackingNumber || null,

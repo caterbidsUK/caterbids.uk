@@ -233,6 +233,15 @@ export async function POST(req: NextRequest) {
         selected_service_price: Number(deliveryPrice || 0),
         estimated_delivery_time: estimatedDeliveryTime || null,
         courier_provider: "Interparcel",
+        pallet_size_name: null,
+        tail_lift_required: tailLiftRequired === "true" || (listing as any)?.tail_lift_required === true,
+        forklift_available: (listing as any)?.forklift_available ?? null,
+        pallet_truck_available: (listing as any)?.pallet_truck_available ?? null,
+        commercial_premises: (listing as any)?.commercial_premises ?? null,
+        ground_floor_collection: (listing as any)?.ground_floor_collection ?? null,
+        access_restrictions: buyerAccessRestrictions || (listing as any)?.access_restrictions || null,
+        access_notes: buyerAccessRestrictions || (listing as any)?.delivery_notes || null,
+        pallet_ready_confirmed: palletReady === "true" || palletReady === "1" || (listing as any)?.pallet_ready === true,
       })
 
       if (deliveryOrderError) {

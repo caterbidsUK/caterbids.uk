@@ -565,14 +565,13 @@ export interface Database {
       delivery_orders: {
         Row: {
           id: string
-          order_id: string | null
           listing_id: string
+          order_id: string | null
           buyer_id: string | null
           seller_id: string | null
-          stripe_checkout_session_id: string | null
-          stripe_payment_intent_id: string | null
           collection_postcode: string | null
           delivery_postcode: string | null
+          pallet_size_name: string | null
           weight_kg: number | null
           length_cm: number | null
           width_cm: number | null
@@ -583,11 +582,21 @@ export interface Database {
           selected_service_price: number | null
           estimated_delivery_time: string | null
           courier_provider: string | null
-          status: string
-          courier_name: string | null
-          courier_reference: string | null
+          delivery_status: string
+          tail_lift_required: boolean | null
+          forklift_available: boolean | null
+          pallet_truck_available: boolean | null
+          commercial_premises: boolean | null
+          ground_floor_collection: boolean | null
+          access_restrictions: string | null
+          access_notes: string | null
+          pallet_ready_confirmed: boolean | null
+          stripe_checkout_session_id: string | null
+          stripe_payment_intent_id: string | null
           tracking_number: string | null
           tracking_url: string | null
+          courier_name: string | null
+          courier_reference: string | null
           is_test: boolean
           paid_at: string | null
           requested_at: string | null
@@ -601,14 +610,13 @@ export interface Database {
         }
         Insert: {
           id?: string
-          order_id?: string | null
           listing_id: string
+          order_id?: string | null
           buyer_id?: string | null
           seller_id?: string | null
-          stripe_checkout_session_id?: string | null
-          stripe_payment_intent_id?: string | null
           collection_postcode?: string | null
           delivery_postcode?: string | null
+          pallet_size_name?: string | null
           weight_kg?: number | null
           length_cm?: number | null
           width_cm?: number | null
@@ -619,11 +627,21 @@ export interface Database {
           selected_service_price?: number | null
           estimated_delivery_time?: string | null
           courier_provider?: string | null
-          status?: string
-          courier_name?: string | null
-          courier_reference?: string | null
+          delivery_status?: string
+          tail_lift_required?: boolean | null
+          forklift_available?: boolean | null
+          pallet_truck_available?: boolean | null
+          commercial_premises?: boolean | null
+          ground_floor_collection?: boolean | null
+          access_restrictions?: string | null
+          access_notes?: string | null
+          pallet_ready_confirmed?: boolean | null
+          stripe_checkout_session_id?: string | null
+          stripe_payment_intent_id?: string | null
           tracking_number?: string | null
           tracking_url?: string | null
+          courier_name?: string | null
+          courier_reference?: string | null
           is_test?: boolean
           paid_at?: string | null
           requested_at?: string | null
@@ -637,14 +655,13 @@ export interface Database {
         }
         Update: {
           id?: string
-          order_id?: string | null
           listing_id?: string
+          order_id?: string | null
           buyer_id?: string | null
           seller_id?: string | null
-          stripe_checkout_session_id?: string | null
-          stripe_payment_intent_id?: string | null
           collection_postcode?: string | null
           delivery_postcode?: string | null
+          pallet_size_name?: string | null
           weight_kg?: number | null
           length_cm?: number | null
           width_cm?: number | null
@@ -655,11 +672,21 @@ export interface Database {
           selected_service_price?: number | null
           estimated_delivery_time?: string | null
           courier_provider?: string | null
-          status?: string
-          courier_name?: string | null
-          courier_reference?: string | null
+          delivery_status?: string
+          tail_lift_required?: boolean | null
+          forklift_available?: boolean | null
+          pallet_truck_available?: boolean | null
+          commercial_premises?: boolean | null
+          ground_floor_collection?: boolean | null
+          access_restrictions?: string | null
+          access_notes?: string | null
+          pallet_ready_confirmed?: boolean | null
+          stripe_checkout_session_id?: string | null
+          stripe_payment_intent_id?: string | null
           tracking_number?: string | null
           tracking_url?: string | null
+          courier_name?: string | null
+          courier_reference?: string | null
           is_test?: boolean
           paid_at?: string | null
           requested_at?: string | null

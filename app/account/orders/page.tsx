@@ -116,7 +116,7 @@ export default async function OrdersPage() {
                 deliveryOrdersByOrderId.get(order.id) ||
                 deliveryOrdersByStripeSession.get(order.stripe_session_id || "") ||
                 null
-              const deliveryStatus = deliveryOrder?.status || order.delivery_status || "not_required"
+              const deliveryStatus = deliveryOrder?.delivery_status || order.delivery_status || "not_required"
               const selectedService = deliveryOrder?.selected_service_name || order.delivery_name || "Not selected"
               const selectedServicePrice = deliveryOrder?.selected_service_price ?? order.delivery_price
               const showTracking = isRealTrackingAvailable(deliveryOrder)
