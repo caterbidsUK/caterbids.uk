@@ -182,9 +182,9 @@ export default function DeliveryQuoteBox({
   if (!deliveryAvailable) {
     return (
       <div className="premium-card rounded-3xl border-white/10 p-5">
-        <h3 className="text-lg font-black text-white">Collection Only</h3>
+        <h3 className="text-lg font-black text-white">Collection only</h3>
         <p className="mt-1 text-sm text-white/60">
-          This seller has not enabled delivery for this item.
+          Contact the seller to arrange pickup.
         </p>
       </div>
     )
@@ -195,50 +195,41 @@ export default function DeliveryQuoteBox({
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="text-xl font-black text-white">
-            CaterBids Delivery
+            Check delivery
           </h3>
           <p className="mt-1 text-sm leading-relaxed text-white/65">
-            Tracked pallet freight, tail-lift support and commercial freight protection for catering equipment.
+            Enter a postcode for pallet options.
           </p>
         </div>
 
         <span className="rounded-full bg-[#FF6B00]/10 px-3 py-1 text-xs font-black text-[#FF6B00]">
-          Interparcel-ready
+          Delivery
         </span>
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-2 text-xs font-bold sm:grid-cols-2">
         <span className="rounded-full bg-[#002E5D]/70 px-3 py-2 text-white">
-          Delivery Available
+          Delivery available
         </span>
         {palletReady && (
           <span className="rounded-full bg-[#002E5D]/70 px-3 py-2 text-white">
-            Pallet Ready
+            Pallet ready
           </span>
         )}
         {tailLiftRequired && (
           <span className="rounded-full bg-[#002E5D]/70 px-3 py-2 text-white">
-            Tail-Lift Available
+            Tail-lift available
           </span>
         )}
-        <span className="rounded-full bg-[#002E5D]/70 px-3 py-2 text-white">
-          Tracked Shipment
-        </span>
-        <span className="rounded-full bg-[#002E5D]/70 px-3 py-2 text-white">
-          Commercial Freight Protection
-        </span>
-        <span className="rounded-full bg-[#002E5D]/70 px-3 py-2 text-white">
-          Collection Also Available
-        </span>
       </div>
 
       <p className="mt-4 text-xs font-semibold text-orange-100">
-        Choose a delivery quote now. Preview quote subject to courier confirmation.
+        Choose delivery before checkout.
       </p>
 
       <div className="mt-5">
         <label className="text-sm font-bold text-white">
-          Enter delivery postcode
+          Delivery postcode
         </label>
 
         <div className="mt-2 flex flex-col gap-2 sm:flex-row">
@@ -255,7 +246,7 @@ export default function DeliveryQuoteBox({
             disabled={loading}
             className="premium-button rounded-2xl px-5 py-3 text-sm font-black text-white disabled:opacity-60"
           >
-            {loading ? "Checking..." : "Get Delivery Price"}
+            {loading ? "Checking..." : "Check delivery"}
           </button>
         </div>
 
@@ -265,7 +256,7 @@ export default function DeliveryQuoteBox({
       {quotes.length > 0 && (
         <div className="mt-5 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h4 className="font-black text-white">Delivery Options</h4>
+            <h4 className="font-black text-white">Choose delivery</h4>
             {quoteProvider && (
               <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-bold text-white/55">
                 {quoteProvider}

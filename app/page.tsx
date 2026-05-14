@@ -66,7 +66,23 @@ export default function HomePage() {
 
         <section className="premium-shell relative mt-2 overflow-hidden rounded-[2rem]">
           <div className="absolute inset-0 bg-[url('/home-header-2026.png')] bg-cover bg-center" />
-          <div className="relative h-[300px] sm:h-[420px]" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#001633]/85 via-[#001633]/35 to-transparent" />
+          <div className="relative flex min-h-[300px] flex-col justify-end p-6 sm:min-h-[420px] sm:p-8">
+            <h1 className="max-w-xl text-3xl font-black leading-tight sm:text-5xl">
+              Buy and sell used catering equipment across the UK.
+            </h1>
+            <p className="mt-3 max-w-md text-base font-semibold text-white/82">
+              List in minutes. Find equipment faster.
+            </p>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <a href="/search?q=all&category=All%20Categories&location=All%20UK" className="premium-button rounded-2xl px-5 py-3 text-sm font-black">
+                Search
+              </a>
+              <a href="/post-listing" className="soft-button rounded-2xl px-5 py-3 text-sm font-black">
+                Sell an item
+              </a>
+            </div>
+          </div>
         </section>
 
         <form
@@ -182,10 +198,7 @@ export default function HomePage() {
               <span className="premium-badge inline-block rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider">
                 Live Results
               </span>
-              <div className="mt-1.5 text-lg font-bold">eBay Live Results</div>
-              <div className="text-sm text-white/70">
-                Live eBay listings are shown in your search results.
-              </div>
+              <div className="mt-1.5 text-lg font-bold">Compare live eBay results</div>
             </div>
           </div>
         </section>
@@ -199,9 +212,7 @@ export default function HomePage() {
 
               <div>
                 <div className="text-xl font-bold">Ready to sell?</div>
-                <div className="text-sm text-white/70">
-                  List your equipment, van or business in minutes.
-                </div>
+                <div className="text-sm text-white/70">Create a listing in minutes.</div>
               </div>
             </div>
 
@@ -210,7 +221,7 @@ export default function HomePage() {
                 href="/post-listing"
                 className="premium-button rounded-2xl px-6 py-3 text-sm font-bold text-white"
               >
-                Post Your Item
+                Sell an item
               </a>
               <span className="text-xs font-semibold text-[#FF6B00]">
                 It&apos;s free to start
@@ -222,23 +233,23 @@ export default function HomePage() {
         <section className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <TrustItem
             icon={<ShieldCheck className="h-6 w-6" />}
-            title="Trusted & Verified"
-            description="Quality listings from trusted sellers"
+            title="Verified sellers"
+            description="Clear seller profiles"
           />
           <TrustItem
             icon={<PoundSterling className="h-6 w-6" />}
-            title="Save Money"
-            description="Compare prices and find the best deals"
+            title="Secure checkout"
+            description="Pay with confidence"
           />
           <TrustItem
             icon={<Clock className="h-6 w-6" />}
-            title="Save Time"
-            description="One search saves hours of looking"
+            title="Delivery support"
+            description="Pallet options"
           />
           <TrustItem
             icon={<TrendingUp className="h-6 w-6" />}
-            title="Sell Faster"
-            description="Get seen by more buyers"
+            title="Engineer support"
+            description="Coming soon"
           />
         </section>
       </div>

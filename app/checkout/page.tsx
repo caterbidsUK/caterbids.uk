@@ -41,6 +41,14 @@ function CheckoutContent() {
   const deliveryDetailsComplete =
     deliveryPrice <= 0 ||
     Boolean(buyerDeliveryFullAddress.trim() && buyerDeliveryPostcode.trim() && buyerPhone.trim())
+  const missingDeliveryDetails =
+    deliveryPrice <= 0
+      ? []
+      : [
+          !buyerDeliveryFullAddress.trim() ? "delivery address" : "",
+          !buyerDeliveryPostcode.trim() ? "delivery postcode" : "",
+          !buyerPhone.trim() ? "buyer phone number" : "",
+        ].filter(Boolean)
   const canContinueToPayment =
     !checkoutLoading &&
     Boolean(listingId && title && itemPrice > 0 && sellerId) &&
@@ -62,10 +70,10 @@ function CheckoutContent() {
             CaterBids Checkout
           </p>
 
-          <h1 className="mt-2 text-2xl font-black">Complete your purchase</h1>
+          <h1 className="mt-2 text-2xl font-black">Pay and book</h1>
 
           <p className="mt-2 text-sm text-slate-600">
-            Secure test payment is connected. Delivery requests are saved now, with final courier confirmation after payment.
+            Secure checkout with delivery support.
           </p>
 
           <div className="mt-5 space-y-3 rounded-2xl bg-slate-50 p-4">
@@ -93,37 +101,76 @@ function CheckoutContent() {
 
             {deliveryPrice > 0 && (
               <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-3 text-xs text-slate-600">
-                <p className="font-black text-[#002E5D]">Delivery details for booking</p>
-                <p className="mt-1">
-                  {collectionPostcode || "Collection postcode pending"} to {buyerDeliveryPostcode || "delivery postcode pending"}
-                </p>
-                <p className="mt-1">
-                  Package: {weightKg || "?"}kg, {lengthCm || "?"} x {widthCm || "?"} x {heightCm || "?"}cm
-                </p>
-                <textarea
-                  value={buyerDeliveryFullAddress}
-                  onChange={(event) => setBuyerDeliveryFullAddress(event.target.value)}
-                  placeholder="Buyer full delivery address"
-                  className="min-h-20 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-[#002E5D] outline-none focus:border-[#FF6B00]"
-                />
-                <input
-                  value={buyerDeliveryPostcode}
-                  onChange={(event) => setBuyerDeliveryPostcode(event.target.value.toUpperCase())}
-                  placeholder="Buyer delivery postcode"
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-[#002E5D] outline-none focus:border-[#FF6B00]"
-                />
-                <input
-                  value={buyerPhone}
-                  onChange={(event) => setBuyerPhone(event.target.value)}
-                  placeholder="Buyer phone number"
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-[#002E5D] outline-none focus:border-[#FF6B00]"
-                />
-                <textarea
-                  value={buyerAccessRestrictions}
-                  onChange={(event) => setBuyerAccessRestrictions(event.target.value)}
-                  placeholder="Buyer access restrictions, opening times or delivery notes"
-                  className="min-h-16 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-[#002E5D] outline-none focus:border-[#FF6B00]"
-                />
+                <div>
+                  <p className="font-black text-[#002E5D]">Delivery details</p>
+                  <p className="mt-1 leading-relaxed">
+                    From <span className="font-bold text-[#002E5D]">{collectionPostcode || "pending"}</span>
+                    {" "}to <span className="font-bold text-[#002E5D]">{buyerDeliveryPostcode || "pending"}</span>
+                  </p>
+                  <p className="mt-1 leading-relaxed">
+                    Package: {weightKg || "?"}kg, {lengthCm || "?"} x {widthCm || "?"} x {heightCm || "?"}cm
+                  </p>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-black uppercase tracking-wide text-[#002E5D]">
+                    Buyer delivery full address <span className="text-[#FF6B00]">required</span>
+                  </label>
+                  <textarea
+                    value={buyerDeliveryFullAddress}
+                    onChange={(event) => setBuyerDeliveryFullAddress(event.target.value)}
+                    placeholder="House/unit, street, town/city and any business name"
+                    className="min-h-20 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-[#002E5D] outline-none placeholder:text-slate-500 focus:border-[#FF6B00]"
+                  />
+                  <p className="mt-1 text-xs font-semibold text-slate-500">
+                    Courier delivery address.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-black uppercase tracking-wide text-[#002E5D]">
+                    Buyer delivery postcode <span className="text-[#FF6B00]">required</span>
+                  </label>
+                  <input
+                    value={buyerDeliveryPostcode}
+                    onChange={(event) => setBuyerDeliveryPostcode(event.target.value.toUpperCase())}
+                    placeholder="e.g. M1 1AE"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-[#002E5D] outline-none placeholder:text-slate-500 focus:border-[#FF6B00]"
+                  />
+                  <p className="mt-1 text-xs font-semibold text-slate-500">
+                    Must match the quote.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-black uppercase tracking-wide text-[#002E5D]">
+                    Buyer phone number <span className="text-[#FF6B00]">required</span>
+                  </label>
+                  <input
+                    value={buyerPhone}
+                    onChange={(event) => setBuyerPhone(event.target.value)}
+                    placeholder="e.g. 07123 456789"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-[#002E5D] outline-none placeholder:text-slate-500 focus:border-[#FF6B00]"
+                  />
+                  <p className="mt-1 text-xs font-semibold text-slate-500">
+                    For delivery updates.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-black uppercase tracking-wide text-[#002E5D]">
+                    Buyer access notes <span className="text-slate-400">optional</span>
+                  </label>
+                  <textarea
+                    value={buyerAccessRestrictions}
+                    onChange={(event) => setBuyerAccessRestrictions(event.target.value)}
+                    placeholder="Loading bay, opening times, stairs, height limits or contact notes"
+                    className="min-h-16 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-[#002E5D] outline-none placeholder:text-slate-500 focus:border-[#FF6B00]"
+                  />
+                  <p className="mt-1 text-xs font-semibold text-slate-500">
+                    Add access details.
+                  </p>
+                </div>
               </div>
             )}
 
@@ -136,13 +183,19 @@ function CheckoutContent() {
           </div>
 
           <div className="mt-5 rounded-2xl border border-green-200 bg-green-50 p-4">
-            <h2 className="font-black text-[#002E5D]">Delivery request preview</h2>
+            <h2 className="font-black text-[#002E5D]">Delivery request</h2>
             <p className="mt-1 text-sm text-slate-700">
               {deliveryPrice > 0
-                ? "Preview quote subject to courier confirmation. CaterBids will confirm final courier booking details after payment."
+                ? "CaterBids will confirm the courier booking after payment."
                 : "No paid delivery option selected for this checkout."}
             </p>
           </div>
+
+          {missingDeliveryDetails.length > 0 && (
+            <p className="mt-4 rounded-2xl border border-[#FF6B00]/25 bg-[#FF6B00]/10 p-3 text-sm font-bold text-[#8A3A00]">
+              Add the buyer {missingDeliveryDetails.join(", ")} to enable payment and delivery request.
+            </p>
+          )}
 
           <button
             type="button"
@@ -227,7 +280,7 @@ function CheckoutContent() {
             disabled={!canContinueToPayment}
             className="mt-5 w-full rounded-2xl bg-[#FF6B00] px-5 py-4 text-base font-black text-white shadow-lg shadow-orange-500/20 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 disabled:shadow-none"
           >
-            {checkoutLoading ? "Opening secure payment..." : deliveryPrice > 0 ? "Pay and request delivery" : "Continue to secure payment"}
+            {checkoutLoading ? "Opening secure payment..." : deliveryPrice > 0 ? "Pay and book" : "Pay"}
           </button>
 
           {checkoutUrl && (

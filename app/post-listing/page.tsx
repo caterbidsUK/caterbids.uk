@@ -65,44 +65,55 @@ type QuickListAiResponse = {
   confidence?: string | number
   condition?: "New" | "Used" | "Refurbished" | "Spares or Repair"
   error?: string
+  detail?: string
 }
 
 type DeliveryPreviewQuote = CaterBidsDeliveryOption
 
 const LISTING_IMAGES_BUCKET = "listing-images"
-const LOCAL_LISTINGS_KEY = "caterbids_listings"
-const LOCAL_CURRENT_LISTING_KEY = "caterbids_current_listing"
-const LOCAL_PUBLIC_LISTINGS_KEY = "caterbids_public_listings"
 const QUICKLIST_AI_WARNING =
-  "CaterBot helps find product information from photos, plates and manuals. Sellers must check all details before publishing. This does not certify safety, condition, installation suitability or legal compliance."
+  "Seller checked details required. Not a safety certificate."
+
+function isManualsLibUrl(url: string) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "").endsWith("manualslib.com")
+  } catch {
+    return false
+  }
+}
+
+function isManualsLibSearchUrl(url: string) {
+  try {
+    const parsed = new URL(url)
+    const path = parsed.pathname.toLowerCase()
+    return isManualsLibUrl(url) && (path.includes("/search") || parsed.searchParams.get("action") === "search")
+  } catch {
+    return false
+  }
+}
+
+function preferredManualSourceUrl(suggestion: QuickListAiResponse) {
+  const candidateUrls = [
+    suggestion.manual_source_url,
+    suggestion.spec_source_url,
+    suggestion.manual_url,
+  ].filter((url): url is string => Boolean(url && /^https?:\/\//i.test(url)))
+  const manualsLibUrl = candidateUrls.find((url) => isManualsLibUrl(url) && !isManualsLibSearchUrl(url))
+  const directSourceUrl = candidateUrls.find((url) => !isManualsLibSearchUrl(url))
+
+  return manualsLibUrl || directSourceUrl || ""
+}
+
+function deliveryOptionForDeliveryMethod(value: string) {
+  if (value === "collection_only") return "Collection only"
+  if (value === "buyer_courier") return "Buyer arranges transport"
+  return "Delivery available through CaterBids"
+}
 
 function formatPrice(price: string) {
   const value = price.trim()
   if (!value) return ""
   return value.startsWith("£") ? value : `£${value}`
-}
-
-function readLocalListings() {
-  if (typeof window === "undefined") return []
-
-  try {
-    const savedListings = localStorage.getItem(LOCAL_LISTINGS_KEY)
-    if (!savedListings) return []
-    const listings = JSON.parse(savedListings)
-    return Array.isArray(listings) ? listings : []
-  } catch (error) {
-    console.warn(`Could not read ${LOCAL_LISTINGS_KEY}:`, error)
-    localStorage.removeItem(LOCAL_LISTINGS_KEY)
-    return []
-  }
-}
-
-function writeLocalListing(listing: Record<string, unknown>, existingListings: Record<string, unknown>[]) {
-  const nextListings = [listing, ...existingListings.filter((item) => String(item?.id ?? "") !== String(listing.id))]
-
-  localStorage.setItem(LOCAL_LISTINGS_KEY, JSON.stringify(nextListings))
-  localStorage.setItem(LOCAL_PUBLIC_LISTINGS_KEY, JSON.stringify(nextListings))
-  localStorage.setItem(LOCAL_CURRENT_LISTING_KEY, JSON.stringify(listing))
 }
 
 function isMissingStorageBucketError(error: unknown) {
@@ -129,9 +140,9 @@ export default function PostListingPage() {
   const [powerType, setPowerType] = useState("Unknown")
   const [description, setDescription] = useState("")
   const [dimensions, setDimensions] = useState("")
-  const [deliveryAvailable, setDeliveryAvailable] = useState(true)
   const [deliveryMethod, setDeliveryMethod] = useState("caterbids_delivery")
-  const [deliveryOption, setDeliveryOption] = useState("Delivery available through CaterBids")
+  const [deliveryOption, setDeliveryOption] = useState(deliveryOptionForDeliveryMethod("caterbids_delivery"))
+  const deliveryAvailable = deliveryMethod === "caterbids_delivery"
   const [manualsAvailable, setManualsAvailable] = useState(false)
   const [weightKg, setWeightKg] = useState("")
   const [lengthCm, setLengthCm] = useState("")
@@ -222,24 +233,11 @@ export default function PostListingPage() {
     return () => window.clearTimeout(timer)
   }, [category, subcategory])
 
-  useEffect(() => {
-    const isCaterBidsDelivery = deliveryMethod === "caterbids_delivery"
-    setDeliveryAvailable(isCaterBidsDelivery)
-
-    if (deliveryMethod === "collection_only") {
-      setDeliveryOption("Collection only")
-    } else if (deliveryMethod === "buyer_courier") {
-      setDeliveryOption("Buyer arranges transport")
-    } else {
-      setDeliveryOption("Delivery available through CaterBids")
-    }
-  }, [deliveryMethod])
-
   function requireLogin() {
     router.push(`/login?next=${encodeURIComponent("/post-listing")}`)
   }
 
-  function resizeListingImage(file: File) {
+  function resizeImage(file: File, maxSize = 900, quality = 0.82) {
     return new Promise<string>((resolve, reject) => {
       const reader = new FileReader()
       reader.onerror = () => reject(reader.error)
@@ -247,7 +245,6 @@ export default function PostListingPage() {
         const image = new Image()
         image.onerror = () => reject(new Error("Could not load image"))
         image.onload = () => {
-          const maxSize = 900
           const scale = Math.min(1, maxSize / Math.max(image.width, image.height))
           const canvas = document.createElement("canvas")
           canvas.width = Math.max(1, Math.round(image.width * scale))
@@ -260,12 +257,20 @@ export default function PostListingPage() {
           }
 
           context.drawImage(image, 0, 0, canvas.width, canvas.height)
-          resolve(canvas.toDataURL("image/jpeg", 0.82))
+          resolve(canvas.toDataURL("image/jpeg", quality))
         }
         image.src = reader.result as string
       }
       reader.readAsDataURL(file)
     })
+  }
+
+  function resizeListingImage(file: File) {
+    return resizeImage(file, 900, 0.82)
+  }
+
+  function resizeSpecPlateForAi(file: File) {
+    return resizeImage(file, 1600, 0.9)
   }
 
   async function buildImagePreviews(files: File[]) {
@@ -348,6 +353,12 @@ export default function PostListingPage() {
 
   function getBase64Payload(dataUrl: string) {
     return dataUrl.includes(",") ? dataUrl.split(",")[1] : dataUrl
+  }
+
+  function getDataUrlFileType(dataUrl: string, fallback: string) {
+    const match = dataUrl.match(/^data:([^;,]+)[;,]/)
+    if (match?.[1]) return match[1]
+    return fallback || "image/jpeg"
   }
 
   function normaliseCondition(value?: string) {
@@ -503,20 +514,24 @@ export default function PostListingPage() {
           const dataUrl = imagePreviews[index] || (await fileToDataUrl(file))
           return {
             imageBase64: getBase64Payload(dataUrl),
-            fileType: file.type || "image/jpeg",
+            fileType: getDataUrlFileType(dataUrl, file.type),
             fileName: file.name,
           }
         })
       )
+      const specPlateDataUrl = specPlateFile ? await resizeSpecPlateForAi(specPlateFile) : ""
       const specPlate = specPlateFile
         ? {
-            imageBase64: getBase64Payload(specPlatePreview || (await fileToDataUrl(specPlateFile))),
-            fileType: specPlateFile.type || "image/jpeg",
+            imageBase64: getBase64Payload(specPlateDataUrl),
+            fileType: getDataUrlFileType(specPlateDataUrl, specPlateFile.type),
             fileName: specPlateFile.name,
           }
         : null
+      const controller = new AbortController()
+      const timeout = window.setTimeout(() => controller.abort(), 90000)
       const res = await fetch("/api/ai-listing", {
         method: "POST",
+        signal: controller.signal,
         headers: {
           "Content-Type": "application/json",
         },
@@ -524,22 +539,28 @@ export default function PostListingPage() {
           itemImages,
           specPlate,
         }),
-      })
+      }).finally(() => window.clearTimeout(timeout))
       const suggestion = (await res.json()) as QuickListAiResponse
 
       if (!res.ok) {
-        throw new Error(suggestion.error || "CaterBot could not analyse these images.")
+        throw new Error("CaterBot could not read these photos. Add clearer images or enter details manually.")
       }
 
       setQuickListResult(suggestion)
 
       if (suggestion.description?.includes("CaterBot vision is not configured")) {
-        setAiError("CaterBot used file names only. Add AI_VISION_API_KEY or OPENAI_API_KEY in .env.local for real photo and spec-plate analysis.")
+        setAiError("CaterBot needs clearer photos. You can still enter the details manually.")
       } else {
-        setAiNotice("CaterBot scan completed. Please confirm all delivery details before publishing.")
+        setAiNotice("CaterBot scan complete. Check the details below.")
       }
     } catch (error) {
-      setAiError(error instanceof Error ? error.message : "CaterBot could not analyse these images.")
+      const message =
+        error instanceof DOMException && error.name === "AbortError"
+          ? "CaterBot timed out while reading these images. Try a clearer crop of the spec plate, then scan again."
+          : error instanceof Error
+            ? error.message
+            : "CaterBot could not read these photos. Add details manually."
+      setAiError(message)
     } finally {
       setAiLoading(false)
     }
@@ -569,6 +590,7 @@ export default function PostListingPage() {
     const aiPalletWidth = extractConfirmedNumber(quickListResult.pallet_width_cm)
     const aiPalletHeight = extractConfirmedNumber(quickListResult.pallet_height_cm)
     const aiPalletCount = extractConfirmedNumber(quickListResult.pallet_count)
+    const preferredSourceUrl = preferredManualSourceUrl(quickListResult)
 
     setTitle(quickListResult.suggested_title || quickListResult.title || title)
     setCategory(nextCategory)
@@ -579,11 +601,10 @@ export default function PostListingPage() {
     setDimensions(quickListResult.dimensions)
     setDeliveryOption(nextDeliveryOption)
     setDeliveryMethod(/courier|pallet|delivery/i.test(nextDeliveryOption) ? "caterbids_delivery" : "buyer_courier")
-    setDeliveryAvailable(/courier|pallet|delivery/i.test(nextDeliveryOption))
     const validatedSource = Boolean(quickListResult.manual_source_validated)
     setManualsAvailable(validatedSource)
-    setManualSourceUrl(validatedSource ? quickListResult.manual_source_url || "" : "")
-    setSpecSourceUrl(validatedSource ? quickListResult.spec_source_url || "" : "")
+    setManualSourceUrl(validatedSource ? preferredSourceUrl : "")
+    setSpecSourceUrl(validatedSource ? preferredSourceUrl : "")
     setManualSourceName(quickListResult.manual_source_name || "Manual / spec source")
     setManualSourceType(quickListResult.manual_source_type || "")
     setManualSourceValidated(validatedSource)
@@ -638,8 +659,8 @@ export default function PostListingPage() {
     setQuickListApplied(true)
     setAiNotice(
       validatedSource
-        ? "CaterBot suggestions applied. Open and confirm the product source before publishing."
-        : "CaterBot suggestions applied. CaterBot could not verify a reliable manual/spec source, so please check the plate details manually."
+        ? "CaterBot suggestions applied. Check the source before publishing."
+        : "CaterBot suggestions applied. Check the data plate manually."
     )
   }
 
@@ -655,61 +676,6 @@ export default function PostListingPage() {
     setSpecConfidence("source rejected")
     setSpecsVerifiedBySeller(false)
     setSourceRejectedBySeller(true)
-  }
-
-  function saveLocalListing(formData: FormData) {
-    const id = `local-${Date.now()}`
-    let images: string[] = []
-
-    try {
-      const parsedImages = JSON.parse((formData.get("images") as string) || "[]")
-      images = Array.isArray(parsedImages)
-        ? parsedImages.filter((url): url is string => typeof url === "string" && Boolean(url))
-        : []
-    } catch {
-      images = []
-    }
-
-    const mainImageUrl = images[0] || (formData.get("image") as string) || ""
-    const listing = {
-      id,
-      title: ((formData.get("title") as string) || "").trim(),
-      price: formatPrice((formData.get("price") as string) || ""),
-      location: ((formData.get("location") as string) || "").trim(),
-      city: ((formData.get("city") as string) || "").trim() || null,
-      category: (formData.get("category") as string) || "Catering Equipment",
-      subcategory: (formData.get("subcategory") as string) || null,
-      condition: (formData.get("condition") as string) || "Used",
-      power_type: powerType,
-      dimensions: ((formData.get("dimensions") as string) || "").trim() || null,
-      service_history: ((formData.get("service_history") as string) || "").trim() || null,
-      warranty_type: (formData.get("warranty_type") as string) || "No warranty",
-      manuals_available: formData.get("manuals_available") === "on",
-      tested_status: (formData.get("tested_status") as string) || "Untested",
-      delivery_option: (formData.get("delivery_option") as string) || "Collection only",
-      collection_postcode: ((formData.get("collection_postcode") as string) || "").trim() || null,
-      vat_included: formData.get("vat_included") === "on",
-      weight_kg: formData.get("weight_kg") ? Number(formData.get("weight_kg")) : null,
-      length_cm: formData.get("length_cm") ? Number(formData.get("length_cm")) : null,
-      width_cm: formData.get("width_cm") ? Number(formData.get("width_cm")) : null,
-      height_cm: formData.get("height_cm") ? Number(formData.get("height_cm")) : null,
-      pallet_ready: formData.get("pallet_ready") === "on",
-      tail_lift_required: formData.get("tail_lift_required") === "on",
-      forklift_available: formData.get("forklift_available") === "on",
-      ground_floor_collection: formData.get("ground_floor_collection") === "on",
-      commercial_premises: formData.get("commercial_premises") === "on",
-      delivery_available: formData.get("delivery_available") === "on",
-      description: ((formData.get("description") as string) || "").trim(),
-      image_url: mainImageUrl,
-      images,
-      user_id: userId || "local-beta",
-      status: "live",
-      created_at: new Date().toISOString(),
-    }
-
-    const existing = readLocalListings()
-    writeLocalListing(listing, existing)
-    return id
   }
 
   function handlePublish(event: React.FormEvent<HTMLFormElement>) {
@@ -736,37 +702,37 @@ export default function PostListingPage() {
       hasPositiveNumber(formData.get("height_cm"))
 
     if (!requiredTitle || !requiredPrice || (!requiredLocation && !requiredCity)) {
-      setPublishError("Please add title, price and location before publishing.")
+      setPublishError("Add title, price and location.")
       return
     }
 
     if (usesCaterBidsDelivery && !hasRequiredDeliverySize) {
-      setPublishError("Please add confirmed pallet weight plus length, width and height before publishing with CaterBids delivery.")
+      setPublishError("Add pallet weight, length, width and height.")
       return
     }
 
     if (usesCaterBidsDelivery && !((formData.get("collection_postcode") as string) || "").trim()) {
-      setPublishError("Please add the collection postcode before publishing with CaterBids delivery.")
+      setPublishError("Add collection postcode.")
       return
     }
 
     if (usesCaterBidsDelivery && !((formData.get("seller_phone") as string) || "").trim()) {
-      setPublishError("Please add the seller phone number before publishing with CaterBids delivery.")
+      setPublishError("Add seller phone number.")
       return
     }
 
     if (usesCaterBidsDelivery && !hasPositiveNumber(formData.get("pallet_count"))) {
-      setPublishError("Please add the number of pallets before publishing with CaterBids delivery.")
+      setPublishError("Add number of pallets.")
       return
     }
 
     if (usesCaterBidsDelivery && formData.get("delivery_details_confirmed") !== "on") {
-      setPublishError("Please confirm the delivery details are accurate before publishing with CaterBids delivery.")
+      setPublishError("Confirm delivery details.")
       return
     }
 
     if (!usesCaterBidsDelivery && !sizeUnknown && !hasRequiredDeliverySize) {
-      setPublishError("Please add the checked weight and size, or tick weight and size unknown.")
+      setPublishError("Add weight and size, or tick unknown.")
       return
     }
 
@@ -872,6 +838,10 @@ export default function PostListingPage() {
     }
   }
 
+  const quickListManualSourceIsVerified = Boolean(quickListResult?.manual_source_validated)
+  const quickListManualSourceUrl =
+    quickListResult && quickListManualSourceIsVerified ? preferredManualSourceUrl(quickListResult) : ""
+
   return (
     <main className="app-bg min-h-screen px-4 py-6 text-white">
       {!authChecked ? (
@@ -901,7 +871,7 @@ export default function PostListingPage() {
       <div className="premium-card mb-4 rounded-3xl p-4">
         <h2 className="font-bold text-lg">Sell your item</h2>
         <p className="text-sm text-white/60">
-          Add commercial catering equipment for UK buyers
+          List in minutes.
         </p>
       </div>
 
@@ -912,15 +882,21 @@ export default function PostListingPage() {
             <ScanSearch size={22} aria-hidden="true" />
           </div>
           <div>
+            <p className="text-xs font-black uppercase tracking-[0.16em] text-[#FF6B00]">
+              Step 1 · Photos
+            </p>
             <h2 className="text-xl font-extrabold text-white">
               List faster with CaterBot
             </h2>
             <p className="mt-1 text-sm leading-relaxed text-slate-300">
-              Upload equipment photos and a spec plate photo. CaterBot, your smart CaterBids listing assistant, helps create your listing and find key specs for delivery.
+              Upload photos and a data plate.
             </p>
-            <p className="mt-2 text-xs leading-relaxed text-white/55">
-              For gas and electric equipment, CaterBot uses the brand, model or GC number to open the manual/spec lookup for exact weight, dimensions and power details.
-            </p>
+            <details className="mt-2 text-xs text-white/55">
+              <summary className="cursor-pointer font-bold text-white/70">More details</summary>
+              <p className="mt-1 leading-relaxed">
+                CaterBot uses the model or GC number to find a matching ManualsLib source.
+              </p>
+            </details>
           </div>
         </div>
 
@@ -1056,10 +1032,10 @@ export default function PostListingPage() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-black uppercase text-[#FF6B00]">
-                  Review CaterBot Suggestions
+                  CaterBot suggestions
                 </p>
                 <p className="mt-1 text-xs font-semibold text-white/55">
-                  CaterBot has helped fill your listing using your photos, data plate, and trusted product sources. Please check everything before publishing.
+                  Check the details before publishing.
                 </p>
                 <h3 className="mt-1 text-lg font-black text-white">
                   {quickListResult.suggested_title}
@@ -1093,7 +1069,10 @@ export default function PostListingPage() {
                 ["electrical_phase", quickListResult.electrical_phase],
                 ["shipping_class", quickListResult.shipping_class],
                 ["delivery_notes", quickListResult.delivery_notes],
-                ["manual/spec source", quickListResult.manual_url ? "CaterBot found a possible product match" : ""],
+                [
+                  "manual/spec source",
+                  quickListManualSourceUrl ? "ManualsLib manual found" : "",
+                ],
               ]
                 .filter(([, value]) => Boolean(value))
                 .map(([label, value]) => (
@@ -1112,119 +1091,154 @@ export default function PostListingPage() {
               {quickListResult.description}
             </p>
 
-            {quickListResult.manual_url && (
+            {quickListManualSourceUrl && (
               <div className="mt-3 rounded-2xl border border-[#FF6B00]/25 bg-[#FF6B00]/10 p-3">
                 <p className="text-sm font-bold text-orange-100">
-                  CaterBot found a possible product match. Please review the specs before publishing.
+                  ManualsLib match found.
                 </p>
                 <a
-                  href={quickListResult.manual_url}
+                  href={quickListManualSourceUrl}
                   target="_blank"
-                  rel="noreferrer"
+                  rel="noopener noreferrer"
                   className="mt-2 inline-flex text-sm font-bold text-[#FF9A4A] underline-offset-4 hover:underline"
                 >
-                  Open manual/spec source
+                  Open ManualsLib manual
                 </a>
               </div>
             )}
           </div>
         )}
 
-        <p className="mt-3 text-xs leading-relaxed text-white/55">
-          CaterBot helps find product information from photos, plates and manuals. Sellers must check all details before publishing. This does not certify safety, condition, installation suitability or legal compliance.
-        </p>
+        <details className="mt-3 text-xs text-white/55">
+          <summary className="cursor-pointer font-bold text-white/70">Safety note</summary>
+          <p className="mt-1 leading-relaxed">{SAFETY_DISCLAIMER}</p>
+        </details>
       </div>
 
       {/* FORM */}
       <form onSubmit={handlePublish} className="premium-card rounded-3xl p-4">
-        <input
-          name="title"
-          placeholder="Title"
-          className="premium-input mb-3 w-full rounded-2xl p-3"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-        />
+        <section className="mb-5">
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-[#FF6B00]">
+            Step 2 · Item details
+          </p>
+          <p className="mt-1 text-sm text-white/60">Tell buyers what the item is.</p>
 
-        <input
-          name="price"
-          placeholder="Price"
-          className="premium-input mb-3 w-full rounded-2xl p-3"
-          value={price}
-          onChange={(e) => setPrice(e.target.value)}
-        />
+          <label className="mt-4 mb-1 block text-sm font-bold text-white/80">
+            Listing title
+          </label>
+          <input
+            name="title"
+            placeholder="e.g. Lincat electric griddle"
+            className="premium-input w-full rounded-2xl p-3"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
 
-        <input
-          name="location"
-          placeholder="Location"
-          className="premium-input mb-3 w-full rounded-2xl p-3"
-          value={location}
-          onChange={(e) => setLocation(e.target.value)}
-        />
-
-        <label className="mb-2 block text-sm font-semibold text-white/80">
-          City / Location
-        </label>
-        <input
-          name="city"
-          placeholder="e.g. Birmingham"
-          className="premium-input mb-3 w-full rounded-2xl p-3"
-          value={city}
-          onChange={(e) => setCity(e.target.value)}
-        />
-
-        <select
-          name="category"
-          className="premium-input mb-3 w-full rounded-2xl p-3"
-          value={category}
-          onChange={(e) => {
-            const nextCategory = e.target.value
-            setCategory(nextCategory)
-            setSubcategory(subcategoriesForCategory(nextCategory)[0] || "")
-          }}
-        >
-          {CATEGORY_OPTIONS.filter((item) => item !== "All Categories").map((item) => (
-            <option key={item} className="text-black">
-              {item}
-            </option>
-          ))}
-        </select>
-
-        {subcategoriesForCategory(category).length > 0 && (
+          <label className="mt-3 mb-1 block text-sm font-bold text-white/80">
+            Category
+          </label>
           <select
-            name="subcategory"
-            className="premium-input mb-3 w-full rounded-2xl p-3"
-            value={subcategory}
-            onChange={(e) => setSubcategory(e.target.value)}
+            name="category"
+            className="premium-input w-full rounded-2xl p-3"
+            value={category}
+            onChange={(e) => {
+              const nextCategory = e.target.value
+              setCategory(nextCategory)
+              setSubcategory(subcategoriesForCategory(nextCategory)[0] || "")
+            }}
           >
-            {subcategoriesForCategory(category).map((item) => (
+            {CATEGORY_OPTIONS.filter((item) => item !== "All Categories").map((item) => (
               <option key={item} className="text-black">
                 {item}
               </option>
             ))}
           </select>
-        )}
 
-        <select
-          name="condition"
-          className="premium-input mb-3 w-full rounded-2xl p-3"
-          value={condition}
-          onChange={(e) => setCondition(e.target.value)}
-        >
-          {CONDITION_OPTIONS.map((option) => (
-            <option key={option} className="text-black">
-              {option}
-            </option>
-          ))}
-        </select>
+          {subcategoriesForCategory(category).length > 0 && (
+            <>
+              <label className="mt-3 mb-1 block text-sm font-bold text-white/80">
+                Type
+              </label>
+              <select
+                name="subcategory"
+                className="premium-input w-full rounded-2xl p-3"
+                value={subcategory}
+                onChange={(e) => setSubcategory(e.target.value)}
+              >
+                {subcategoriesForCategory(category).map((item) => (
+                  <option key={item} className="text-black">
+                    {item}
+                  </option>
+                ))}
+              </select>
+            </>
+          )}
+
+          <label className="mt-3 mb-1 block text-sm font-bold text-white/80">
+            Condition
+          </label>
+          <select
+            name="condition"
+            className="premium-input w-full rounded-2xl p-3"
+            value={condition}
+            onChange={(e) => setCondition(e.target.value)}
+          >
+            {CONDITION_OPTIONS.map((option) => (
+              <option key={option} className="text-black">
+                {option}
+              </option>
+            ))}
+          </select>
+        </section>
+
+        <section className="mb-5">
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-[#FF6B00]">
+            Step 3 · Price & location
+          </p>
+          <p className="mt-1 text-sm text-white/60">Add the price and collection area.</p>
+
+          <label className="mt-4 mb-1 block text-sm font-bold text-white/80">
+            Price
+          </label>
+          <input
+            name="price"
+            placeholder="e.g. 250"
+            className="premium-input w-full rounded-2xl p-3"
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+          />
+
+          <label className="mt-3 mb-1 block text-sm font-bold text-white/80">
+            Collection area
+          </label>
+          <input
+            name="location"
+            placeholder="e.g. Birmingham"
+            className="premium-input w-full rounded-2xl p-3"
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+          />
+
+          <label className="mt-3 mb-1 block text-sm font-bold text-white/80">
+            Town or city
+          </label>
+          <input
+            name="city"
+            placeholder="e.g. Birmingham"
+            className="premium-input w-full rounded-2xl p-3"
+            value={city}
+            onChange={(e) => setCity(e.target.value)}
+          />
+        </section>
 
         <div className="mb-4 rounded-3xl border border-[#FF6B00]/20 bg-[#002E5D]/35 p-4">
-          <p className="mb-1 text-sm font-black text-[#FF6B00]">Trade trust details</p>
+          <p className="mb-1 text-sm font-black text-[#FF6B00]">Item checks</p>
           <p className="mb-4 text-xs leading-relaxed text-white/60">
-            These details help catering buyers check installation, safety and delivery before they travel.
+            Add power, size and paperwork.
           </p>
 
           <div className="mt-3">
-            <label className="mb-1 block text-xs font-bold text-[#002E5D]">
+            <label className="mb-1 block text-xs font-bold text-white/80">
               Power / Fuel Type
             </label>
 
@@ -1242,43 +1256,58 @@ export default function PostListingPage() {
             </select>
           </div>
 
+          <label className="mt-3 mb-1 block text-xs font-bold text-white/80">
+            Item dimensions
+          </label>
           <input
             name="dimensions"
-            placeholder="Dimensions e.g. 900w x 700d x 900h mm"
-            className="premium-input my-3 w-full rounded-2xl p-3"
+            placeholder="e.g. 900w x 700d x 900h mm"
+            className="premium-input w-full rounded-2xl p-3"
             value={dimensions}
             onChange={(event) => setDimensions(event.target.value)}
           />
 
+          <label className="mt-3 mb-1 block text-xs font-bold text-white/80">
+            Service history
+          </label>
           <textarea
             name="service_history"
-            placeholder="Service history, engineer checks, PAT/gas-safe notes"
-            className="premium-input mb-3 min-h-24 w-full rounded-2xl p-3"
+            placeholder="Engineer checks, PAT or gas-safe notes"
+            className="premium-input min-h-24 w-full rounded-2xl p-3"
           />
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <select name="warranty_type" defaultValue="No warranty" className="premium-input w-full rounded-2xl p-3">
-              {WARRANTY_TYPE_OPTIONS.map((option) => (
-                <option key={option} className="text-black">
-                  {option}
-                </option>
-              ))}
-            </select>
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-bold text-white/80">Warranty</label>
+              <select name="warranty_type" defaultValue="No warranty" className="premium-input w-full rounded-2xl p-3">
+                {WARRANTY_TYPE_OPTIONS.map((option) => (
+                  <option key={option} className="text-black">
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-            <select name="tested_status" defaultValue="Untested" className="premium-input w-full rounded-2xl p-3">
-              {TESTED_STATUS_OPTIONS.map((option) => (
-                <option key={option} className="text-black">
-                  {option}
-                </option>
-              ))}
-            </select>
+            <div>
+              <label className="mb-1 block text-xs font-bold text-white/80">Tested status</label>
+              <select name="tested_status" defaultValue="Untested" className="premium-input w-full rounded-2xl p-3">
+                {TESTED_STATUS_OPTIONS.map((option) => (
+                  <option key={option} className="text-black">
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
+          <label className="mt-3 mb-1 block text-xs font-bold text-white/80">
+            Delivery badge
+          </label>
           <select
             name="delivery_option"
             value={deliveryOption}
             onChange={(event) => setDeliveryOption(event.target.value)}
-            className="premium-input my-3 w-full rounded-2xl p-3"
+            className="premium-input w-full rounded-2xl p-3"
           >
             {DELIVERY_OPTION_OPTIONS.map((option) => (
               <option key={option} className="text-black">
@@ -1304,21 +1333,27 @@ export default function PostListingPage() {
             </label>
           </div>
 
-          <p className="mt-4 text-xs leading-relaxed text-white/60">{BUYER_WARNING}</p>
-          <p className="mt-2 text-[11px] leading-relaxed text-white/45">{SAFETY_DISCLAIMER}</p>
+          <details className="mt-4 text-xs text-white/55">
+            <summary className="cursor-pointer font-bold text-white/70">Safety note</summary>
+            <p className="mt-2 leading-relaxed">{BUYER_WARNING}</p>
+            <p className="mt-2 leading-relaxed text-white/45">{SAFETY_DISCLAIMER}</p>
+          </details>
         </div>
 
         <div className="mb-4 rounded-3xl border border-[#FF6B00]/20 bg-white p-5 text-[#002E5D] shadow-sm">
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-[#FF6B00]">
+            Step 4 · Delivery
+          </p>
           <h3 className="text-xl font-black">
-            CaterBids Delivery
+            Enter pallet details
           </h3>
 
           <p className="mt-1 text-sm text-slate-600">
-            Choose how buyers can collect or receive this item. CaterBids delivery needs confirmed pallet details before publishing.
+            Choose collection or delivery.
           </p>
 
           <p className="mt-3 rounded-2xl bg-[#FF6B00]/10 px-4 py-3 text-sm font-bold leading-relaxed text-[#8A3A00]">
-            Weight and size are required. Use the manufacturer manual/spec sheet, scales and a tape measure where possible; CaterBot suggestions must be checked before publishing.
+            Use checked kg and cm for delivery quotes.
           </p>
 
           <label className="mt-4 block text-xs font-bold uppercase tracking-wide text-[#002E5D]/70">
@@ -1327,7 +1362,11 @@ export default function PostListingPage() {
           <select
             name="delivery_method"
             value={deliveryMethod}
-            onChange={(event) => setDeliveryMethod(event.target.value)}
+            onChange={(event) => {
+              const nextMethod = event.target.value
+              setDeliveryMethod(nextMethod)
+              setDeliveryOption(deliveryOptionForDeliveryMethod(nextMethod))
+            }}
             className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-bold text-[#002E5D] focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
           >
             <option value="collection_only">Collection only</option>
@@ -1337,7 +1376,7 @@ export default function PostListingPage() {
 
           {deliveryMethod === "caterbids_delivery" && (
             <p className="mt-3 rounded-2xl border border-[#FF6B00]/20 bg-[#FF6B00]/10 px-4 py-3 text-xs font-bold leading-relaxed text-[#8A3A00]">
-              CaterBot has estimated these delivery details where possible. Please check and confirm before publishing.
+              Check any CaterBot estimates.
             </p>
           )}
 
@@ -1349,8 +1388,9 @@ export default function PostListingPage() {
                 checked={deliveryAvailable}
                 onChange={(event) => {
                   const checked = event.target.checked
-                  setDeliveryAvailable(checked)
-                  setDeliveryMethod(checked ? "caterbids_delivery" : "collection_only")
+                  const nextMethod = checked ? "caterbids_delivery" : "collection_only"
+                  setDeliveryMethod(nextMethod)
+                  setDeliveryOption(deliveryOptionForDeliveryMethod(nextMethod))
                 }}
                 className="h-4 w-4 accent-[#FF6B00]"
               />
@@ -1415,7 +1455,7 @@ export default function PostListingPage() {
 
           <div className="mt-4">
             <p className="mb-3 text-xs font-semibold text-slate-500">
-              Enter seller-checked delivery measurements in cm and kg when known. Do not rely on CaterBot estimates if unsure.
+              Enter checked cm and kg.
             </p>
 
             <label className="mb-4 flex items-start gap-3 rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-bold text-[#8A3A00]">
@@ -1438,48 +1478,92 @@ export default function PostListingPage() {
               <span>
                 Weight and size unknown
                 <span className="mt-1 block text-xs font-semibold text-[#8A3A00]/75">
-                  Buyers can still message or buy, but instant delivery quotes need confirmed kg and cm.
+                  Delivery quotes need confirmed kg and cm.
                 </span>
               </span>
             </label>
 
             {deliveryMethod === "caterbids_delivery" && (
               <div className="mb-4 grid gap-3 sm:grid-cols-2">
-                <textarea
-                  name="collection_full_address"
-                  value={collectionFullAddress}
-                  onChange={(event) => setCollectionFullAddress(event.target.value)}
-                  placeholder="Collection full address"
-                  className="min-h-24 rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-gray-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20 sm:col-span-2"
-                />
-                <input
-                  name="collection_city"
-                  value={collectionCity}
-                  onChange={(event) => setCollectionCity(event.target.value)}
-                  placeholder="Collection city"
-                  className="rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-gray-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
-                />
-                <input
-                  name="seller_contact_name"
-                  value={sellerContactName}
-                  onChange={(event) => setSellerContactName(event.target.value)}
-                  placeholder="Seller contact name"
-                  className="rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-gray-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
-                />
-                <input
-                  name="seller_phone"
-                  value={sellerPhone}
-                  onChange={(event) => setSellerPhone(event.target.value)}
-                  placeholder="Seller phone number"
-                  className="rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-gray-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
-                />
-                <input
-                  name="preferred_collection_date"
-                  value={preferredCollectionDate}
-                  onChange={(event) => setPreferredCollectionDate(event.target.value)}
-                  type="date"
-                  className="rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-gray-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
-                />
+                <div className="sm:col-span-2">
+                  <label className="mb-1 block text-xs font-black uppercase tracking-wide text-[#002E5D]">
+                    Collection full address
+                  </label>
+                  <textarea
+                    name="collection_full_address"
+                    value={collectionFullAddress}
+                    onChange={(event) => setCollectionFullAddress(event.target.value)}
+                    placeholder="Unit/building, street, loading bay or yard entrance"
+                    className="min-h-24 w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-500 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                  />
+                  <p className="mt-1 text-xs font-semibold text-slate-500">
+                    Used for courier collection after sale. Add the exact pickup address.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-black uppercase tracking-wide text-[#002E5D]">
+                    Collection city
+                  </label>
+                  <input
+                    name="collection_city"
+                    value={collectionCity}
+                    onChange={(event) => setCollectionCity(event.target.value)}
+                    placeholder="e.g. Birmingham"
+                    className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-500 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                  />
+                  <p className="mt-1 text-xs font-semibold text-slate-500">
+                    Town or city where the item will be collected.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-black uppercase tracking-wide text-[#002E5D]">
+                    Collection contact name
+                  </label>
+                  <input
+                    name="seller_contact_name"
+                    value={sellerContactName}
+                    onChange={(event) => setSellerContactName(event.target.value)}
+                    placeholder="e.g. Sam at reception"
+                    className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-500 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                  />
+                  <p className="mt-1 text-xs font-semibold text-slate-500">
+                    Person the driver should ask for.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-black uppercase tracking-wide text-[#002E5D]">
+                    Collection phone number
+                  </label>
+                  <input
+                    name="seller_phone"
+                    value={sellerPhone}
+                    onChange={(event) => setSellerPhone(event.target.value)}
+                    placeholder="e.g. 07123 456789"
+                    className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-500 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                  />
+                  <p className="mt-1 text-xs font-semibold text-slate-500">
+                    Required for delivery booking and collection issues.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-black uppercase tracking-wide text-[#002E5D]">
+                    Preferred collection date
+                  </label>
+                  <input
+                    name="preferred_collection_date"
+                    value={preferredCollectionDate}
+                    onChange={(event) => setPreferredCollectionDate(event.target.value)}
+                    type="date"
+                    className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-500 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                  />
+                  <p className="mt-1 text-xs font-semibold text-slate-500">
+                    Pick the earliest date the item can be collected.
+                  </p>
+                </div>
               </div>
             )}
 
@@ -1602,27 +1686,44 @@ export default function PostListingPage() {
 
             {deliveryMethod === "caterbids_delivery" && (
               <div className="mt-4 space-y-3">
-                <textarea
-                  name="access_restrictions"
-                  value={accessRestrictions}
-                  onChange={(event) => setAccessRestrictions(event.target.value)}
-                  placeholder="Access restrictions, loading bay notes, stairs, opening times"
-                  className="min-h-20 w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-gray-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
-                />
-                <textarea
-                  name="delivery_notes"
-                  value={deliveryNotes}
-                  onChange={(event) => setDeliveryNotes(event.target.value)}
-                  placeholder="Delivery notes for CaterBids or courier"
-                  className="min-h-20 w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-gray-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
-                />
+                <div>
+                  <label className="mb-1 block text-xs font-black uppercase tracking-wide text-[#002E5D]">
+                    Access restrictions
+                  </label>
+                  <textarea
+                    name="access_restrictions"
+                    value={accessRestrictions}
+                    onChange={(event) => setAccessRestrictions(event.target.value)}
+                    placeholder="Loading bay notes, stairs, height limits, opening times"
+                    className="min-h-20 w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-500 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                  />
+                  <p className="mt-1 text-xs font-semibold text-slate-500">
+                    Tell the courier anything that affects pickup access.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-black uppercase tracking-wide text-[#002E5D]">
+                    Delivery notes
+                  </label>
+                  <textarea
+                    name="delivery_notes"
+                    value={deliveryNotes}
+                    onChange={(event) => setDeliveryNotes(event.target.value)}
+                    placeholder="Pallet condition, loose parts, collection window or handling notes"
+                    className="min-h-20 w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-500 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                  />
+                  <p className="mt-1 text-xs font-semibold text-slate-500">
+                    Add anything CaterBids or the courier should know before booking.
+                  </p>
+                </div>
 
                 <div className="rounded-3xl border border-[#FF6B00]/25 bg-[#002E5D]/5 p-4">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                       <h3 className="text-lg font-black text-[#002E5D]">Interparcel pricing check</h3>
                       <p className="mt-1 text-xs font-semibold leading-relaxed text-slate-600">
-                        Enter a sample buyer postcode to preview automatic pallet pricing. Buyers still get the final quote at checkout.
+                        Preview pallet pricing.
                       </p>
                     </div>
                     <span className="rounded-full bg-[#FF6B00]/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[#FF6B00]">
@@ -1630,13 +1731,18 @@ export default function PostListingPage() {
                     </span>
                   </div>
 
-                  <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-                    <input
-                      value={interparcelPreviewPostcode}
-                      onChange={(event) => setInterparcelPreviewPostcode(event.target.value.toUpperCase())}
-                      placeholder="Sample buyer postcode"
-                      className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-gray-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
-                    />
+                  <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-end">
+                    <div className="flex-1">
+                      <label className="mb-1 block text-xs font-black uppercase tracking-wide text-[#002E5D]">
+                        Sample buyer postcode
+                      </label>
+                      <input
+                        value={interparcelPreviewPostcode}
+                        onChange={(event) => setInterparcelPreviewPostcode(event.target.value.toUpperCase())}
+                        placeholder="e.g. M1 1AE"
+                        className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-500 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                      />
+                    </div>
                     <button
                       type="button"
                       onClick={checkInterparcelPreview}
@@ -1705,16 +1811,14 @@ export default function PostListingPage() {
                             Selected preview: {selectedInterparcelPreviewQuote.name} - £{selectedInterparcelPreviewQuote.price}
                           </p>
                           <p className="mt-1 text-xs font-semibold text-slate-600">
-                            ETA: {selectedInterparcelPreviewQuote.eta}. Preview quote subject to courier confirmation.
+                            ETA: {selectedInterparcelPreviewQuote.eta}.
                           </p>
                         </div>
                       )}
                     </div>
                   )}
 
-                  <p className="mt-3 text-xs font-semibold text-slate-500">
-                    Automatic booking uses these seller details plus the buyer delivery address after Stripe payment.
-                  </p>
+                  <p className="mt-3 text-xs font-semibold text-slate-500">Buyers choose delivery at checkout.</p>
                 </div>
 
                 <label className="flex items-start gap-3 rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-bold text-green-800">
@@ -1739,7 +1843,7 @@ export default function PostListingPage() {
                 <p className="text-xs font-black uppercase tracking-[0.16em] text-[#FF6B00]">
                   CaterBot product match
                 </p>
-                <h3 className="mt-1 text-lg font-black">Review CaterBot Suggestions</h3>
+                <h3 className="mt-1 text-lg font-black">Check manual match</h3>
               </div>
               <span
                 className={`rounded-full px-3 py-1 text-xs font-black ${
@@ -1755,9 +1859,9 @@ export default function PostListingPage() {
             <p className="mt-2 text-sm leading-relaxed text-slate-600">
               {manualSourceValidated
                 ? specConfidence === "high"
-                  ? "CaterBot found a strong product match for this item. Please check and confirm before publishing."
-                  : "CaterBot found a likely product match. Please check carefully before publishing."
-                : "CaterBot could not verify a reliable manual/spec source for this item. Continue using the plate and photo details only."}
+                  ? "Strong match found."
+                  : "Likely match found."
+                : "No reliable manual match found."}
             </p>
 
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -1817,7 +1921,7 @@ export default function PostListingPage() {
                 <a
                   href={manualSourceUrl}
                   target="_blank"
-                  rel="noreferrer"
+                  rel="noopener noreferrer"
                   className="inline-flex flex-1 items-center justify-center rounded-2xl bg-[#FF6B00] px-4 py-3 text-sm font-black text-white"
                 >
                   Open manual/spec source
@@ -1862,9 +1966,16 @@ export default function PostListingPage() {
           </div>
         )}
 
+        <section className="mb-4">
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-[#FF6B00]">
+            Step 5 · Review & publish
+          </p>
+          <p className="mt-1 text-sm text-white/60">Check the listing, then publish.</p>
+        </section>
+
         <textarea
           name="description"
-          placeholder="Description"
+          placeholder="Short description for buyers"
           className="premium-input mb-4 min-h-28 w-full rounded-2xl p-3"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
@@ -1884,7 +1995,7 @@ export default function PostListingPage() {
           disabled={isPublishing}
           className="premium-button w-full rounded-2xl py-3 text-lg font-bold disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {isPublishing ? "Publishing..." : "Publish Listing"}
+          {isPublishing ? "Publishing..." : "Publish listing"}
         </button>
       </form>
       </div>

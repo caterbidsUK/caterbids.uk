@@ -105,11 +105,52 @@ function safeText(value: unknown) {
   return typeof value === "string" ? value.trim() : ""
 }
 
+function normaliseImageMimeType(value: string | undefined) {
+  const mimeType = safeText(value).toLowerCase()
+  if (mimeType === "image/jpg") return "image/jpeg"
+  if (["image/jpeg", "image/png", "image/webp"].includes(mimeType)) return mimeType
+  return "image/jpeg"
+}
+
+function isManualsLibSearchUrl(url: string) {
+  try {
+    const parsed = new URL(url)
+    const hostname = parsed.hostname.replace(/^www\./, "")
+    const path = parsed.pathname.toLowerCase()
+    return hostname.endsWith("manualslib.com") && (path.includes("/search") || parsed.searchParams.get("action") === "search")
+  } catch {
+    return false
+  }
+}
+
+function isDirectSourceUrl(url: string) {
+  const lower = url.toLowerCase()
+  return (
+    /^https?:\/\//i.test(url) &&
+    !isManualsLibSearchUrl(url) &&
+    !lower.includes("google.com/search") &&
+    !lower.includes("bing.com/search") &&
+    !lower.includes("duckduckgo.com")
+  )
+}
+
 function clampConfidence(value: unknown) {
   const numberValue = typeof value === "number" ? value : Number(value)
   if (!Number.isFinite(numberValue)) return 0.2
   if (numberValue > 1) return Math.max(0, Math.min(1, numberValue / 100))
   return Math.max(0, Math.min(1, numberValue))
+}
+
+function normaliseWeightText(weight: unknown, estimatedWeight: unknown) {
+  const explicitWeight = safeText(weight)
+  if (explicitWeight) return explicitWeight
+
+  const estimatedWeightText = safeText(estimatedWeight)
+  if (!estimatedWeightText) return ""
+  if (/^\d+(?:\.\d+)?$/.test(estimatedWeightText)) return `${estimatedWeightText}kg`
+  if (/^\d+(?:\.\d+)?\s*kg$/i.test(estimatedWeightText)) return estimatedWeightText
+
+  return ""
 }
 
 function confidenceLabel(score: number) {
@@ -239,16 +280,6 @@ function inferShippingClass(text: string, weight: string, dimensions: string) {
   return "Delivery quote required"
 }
 
-function buildManualSearchUrl({ brand, model, gcNumber }: { brand: string; model: string; gcNumber: string }) {
-  if (!model && !gcNumber) return ""
-
-  const query = [brand, model, gcNumber, "manual spec sheet dimensions weight pdf catering equipment"]
-    .filter(Boolean)
-    .join(" ")
-
-  return `https://www.google.com/search?q=${encodeURIComponent(query)}`
-}
-
 function normaliseCategory(value: Partial<QuickListAiSuggestion>) {
   const mainCategories = CATEGORY_OPTIONS.filter((item) => item !== "All Categories")
   const proposedCategory = safeText(value.category)
@@ -291,16 +322,19 @@ function normaliseQuickListSuggestion(value: Partial<QuickListAiSuggestion>) {
   const brand = safeText(value.brand)
   const model = safeText(value.model)
   const gcNumber = safeText(value.gc_number)
+  const suggestedTitle = safeText(value.suggested_title) || safeText(value.title) || fallbackSuggestion.suggested_title
+  const description = safeText(value.description) || fallbackSuggestion.description
   const manualUrl = safeText(value.manual_url)
   const sourceUrl = safeText(value.manual_source_url) || safeText(value.spec_source_url) || manualUrl
+  const normalisedManualUrl = isDirectSourceUrl(manualUrl) ? manualUrl : ""
+  const directSourceUrl = isDirectSourceUrl(sourceUrl) ? sourceUrl : ""
   const confidenceScore = clampConfidence(value.confidence_score ?? value.confidence)
-  const estimatedWeight = safeText(value.estimated_weight_kg)
-  const normalisedWeight = safeText(value.weight) || (estimatedWeight ? `${estimatedWeight}kg` : "")
+  const normalisedWeight = normaliseWeightText(value.weight, value.estimated_weight_kg)
   const deliveryNotes = safeText(value.delivery_notes)
 
   return {
-    suggested_title: safeText(value.suggested_title) || safeText(value.title) || fallbackSuggestion.suggested_title,
-    description: safeText(value.description) || fallbackSuggestion.description,
+    suggested_title: suggestedTitle,
+    description,
     category,
     subcategory,
     brand,
@@ -325,9 +359,9 @@ function normaliseQuickListSuggestion(value: Partial<QuickListAiSuggestion>) {
     amps: safeText(value.amps),
     kw_rating: safeText(value.kw_rating),
     electrical_phase: safeText(value.electrical_phase),
-    manual_url: /^https?:\/\//i.test(manualUrl) ? manualUrl : buildManualSearchUrl({ brand, model, gcNumber }),
-    manual_source_url: /^https?:\/\//i.test(sourceUrl) ? sourceUrl : "",
-    spec_source_url: /^https?:\/\//i.test(sourceUrl) ? sourceUrl : "",
+    manual_url: normalisedManualUrl,
+    manual_source_url: directSourceUrl,
+    spec_source_url: directSourceUrl,
     manual_source_name: brand || model ? `${[brand, model].filter(Boolean).join(" ")} manual/spec source` : "Manual/spec source",
     manual_source_type: safeText(value.manual_source_type),
     manual_source_validated: Boolean(value.manual_source_validated),
@@ -351,11 +385,20 @@ async function withValidatedSource(suggestion: QuickListAiSuggestion) {
     suggestion.spec_source_url,
     suggestion.manual_url,
   ].filter((url): url is string => Boolean(url && /^https?:\/\//i.test(url)))
+  const plateIdentifier = suggestion.model || suggestion.gc_number
+  const equipmentSearchText = [
+    suggestion.subcategory,
+    suggestion.category,
+    suggestion.suggested_title || suggestion.title,
+    suggestion.description,
+  ]
+    .filter(Boolean)
+    .join(" ")
 
   const source = await findValidatedCaterBotSource({
     brand: suggestion.brand,
-    model: suggestion.model,
-    equipmentType: suggestion.subcategory || suggestion.category,
+    model: plateIdentifier,
+    equipmentType: equipmentSearchText || suggestion.subcategory || suggestion.category,
     candidateUrls,
   })
 
@@ -369,9 +412,9 @@ async function withValidatedSource(suggestion: QuickListAiSuggestion) {
       manual_source_validated: false,
       manual_source_last_checked_at: new Date().toISOString(),
       manual_source_match_notes:
-        suggestion.brand && suggestion.model
-          ? "CaterBot could not verify a reliable manual/spec source for this item."
-          : "CaterBot needs a clear brand and exact model before it can verify a manual/spec source.",
+        plateIdentifier
+          ? `CaterBot could not verify a reliable manual/spec source containing the exact plate identifier ${plateIdentifier}.`
+          : "CaterBot needs a clear model or GC number from the data plate before it can verify a manual/spec source.",
       manual_source_useful_details: [],
       ai_spec_confidence: "low",
       source_rejected_by_seller: false,
@@ -436,7 +479,7 @@ function fallbackFromFiles(files: QuickListImageInput[]) {
     description:
       equipment.keywords.length > 0
         ? equipment.description
-        : "CaterBot vision is not configured yet. This local prototype used file names only, so please add details manually or set AI_VISION_API_KEY / OPENAI_API_KEY for real photo and spec-plate analysis.",
+        : "Add clear photos and data plate details manually.",
     category: "Catering Equipment",
     subcategory: equipment.subcategory,
     brand,
@@ -508,7 +551,7 @@ async function analyseWithGemini({
                 { text: prompt },
                 ...images.map((image) => ({
                   inline_data: {
-                    mime_type: image.fileType || "image/jpeg",
+                    mime_type: normaliseImageMimeType(image.fileType),
                     data: image.imageBase64,
                   },
                 })),
@@ -572,7 +615,7 @@ async function analyseWithOpenAI({
             ...images.map((image) => ({
               type: "image_url",
               image_url: {
-                url: `data:${image.fileType || "image/jpeg"};base64,${image.imageBase64}`,
+                url: `data:${normaliseImageMimeType(image.fileType)};base64,${image.imageBase64}`,
               },
             })),
           ],
@@ -683,8 +726,7 @@ export async function POST(req: Request) {
       return NextResponse.json(
         {
           ...withLegacyAliases(fallbackFromFiles(images)),
-          error:
-            "CaterBot needs AI_VISION_API_KEY or OPENAI_API_KEY in .env.local for real photo and spec-plate analysis.",
+          error: "CaterBot could not read photos right now.",
         },
         { status: 503 }
       )
@@ -696,10 +738,11 @@ Analyse all uploaded item photos plus the spec/data plate photo if present.
 
 Tasks:
 - Identify the item type from normal photos.
-- Read the spec/data plate if visible.
-- Extract brand, model, serial number and GC number if visible.
-- For gas or electric catering equipment, treat the manufacturer manual/spec sheet as the preferred source for exact dimensions, weight, power and gas/electrical information.
-- If brand plus model or GC number is found, prepare a manual/spec sheet lookup so the seller can open the exact source.
+- Read the spec/data plate if visible. Treat the data plate as the authority for brand, model, serial number and GC number.
+- Extract brand, model, serial number and GC number only when they are visible on the spec/data plate or a clearly readable label.
+- Do not use generic phrases such as "Catering Equipment", "Commercial Catering Equipment" or the equipment type as the brand. If the maker is unclear, use "" for brand.
+- For gas or electric catering equipment, treat ManualsLib as the first manual database for exact dimensions, weight, power and gas/electrical information.
+- Use the exact model number first, or the exact GC number if no model is visible, for the ManualsLib manual lookup.
 - Extract dimensions and weight only when visible in photos, visible on the plate, or certain from a manufacturer manual/spec sheet.
 - Suggest delivery/shipping class for a UK catering equipment buyer.
 - Generate an editable listing title, category and description.
@@ -756,11 +799,13 @@ Rules:
 - Subcategory must be one of: ${CATEGORY_TITLES.join(", ")} when category is Catering Equipment.
 - power_type should be one of: ${POWER_TYPE_OPTIONS.join(", ")}.
 - Use "" for unknown values.
+- brand must be the maker/manufacturer only, not a category or supplier phrase.
 - Do not invent or estimate a model, serial number, GC number, voltage, amps, kW rating, dimensions or weight.
+- Do not copy a model number from a guessed product name. The model or GC number must come from the data plate/label text. If the plate is blurry or ambiguous, use "" and leave manual_url empty.
 - Use "" for dimensions and weight if they are not readable or not certain. Never guess from item type.
 - For pallet_length_cm, pallet_width_cm, pallet_height_cm and estimated_weight_kg, use the exact readable/spec-sheet value when present. If only an estimate is possible, put "Needs seller confirmation" instead of a number.
 - delivery_notes must mention "Needs seller confirmation" for any estimated pallet, weight, dimension, phone, collection or access detail.
-- manual_url should be a manufacturer manual/spec-sheet URL if directly known. If no direct URL is known but model or GC number is found, use a search URL for the exact brand/model/GC plus manual/spec sheet.
+- manual_url should be a direct ManualsLib /manual/ page URL only when it matches the exact visible model number or GC number. If no exact identifier match is known, use "". Do not use ManualsLib search pages, Google, generic search URLs, or generic brand phrases.
 - manual_source_url/spec_source_url should only be direct manufacturer, distributor, supplier or manual page URLs. Do not return generic homepages, search pages, unrelated products or category pages.
 - manual_source_validated should be false. CaterBids validates links server-side before the seller can confirm them.
 - manual_source_useful_details should list factual details visible in the source only, such as Dimensions, Weight, Voltage, Phase, Power rating, Capacity, Installation notes or Delivery handling notes.
@@ -797,8 +842,7 @@ Rules:
       const message = error instanceof Error ? error.message : "Unknown CaterBot analysis error"
       return NextResponse.json(
         {
-          error:
-            "CaterBot could not complete real image analysis. Check AI_VISION_API_KEY / OPENAI_API_KEY and AI_VISION_MODEL in .env.local, then restart npm run dev.",
+          error: "CaterBot could not read these photos.",
           detail: message,
         },
         { status: 502 }

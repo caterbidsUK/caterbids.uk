@@ -93,9 +93,7 @@ function CheckoutSuccessContent() {
 
         <h1 className="mt-2 text-3xl font-black">Payment successful</h1>
 
-        <p className="mt-3 text-sm text-slate-600">
-          Your test payment was completed successfully.
-        </p>
+        <p className="mt-3 text-sm text-slate-600">Your payment is complete.</p>
 
         {sessionId && (
           <div className="mt-4 break-all rounded-2xl bg-slate-50 p-4 text-xs text-slate-600">
@@ -127,7 +125,7 @@ function CheckoutSuccessContent() {
               : deliveryMessage || "Final courier confirmation will follow."}
           </p>
           <p className="mt-3 rounded-xl bg-white px-3 py-2 text-xs font-bold text-[#002E5D]">
-            Preview quote subject to courier confirmation. No final courier booking has been made yet.
+            CaterBids will confirm the courier details.
           </p>
         </div>
 

@@ -31,7 +31,7 @@ export default function BuyCheckoutBox({
 
   function handleBuyNow() {
     if (checkoutDisabled) {
-      alert("Please choose a CaterBids delivery option before checkout, or message the seller to arrange collection.")
+      alert("Choose delivery first, or contact the seller.")
       return
     }
 
@@ -65,11 +65,11 @@ export default function BuyCheckoutBox({
 
   return (
     <div className="rounded-3xl border border-[#FF6B00]/40 bg-white p-5 text-[#002E5D] shadow-lg shadow-black/20">
-      <h3 className="text-xl font-black">Ready to buy?</h3>
+      <h3 className="text-xl font-black">Buy now</h3>
       <p className="mt-1 text-sm text-slate-600">
         {deliveryAvailable
-          ? "Review the item and delivery cost before checkout."
-          : "This listing is collection only. Review the item total before checkout."}
+          ? "Choose delivery, then pay securely."
+          : "Pay securely and arrange collection."}
       </p>
 
       <div className="mt-4 space-y-3 rounded-2xl bg-slate-50 p-4">
@@ -107,7 +107,7 @@ export default function BuyCheckoutBox({
 
       {deliveryAvailable && !selectedDelivery && (
         <p className="mt-3 rounded-xl bg-orange-50 p-3 text-xs font-bold text-orange-700">
-          Select a delivery option above first, or continue as collection only.
+          Choose delivery first.
         </p>
       )}
 
@@ -117,7 +117,7 @@ export default function BuyCheckoutBox({
         disabled={checkoutDisabled}
         className="mt-4 w-full rounded-2xl bg-[#FF6B00] px-5 py-4 text-base font-black text-white shadow-lg shadow-orange-500/20 hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 disabled:shadow-none"
       >
-        {deliveryAvailable ? "Continue to payment" : "Buy Now"}
+        {deliveryAvailable ? "Pay and book" : "Pay"}
       </button>
 
       <button
@@ -125,11 +125,11 @@ export default function BuyCheckoutBox({
         onClick={onMessageSeller}
         className="mt-3 w-full rounded-2xl border border-[#002E5D]/20 bg-white px-5 py-4 text-base font-black text-[#002E5D] hover:bg-slate-50"
       >
-        Message Seller
+        Contact seller
       </button>
 
       <p className="mt-3 text-center text-xs text-slate-500">
-        Secure checkout saves the order and delivery request. Final courier confirmation will follow.
+        Secure checkout. Delivery support included.
       </p>
     </div>
   )

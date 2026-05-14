@@ -1076,7 +1076,13 @@ function ListingContent() {
   const trustBadges = trustBadgesForListing(listing)
   const deliveryOptionText = (listing.delivery_option || "").toLowerCase()
   const usesCaterBidsDelivery =
-    Boolean(listing.caterbids_delivery_available) || listing.delivery_method === "caterbids_delivery"
+    Boolean(listing.caterbids_delivery_available) ||
+    Boolean(listing.delivery_available) ||
+    listing.delivery_method === "caterbids_delivery" ||
+    deliveryOptionText.includes("delivery") ||
+    deliveryOptionText.includes("pallet") ||
+    deliveryOptionText.includes("courier") ||
+    deliveryOptionText.includes("local")
   const listingWeightKg = listing.pallet_weight_kg || listing.weight_kg
   const listingLengthCm = listing.pallet_length_cm || listing.length_cm
   const listingWidthCm = listing.pallet_width_cm || listing.width_cm
@@ -1087,9 +1093,11 @@ function ListingContent() {
     Number(listingWidthCm || 0) > 0 &&
     Number(listingHeightCm || 0) > 0
   const deliveryExplicitlyDisabled =
-    listing.delivery_method === "collection_only" ||
-    listing.delivery_available === false ||
-    deliveryOptionText.includes("buyer arranges transport")
+    !usesCaterBidsDelivery &&
+    (listing.delivery_method === "collection_only" ||
+      listing.delivery_available === false ||
+      deliveryOptionText.includes("buyer arranges transport")
+    )
   const hasDeliveryOption =
     usesCaterBidsDelivery &&
     hasDeliveryMeasurements &&
@@ -1101,12 +1109,12 @@ function ListingContent() {
       deliveryOptionText.includes("local"))
   const isListingOwner = userOwnsListing(listing)
   const isSoldListing = listing.status === "sold"
-  const manualSourceUrl = ((listing as any).manual_source_url || (listing as any).spec_source_url || "") as string
-  const manualSourceName = ((listing as any).manual_source_name || "Manual / spec source") as string
-  const specConfidence = ((listing as any).ai_spec_confidence || "") as string
-  const specsVerifiedBySeller = Boolean((listing as any).specs_verified_by_seller)
-  const manualSourceValidated = Boolean((listing as any).manual_source_validated)
-  const sourceRejectedBySeller = Boolean((listing as any).source_rejected_by_seller)
+  const manualSourceUrl = listing.manual_source_url || listing.spec_source_url || ""
+  const manualSourceName = listing.manual_source_name || "Manual / spec source"
+  const specConfidence = listing.ai_spec_confidence || ""
+  const specsVerifiedBySeller = Boolean(listing.specs_verified_by_seller)
+  const manualSourceValidated = Boolean(listing.manual_source_validated)
+  const sourceRejectedBySeller = Boolean(listing.source_rejected_by_seller)
   const showCaterBotSource =
     Boolean(manualSourceUrl) &&
     manualSourceValidated &&
@@ -1253,6 +1261,37 @@ function ListingContent() {
                 <Eye className="h-3 w-3" /> 1 view
               </span>
             </div>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center">
+              <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                  <p className="text-[10px] font-black uppercase tracking-wide text-white/45">Price</p>
+                  <p className="mt-1 text-lg font-black text-[#FF6B00]">{formatPrice(listing.price)}</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                  <p className="text-[10px] font-black uppercase tracking-wide text-white/45">Delivery</p>
+                  <p className="mt-1 font-black text-white">{usesCaterBidsDelivery ? "Available" : "Collection"}</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                  <p className="text-[10px] font-black uppercase tracking-wide text-white/45">Condition</p>
+                  <p className="mt-1 font-black text-white">{listing.condition || "Used"}</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                  <p className="text-[10px] font-black uppercase tracking-wide text-white/45">Seller</p>
+                  <p className="mt-1 font-black text-white">{listing.seller_contact_name || "CaterBids seller"}</p>
+                </div>
+              </div>
+              {!isListingOwner && !isSoldListing && (
+                <button
+                  type="button"
+                  onClick={messageSeller}
+                  disabled={openingMessage}
+                  className="premium-button rounded-2xl px-5 py-3 text-sm font-black text-white disabled:opacity-60"
+                >
+                  {openingMessage ? "Opening..." : "Contact seller"}
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Listing status */}
@@ -1300,19 +1339,21 @@ function ListingContent() {
           )}
 
           {/* Description */}
-          <div className="premium-card rounded-3xl p-5">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-white/50">Description</h2>
-  <p className="mt-3 whitespace-pre-line text-base leading-7 text-white/82">
+          <details className="premium-card rounded-3xl p-5">
+            <summary className="cursor-pointer list-none text-sm font-black uppercase tracking-wider text-white/70">
+              Description
+            </summary>
+            <p className="mt-3 whitespace-pre-line text-base leading-7 text-white/82">
               {listing.description || ''}
             </p>
-          </div>
+          </details>
 
           {/* Trade Checks */}
-          <div className="premium-card rounded-3xl p-5">
-            <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-white/50">
-              <Shield className="h-4 w-4 text-[#FF6B00]" />
-              Catering equipment checks
-            </h2>
+          <details className="premium-card rounded-3xl p-5">
+            <summary className="cursor-pointer list-none text-sm font-black uppercase tracking-wider text-white/70">
+              Specs & checks
+            </summary>
+            <p className="mt-2 text-xs text-white/50">Specs, condition and paperwork.</p>
             <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
               {safetyRows.map(([label, value]) => (
                 <div key={label} className="rounded-2xl border border-white/10 bg-[#002E5D]/35 p-3">
@@ -1321,20 +1362,24 @@ function ListingContent() {
                 </div>
               ))}
             </div>
-            <p className="mt-4 rounded-2xl border border-[#FF6B00]/25 bg-[#FF6B00]/10 p-3 text-xs leading-relaxed text-orange-100">
-              {BUYER_WARNING}
-            </p>
-          </div>
+            <details className="mt-4 rounded-2xl border border-[#FF6B00]/25 bg-[#FF6B00]/10 p-3 text-xs text-orange-100">
+              <summary className="cursor-pointer font-black">Safety note</summary>
+              <p className="mt-2 leading-relaxed">{BUYER_WARNING}</p>
+              <p className="mt-2 leading-relaxed text-orange-100/75">{SAFETY_DISCLAIMER}</p>
+            </details>
+          </details>
 
-          <div className="premium-card rounded-3xl p-5">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-white/50">Delivery status</h2>
+          <details className="premium-card rounded-3xl p-5">
+            <summary className="cursor-pointer list-none text-sm font-black uppercase tracking-wider text-white/70">
+              Delivery details
+            </summary>
             {usesCaterBidsDelivery ? (
               <div className="mt-3 space-y-3">
-                <p className="text-lg font-black text-white">CaterBids delivery available</p>
+                <p className="text-lg font-black text-white">Delivery available</p>
                 <p className="text-sm text-white/65">
                   {listing.delivery_details_confirmed
-                    ? "Pallet details confirmed. Buyer can get a delivery price at checkout."
-                    : "Pallet details need seller confirmation before courier booking."}
+                    ? "Pallet details confirmed."
+                    : "Pallet details need checking."}
                 </p>
                 <div className="grid gap-2 text-xs sm:grid-cols-2">
                   <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
@@ -1362,7 +1407,7 @@ function ListingContent() {
             ) : (
               <p className="mt-3 text-lg font-black text-white">Collection only</p>
             )}
-          </div>
+          </details>
 
           {!isSoldListing && hasDeliveryOption && (
             <DeliveryQuoteBox
@@ -1383,12 +1428,10 @@ function ListingContent() {
 
           {!isSoldListing && !hasDeliveryOption && !deliveryExplicitlyDisabled && !hasDeliveryMeasurements && (
             <div className="premium-card rounded-3xl border-[#FF6B00]/25 p-5">
-              <h3 className="text-xl font-black text-white">Delivery quote pending</h3>
-              <p className="mt-2 text-sm leading-relaxed text-white/65">
-                The seller has not confirmed the weight and size yet, so instant delivery prices are not available for this item.
-              </p>
+              <h3 className="text-xl font-black text-white">Delivery pending</h3>
+              <p className="mt-2 text-sm text-white/65">Weight and size are not confirmed yet.</p>
               <p className="mt-3 rounded-2xl border border-[#FF6B00]/25 bg-[#FF6B00]/10 p-3 text-xs font-bold text-orange-100">
-                Message the seller to confirm pallet dimensions, weight and collection details.
+                Contact seller for delivery details.
               </p>
             </div>
           )}
@@ -1413,10 +1456,12 @@ function ListingContent() {
           )}
 
           {showCaterBotSource && (
-            <div className="premium-card rounded-3xl border-[#FF6B00]/25 p-5">
-              <h2 className="text-lg font-black text-white">Product specs supported by CaterBot</h2>
+            <details className="premium-card rounded-3xl border-[#FF6B00]/25 p-5">
+              <summary className="cursor-pointer list-none text-sm font-black uppercase tracking-wider text-white/70">
+                Manuals & AI notes
+              </summary>
               <div className="mt-3 rounded-2xl border border-white/10 bg-white/5 p-4">
-                <p className="text-sm font-black text-white">Seller-confirmed product source available.</p>
+                <p className="text-sm font-black text-white">Seller-confirmed source.</p>
                 <p className="mt-1 text-xs text-white/55">
                   {manualSourceName}
                   {specConfidence ? ` · CaterBot spec confidence: ${specConfidence}` : ""}
@@ -1432,16 +1477,19 @@ function ListingContent() {
                 </a>
               </div>
               <p className="mt-3 text-xs leading-relaxed text-white/55">
-                Specs are provided to help buyers check details. Please confirm suitability before purchase.
+                Check specs before purchase.
               </p>
-            </div>
+            </details>
           )}
 
           {/* Buyer Checklist */}
-          <div className="premium-card rounded-3xl p-5">
-            <h3 className="flex items-center gap-2 text-sm font-bold">
+          <details className="premium-card rounded-3xl p-5">
+            <summary className="cursor-pointer list-none text-sm font-black uppercase tracking-wider text-white/70">
+              More details
+            </summary>
+            <h3 className="mt-3 flex items-center gap-2 text-sm font-bold">
               <Shield className="h-4 w-4 text-[#FF6B00]" />
-              Buyer checklist: {buyerChecklist.label}
+              Buyer checks: {buyerChecklist.label}
             </h3>
             <ul className="mt-3 space-y-2 text-xs leading-relaxed text-white/65">
               {buyerChecklist.items.map((item) => (
@@ -1451,40 +1499,7 @@ function ListingContent() {
                 </li>
               ))}
             </ul>
-          </div>
-
-          {/* CaterBot Advice */}
-          <div className="premium-card rounded-3xl border-[#FF6B00]/25 p-5">
-            <p className="text-xs font-black uppercase tracking-[0.18em] text-[#FF6B00]">CaterBot buyer advice</p>
-            <p className="mt-2 text-sm leading-relaxed text-white/70">
-              Ask the seller to confirm working condition, installation requirements and access for collection before arranging payment.
-            </p>
-            <p className="mt-3 text-[11px] leading-relaxed text-white/45">
-              {SAFETY_DISCLAIMER}
-            </p>
-          </div>
-
-          {/* Safety Tips */}
-          <div className="premium-card rounded-3xl p-5">
-            <h3 className="flex items-center gap-2 text-sm font-bold">
-              <Shield className="h-4 w-4 text-[#FF6B00]" />
-              Safety Tips
-            </h3>
-            <ul className="mt-3 space-y-2 text-xs text-white/60">
-              <li className="flex items-start gap-2">
-                <span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#FF6B00]" />
-                Confirm the equipment can be safely installed for your site, power supply and extraction setup
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#FF6B00]" />
-                Inspect condition, serial plates, gas or electrical details, dimensions and paperwork before paying
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#FF6B00]" />
-                Use qualified engineers for gas, hardwired electrical and commercial kitchen installation work
-              </li>
-            </ul>
-          </div>
+          </details>
 
           {/* CTA */}
           {messageError && (
@@ -1500,7 +1515,7 @@ function ListingContent() {
               className="premium-button flex flex-1 items-center justify-center gap-2 rounded-2xl py-4 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
             >
               <MessageCircle className="h-5 w-5" />
-              {openingMessage ? "Opening..." : "Message Seller"}
+              {openingMessage ? "Opening..." : "Contact seller"}
             </button>
             <button className="soft-button flex items-center justify-center gap-2 rounded-2xl px-6 py-4 text-sm font-semibold">
               <Share2 className="h-4 w-4" />

@@ -218,10 +218,8 @@ export default function AccountClient({
       <div className="mx-auto max-w-md space-y-5">
         {/* TITLE */}
         <section>
-          <h2 className="text-2xl font-black">Account Dashboard</h2>
-          <p className="text-sm text-white/60">
-            Manage your CaterBids profile and activity.
-          </p>
+          <h2 className="text-2xl font-black">Account</h2>
+          <p className="text-sm text-white/60">Listings, orders and saved items.</p>
         </section>
 
         {/* PROFILE CARD */}
@@ -299,12 +297,9 @@ export default function AccountClient({
         {/* BIG SELL BUTTON */}
         {legacyListingCount > 0 && (
           <section className="rounded-3xl border border-[#FF6B00]/30 bg-[#FF6B00]/10 p-4">
-            <h3 className="text-base font-black text-orange-100">
-              Restore local beta listings
-            </h3>
-            <p className="mt-1 text-sm leading-relaxed text-orange-100/75">
-              {legacyListingCount} older beta listing{legacyListingCount === 1 ? "" : "s"} were saved before
-              account ownership was added. Attach them to this account to manage them here.
+            <h3 className="text-base font-black text-orange-100">Restore listings</h3>
+            <p className="mt-1 text-sm text-orange-100/75">
+              {legacyListingCount} older listing{legacyListingCount === 1 ? "" : "s"} found.
             </p>
             <button
               type="button"
@@ -322,7 +317,7 @@ export default function AccountClient({
           className="premium-button flex items-center justify-center gap-3 rounded-3xl py-5 text-lg font-black text-white"
         >
           <Plus size={24} />
-          Sell Item
+          Sell an item
         </Link>
 
         {/* QUICK ACTIONS */}

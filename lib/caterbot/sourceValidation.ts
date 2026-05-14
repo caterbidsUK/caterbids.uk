@@ -48,6 +48,24 @@ const TRUSTED_SOURCE_HINTS = [
   "cateringequipment",
 ]
 
+const MANUALSLIB_BASE_URL = "https://www.manualslib.com"
+
+function isManualsLibUrl(url: string) {
+  return getHostname(url).endsWith("manualslib.com")
+}
+
+function sourcePriority(url: string) {
+  const lowerUrl = url.toLowerCase()
+
+  if (lowerUrl.includes("manualslib.com/manual/")) return 0
+  if (lowerUrl.includes("manualslib.com/products/")) return 1
+  if (isManualsLibUrl(url)) return 2
+  if (lowerUrl.includes("/manual") || lowerUrl.includes("usermanual")) return 3
+  if (lowerUrl.includes("spec") || lowerUrl.includes(".pdf")) return 4
+
+  return 5
+}
+
 function clean(value: string | null | undefined) {
   return String(value || "")
     .toLowerCase()
@@ -59,6 +77,60 @@ function compactModel(value: string | null | undefined) {
   return String(value || "")
     .toLowerCase()
     .replace(/[^a-z0-9]/g, "")
+}
+
+function hasLettersAndDigits(value: string) {
+  return /[a-z]/i.test(value) && /\d/.test(value)
+}
+
+function hasPlateIdentifierShape(value: string) {
+  const compactValue = compactModel(value)
+  return hasLettersAndDigits(compactValue) || /^\d{5,}$/.test(compactValue)
+}
+
+function addUnique(values: string[], value: string) {
+  if (!values.includes(value)) values.push(value)
+}
+
+function modelSearchTerms(model: string | null | undefined) {
+  const raw = String(model || "").trim()
+  if (!raw) return []
+
+  const terms: string[] = []
+  const add = (value: string) => {
+    const cleaned = value.replace(/\s+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "")
+    if (cleaned && hasPlateIdentifierShape(cleaned)) addUnique(terms, cleaned)
+  }
+
+  add(raw)
+
+  const parts = raw.split(/[-\s_/]+/).filter(Boolean)
+  for (let index = 1; index < parts.length; index += 1) {
+    add(parts.slice(index).join("-"))
+  }
+
+  return terms.slice(0, 4)
+}
+
+function modelMatchAliases(model: string | null | undefined) {
+  return modelSearchTerms(model)
+    .map((term) => compactModel(term))
+    .filter((term) => term.length >= 4 && hasPlateIdentifierShape(term))
+}
+
+function normaliseManualLookupBrand(brand: string) {
+  const cleaned = brand
+    .replace(/\b(commercial\s+)?catering\s+equipment\b/gi, " ")
+    .replace(/\b(commercial\s+)?kitchen\s+equipment\b/gi, " ")
+    .replace(/\bequipment\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+
+  return cleaned.length >= 3 ? cleaned : ""
+}
+
+function manualsLibBrandSlug(brand: string) {
+  return clean(normaliseManualLookupBrand(brand)).replace(/\s+/g, "-")
 }
 
 function getHostname(url: string) {
@@ -73,6 +145,9 @@ function sourceTypeFor(url: string) {
   const host = getHostname(url)
   const lowerUrl = url.toLowerCase()
 
+  if (host.includes("manualslib")) {
+    return lowerUrl.includes("/manual/") ? "ManualsLib manual page" : "ManualsLib source"
+  }
   if (lowerUrl.endsWith(".pdf") || lowerUrl.includes(".pdf?")) return "PDF manual / spec sheet"
   if (host.includes("manual")) return "Manual page"
   if (TRUSTED_SOURCE_HINTS.some((hint) => host.includes(hint))) {
@@ -87,6 +162,9 @@ function sourceTypeFor(url: string) {
 function sourceNameFor(url: string, brand: string, model: string) {
   const host = getHostname(url)
   const label = [brand, model].filter(Boolean).join(" ")
+  if (host.includes("manualslib")) {
+    return label ? `${label} ManualsLib manual` : "ManualsLib manual"
+  }
   return label ? `${label} manual / spec source (${host})` : `Manual / spec source (${host})`
 }
 
@@ -132,12 +210,36 @@ function extractedSpecsFrom(text: string): CaterBotSourceValidationResult["extra
   }
 }
 
+function sourceMatchesEquipment(text: string, equipmentType: string | null | undefined) {
+  const equipmentText = clean(equipmentType)
+  if (!equipmentText) return true
+
+  if (/\b(griddle|plancha|clam)\b/.test(equipmentText)) return /\b(griddle|grill)\b/.test(text)
+  if (/\b(chargrill|charbroiler|grill|salamander|broiler)\b/.test(equipmentText)) {
+    return /\b(grill|griddle|broiler|salamander)\b/.test(text)
+  }
+  if (/\b(fryer|chip fryer|deep fryer)\b/.test(equipmentText)) return /\bfryer\b/.test(text)
+  if (/\b(oven|combi|range|roast|roasting|pizza)\b/.test(equipmentText)) {
+    return /\b(oven|combi|range|pizza)\b/.test(text)
+  }
+  if (/\b(dishwasher|glasswasher|warewasher|washer)\b/.test(equipmentText)) {
+    return /\b(dishwasher|glasswasher|warewasher|washer)\b/.test(text)
+  }
+  if (/\b(fridge|refrigerator|refrigeration|chiller|cooler)\b/.test(equipmentText)) {
+    return /\b(fridge|refrigerator|refrigeration|chiller|cooler)\b/.test(text)
+  }
+  if (/\b(freezer|blast freezer)\b/.test(equipmentText)) return /\bfreezer\b/.test(text)
+
+  return true
+}
+
 function isGenericOrBadUrl(url: string) {
   const lower = url.toLowerCase()
   if (!/^https?:\/\//i.test(url)) return true
   if (lower.includes("google.com/search")) return true
   if (lower.includes("bing.com/search")) return true
   if (lower.includes("duckduckgo.com")) return true
+  if (lower.includes("manualslib.com/index.php?action=search")) return true
   if (lower.includes("facebook.com")) return true
   if (lower.includes("instagram.com")) return true
 
@@ -148,6 +250,242 @@ function isGenericOrBadUrl(url: string) {
   } catch {
     return true
   }
+}
+
+function manualsLibCategorySlugs(equipmentType: string | null | undefined) {
+  const text = clean(equipmentType)
+  const slugs: string[] = []
+  const add = (slug: string) => addUnique(slugs, slug)
+
+  if (/\b(griddle|plancha|clam)\b/.test(text)) {
+    add("griddle")
+    add("grill")
+  }
+  if (/\b(chargrill|charbroiler|grill|salamander|broiler)\b/.test(text)) add("grill")
+  if (/\b(fryer|chip fryer|deep fryer)\b/.test(text)) add("fryer")
+  if (/\b(oven|combi|range|roast|roasting|pizza)\b/.test(text)) add("oven")
+  if (/\b(boiler|water boiler|urn)\b/.test(text)) add("boiler")
+  if (/\b(toaster|conveyor toaster)\b/.test(text)) add("toaster")
+  if (/\b(waffle)\b/.test(text)) add("waffle-maker")
+  if (/\b(coffee|espresso|grinder)\b/.test(text)) add("coffee-maker")
+  if (/\b(dishwasher|glasswasher|warewasher|washer)\b/.test(text)) add("dishwasher")
+  if (/\b(fridge|refrigerator|refrigeration|chiller|cooler)\b/.test(text)) add("refrigerator")
+  if (/\b(freezer|blast freezer)\b/.test(text)) add("freezer")
+  if (/\b(ice maker|ice machine)\b/.test(text)) add("ice-maker")
+  if (/\b(food warmer|hot cupboard|hotplate|bain marie|heated)\b/.test(text)) add("food-warmer")
+  if (/\b(mixer|planetary mixer)\b/.test(text)) add("mixer")
+  if (/\b(slicer|processor|prep|preparation)\b/.test(text)) add("food-processor")
+
+  add("commercial-food-equipment")
+
+  return slugs.slice(0, 6)
+}
+
+function manualsLibBrandPageUrls(brand: string, equipmentType: string | null | undefined) {
+  const brandSlug = manualsLibBrandSlug(brand)
+  if (!brandSlug) return []
+
+  const pages = manualsLibCategorySlugs(equipmentType).map(
+    (categorySlug) => `${MANUALSLIB_BASE_URL}/brand/${brandSlug}/${categorySlug}.html`
+  )
+  addUnique(pages, `${MANUALSLIB_BASE_URL}/brand/${brandSlug}/`)
+
+  return pages
+}
+
+function decodeHtml(value: string) {
+  return value
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, " ")
+}
+
+function plainTextFromHtml(value: string) {
+  return decodeHtml(value)
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+}
+
+function extractManualsLibManualUrls(html: string, pageUrl: string, model: string) {
+  const modelAliases = modelMatchAliases(model)
+  if (modelAliases.length === 0) return []
+
+  const urls = new Set<string>()
+  const hrefPattern = /\bhref\s*=\s*(["'])(.*?)\1/gi
+  let match: RegExpExecArray | null
+
+  while ((match = hrefPattern.exec(html)) && urls.size < 12) {
+    const rawHref = decodeHtml(match[2] || "")
+    if (!rawHref.includes("/manual/")) continue
+
+    const contextStart = Math.max(0, match.index - 900)
+    const contextEnd = Math.min(html.length, match.index + rawHref.length + 900)
+    const contextText = plainTextFromHtml(html.slice(contextStart, contextEnd))
+    const compactHref = compactModel(rawHref)
+    const compactContext = compactModel(contextText)
+    const hrefMatchesModel = modelAliases.some((modelText) => compactHref.includes(modelText))
+    const rowMatchesModel = modelAliases.some((modelText) => compactContext.includes(modelText))
+
+    if (!hrefMatchesModel && !rowMatchesModel) continue
+
+    try {
+      const targetUrl = new URL(rawHref, pageUrl).toString()
+      if (isManualsLibUrl(targetUrl) && targetUrl.includes("/manual/")) urls.add(targetUrl)
+    } catch {
+      // Ignore malformed ManualsLib links.
+    }
+  }
+
+  return Array.from(urls)
+}
+
+function extractManualsLibCategoryUrls(
+  html: string,
+  pageUrl: string,
+  brandSlug: string,
+  equipmentType: string | null | undefined
+) {
+  const urls = new Set<string>()
+  const words = clean(equipmentType)
+    .split(" ")
+    .filter((word) => word.length >= 5 && !["catering", "equipment", "commercial", "electric"].includes(word))
+  const hrefPattern = /\bhref\s*=\s*(["'])(.*?)\1/gi
+  let match: RegExpExecArray | null
+
+  while ((match = hrefPattern.exec(html)) && urls.size < 6) {
+    const rawHref = decodeHtml(match[2] || "")
+    if (!rawHref.includes(`/brand/${brandSlug}/`) || !rawHref.endsWith(".html")) continue
+
+    const contextStart = Math.max(0, match.index - 120)
+    const contextEnd = Math.min(html.length, match.index + rawHref.length + 160)
+    const contextText = clean(plainTextFromHtml(html.slice(contextStart, contextEnd)))
+    const hrefText = clean(rawHref)
+    const isRelevant =
+      words.length === 0 || words.some((word) => contextText.includes(word) || hrefText.includes(word))
+
+    if (!isRelevant) continue
+
+    try {
+      urls.add(new URL(rawHref, pageUrl).toString())
+    } catch {
+      // Ignore malformed category links.
+    }
+  }
+
+  return Array.from(urls)
+}
+
+async function fetchManualsLibText(url: string) {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 7000)
+
+  try {
+    const response = await fetch(url, {
+      redirect: "follow",
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "CaterBidsUK-CaterBot/1.0 (+https://caterbids.uk)",
+        Accept: "text/html,*/*;q=0.8",
+      },
+    })
+
+    if (!response.ok) return ""
+    return response.text()
+  } catch {
+    return ""
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+function stripHtml(value: string) {
+  return plainTextFromHtml(value).trim()
+}
+
+async function manualsLibAutocompleteModels(model: string, equipmentType: string | null | undefined) {
+  const results: Array<{ brand: string; model: string }> = []
+  const equipmentText = clean(equipmentType)
+
+  for (const term of modelSearchTerms(model)) {
+    try {
+      const url = `${MANUALSLIB_BASE_URL}/openSearch/action/autocomplete?term=${encodeURIComponent(term)}&open=1`
+      const raw = await fetchManualsLibText(url)
+      if (!raw) continue
+
+      const data = JSON.parse(raw) as Array<{ label?: string; value?: string; dalue?: string }>
+      for (const item of data) {
+        const value = stripHtml(item.value || item.dalue || item.label || "")
+        const parts = value.split(/\s+/).filter(Boolean)
+        if (parts.length < 2) continue
+
+        const brand = parts[0]
+        const matchedModel = parts.slice(1).join(" ")
+        const compactMatchedModel = compactModel(matchedModel)
+        const matchesModel = modelMatchAliases(model).some((alias) => compactMatchedModel.includes(alias))
+        const looksRelevant =
+          !equipmentText ||
+          !/(fridge|freezer|refrigerat|chiller|cooler|microwave|oven)/.test(clean(value)) ||
+          /(fridge|freezer|refrigerat|chiller|cooler|microwave|oven)/.test(equipmentText)
+
+        if (matchesModel && looksRelevant) {
+          results.push({ brand, model: matchedModel })
+        }
+      }
+    } catch {
+      // Autocomplete is best-effort. Brand/category scans and validation are still the gate.
+    }
+  }
+
+  return results.slice(0, 6)
+}
+
+async function findManualsLibCandidateUrls({
+  brand,
+  model,
+  equipmentType,
+}: {
+  brand: string
+  model: string
+  equipmentType?: string | null
+}) {
+  const brandSlug = manualsLibBrandSlug(brand)
+  if (!compactModel(model)) return []
+
+  const candidates: string[] = []
+  const visitedPages = new Set<string>()
+  const lookupModels = [
+    ...(brandSlug ? [{ brand, model }] : []),
+    ...(await manualsLibAutocompleteModels(model, equipmentType)),
+  ]
+  const pageQueue = lookupModels.flatMap((lookup) => manualsLibBrandPageUrls(lookup.brand, equipmentType))
+
+  while (pageQueue.length > 0 && visitedPages.size < 10 && candidates.length < 12) {
+    const pageUrl = pageQueue.shift()
+    if (!pageUrl || visitedPages.has(pageUrl)) continue
+    visitedPages.add(pageUrl)
+
+    const html = await fetchManualsLibText(pageUrl)
+    if (!html) continue
+
+    lookupModels
+      .map((lookup) => lookup.model)
+      .forEach((lookupModel) => {
+        extractManualsLibManualUrls(html, pageUrl, lookupModel).forEach((url) => addUnique(candidates, url))
+      })
+
+    const pageBrandSlug = pageUrl.match(/\/brand\/([^/]+)\/?$/)?.[1]
+    if (pageBrandSlug && candidates.length === 0) {
+      extractManualsLibCategoryUrls(html, pageUrl, pageBrandSlug, equipmentType).forEach((url) =>
+        addUnique(pageQueue, url)
+      )
+    }
+  }
+
+  return candidates
 }
 
 export async function validateCaterBotProductSource({
@@ -185,8 +523,7 @@ export async function validateCaterBotProductSource({
         "User-Agent": "CaterBidsUK-CaterBot/1.0 (+https://caterbids.uk)",
         Accept: "text/html,application/pdf;q=0.9,*/*;q=0.8",
       },
-    })
-    clearTimeout(timeout)
+    }).finally(() => clearTimeout(timeout))
 
     if (!response.ok) {
       return {
@@ -204,10 +541,9 @@ export async function validateCaterBotProductSource({
 
     const contentType = response.headers.get("content-type") || ""
     const finalUrl = response.url || url
-    const hostAndUrlText = clean(`${finalUrl} ${getHostname(finalUrl)}`)
-    const brandText = clean(brand)
-    const modelText = clean(model)
-    const compactModelText = compactModel(model)
+    const hostAndUrlText = clean(`${url} ${finalUrl} ${getHostname(finalUrl)}`)
+    const brandText = clean(normaliseManualLookupBrand(brand || ""))
+    const modelAliases = modelMatchAliases(model)
 
     let bodyText = ""
     if (!contentType.includes("pdf")) {
@@ -220,17 +556,20 @@ export async function validateCaterBotProductSource({
         .slice(0, 50000)
     }
 
-    const combinedText = clean(`${finalUrl} ${getHostname(finalUrl)} ${bodyText}`)
-    const compactCombinedText = compactModel(`${finalUrl} ${bodyText}`)
+    const combinedText = clean(`${url} ${finalUrl} ${getHostname(finalUrl)} ${bodyText}`)
+    const compactCombinedText = compactModel(`${url} ${finalUrl} ${bodyText}`)
     const brandMatches = !brandText || combinedText.includes(brandText) || hostAndUrlText.includes(brandText)
     const exactModelMatches =
-      Boolean(compactModelText) &&
-      (compactCombinedText.includes(compactModelText) || compactModel(finalUrl).includes(compactModelText))
-    const equipmentMatches = !equipmentType || combinedText.includes(clean(equipmentType))
+      modelAliases.length > 0 &&
+      modelAliases.some(
+        (modelText) => compactCombinedText.includes(modelText) || compactModel(finalUrl).includes(modelText)
+      )
+    const equipmentMatches = sourceMatchesEquipment(combinedText, equipmentType)
+    const brandCanBeRelaxed = isManualsLibUrl(finalUrl) && exactModelMatches && equipmentMatches
     const usefulDetails = usefulDetailsFrom(`${finalUrl} ${bodyText}`)
     const extractedSpecs = extractedSpecsFrom(bodyText)
 
-    if (!brandMatches || !exactModelMatches) {
+    if (!exactModelMatches || (!brandMatches && !brandCanBeRelaxed)) {
       return {
         valid: false,
         url: "",
@@ -239,7 +578,7 @@ export async function validateCaterBotProductSource({
         confidence: "low",
         checkedAt,
         matchNotes:
-          "CaterBot could not verify the same brand and exact model number on this source.",
+          "CaterBot could not verify the same model or GC number on this source.",
         usefulDetails,
         extractedSpecs,
       }
@@ -255,10 +594,13 @@ export async function validateCaterBotProductSource({
       sourceType: sourceTypeFor(finalUrl),
       confidence,
       checkedAt,
-      matchNotes:
-        confidence === "high"
-          ? "CaterBot matched the same brand and exact model on a useful product/manual source."
-          : "CaterBot matched the same brand and exact model, but the seller should check the source carefully.",
+      matchNotes: isManualsLibUrl(finalUrl) && !brandMatches
+        ? "CaterBot matched the exact data-plate identifier on ManualsLib. The seller should confirm the brand because this may be an OEM or rebranded item."
+        : isManualsLibUrl(finalUrl)
+        ? "CaterBot matched the same brand and exact data-plate identifier on ManualsLib."
+        : confidence === "high"
+          ? "CaterBot matched the same brand and exact data-plate identifier on a useful product/manual source."
+          : "CaterBot matched the same brand and exact data-plate identifier, but the seller should check the source carefully.",
       usefulDetails,
       extractedSpecs,
     }
@@ -311,17 +653,31 @@ export async function findValidatedCaterBotSource({
   equipmentType?: string | null
   candidateUrls?: string[]
 }) {
-  const brandText = String(brand || "").trim()
+  const brandText = normaliseManualLookupBrand(String(brand || "").trim())
   const modelText = String(model || "").trim()
-  if (!brandText || !modelText) return null
+  if (!modelText) return null
 
   const candidates = new Set(candidateUrls.filter((url) => !isGenericOrBadUrl(url)))
-  const queries = [
-    `${brandText} ${modelText} manual`,
-    `${brandText} ${modelText} spec sheet`,
-    `${brandText} ${modelText} dimensions weight`,
-    `${brandText} ${modelText} product data sheet`,
-  ]
+
+  const manualsLibCandidates = await findManualsLibCandidateUrls({
+    brand: brandText,
+    model: modelText,
+    equipmentType,
+  })
+  manualsLibCandidates.forEach((url) => candidates.add(url))
+
+  const queries =
+    manualsLibCandidates.length > 0
+      ? []
+      : [
+          ["site:manualslib.com/manual", brandText, modelText].filter(Boolean).join(" "),
+          ["site:manualslib.com/products", brandText, modelText].filter(Boolean).join(" "),
+          ["site:manualslib.com/manual", brandText, modelText, equipmentType || ""].filter(Boolean).join(" "),
+          [brandText, modelText, "manual"].filter(Boolean).join(" "),
+          [brandText, modelText, "spec sheet"].filter(Boolean).join(" "),
+          [brandText, modelText, "dimensions weight"].filter(Boolean).join(" "),
+          [brandText, modelText, "product data sheet"].filter(Boolean).join(" "),
+        ]
 
   for (const query of queries) {
     try {
@@ -332,8 +688,7 @@ export async function findValidatedCaterBotSource({
           "User-Agent": "CaterBidsUK-CaterBot/1.0 (+https://caterbids.uk)",
         },
         signal: controller.signal,
-      })
-      clearTimeout(timeout)
+      }).finally(() => clearTimeout(timeout))
       if (response.ok) {
         extractDuckDuckGoUrls(await response.text()).forEach((url) => candidates.add(url))
       }
@@ -344,7 +699,7 @@ export async function findValidatedCaterBotSource({
     if (candidates.size >= 10) break
   }
 
-  for (const url of Array.from(candidates).slice(0, 10)) {
+  for (const url of Array.from(candidates).sort((a, b) => sourcePriority(a) - sourcePriority(b)).slice(0, 12)) {
     const validation = await validateCaterBotProductSource({
       url,
       brand: brandText,

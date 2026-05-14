@@ -72,9 +72,7 @@ export default function SavedSearchesPage() {
             <Search size={26} />
           </div>
           <h2 className="mt-4 text-2xl font-black">Saved Searches</h2>
-          <p className="mt-2 text-sm text-white/60">
-            Saved marketplace searches will appear here.
-          </p>
+          <p className="mt-2 text-sm text-white/60">Run saved searches again.</p>
         </section>
 
         {savedSearches.length > 0 && (

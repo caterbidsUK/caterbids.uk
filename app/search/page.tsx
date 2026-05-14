@@ -737,20 +737,13 @@ function SearchContent() {
           </div>
         </div>
 
-        <div className="premium-card mb-5 rounded-3xl border-[#FF6B00]/25 p-4">
-          <p className="text-sm font-semibold leading-relaxed text-white/85">
-            <span className="text-[#FF6B00]">Free public beta:</span>{" "}
-            CaterBidsUK is in free public beta — list commercial catering equipment for free.
-          </p>
-        </div>
-
         {/* Search Summary */}
         <div className="premium-card mb-5 rounded-3xl p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <div className="flex items-center gap-2 text-sm text-white/60">
                 <Search className="h-4 w-4" />
-                Showing results for
+                Results for
               </div>
               <div className="mt-1 flex flex-wrap items-center gap-2">
                 <h2 className="text-lg font-bold">{query || "All listings"}</h2>
@@ -773,7 +766,7 @@ function SearchContent() {
               className="soft-button inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl px-4 py-2 text-sm font-bold disabled:opacity-60"
             >
               {savingSearch ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bookmark className="h-4 w-4" />}
-              Save this search
+              Save search
             </button>
           </div>
 
@@ -799,25 +792,17 @@ function SearchContent() {
             </button>
           </form>
 
-          <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.04] p-3">
-            <div className="mb-3">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-[#FF6B00]">
-                Search other platforms
-              </p>
-              <p className="mt-1 text-xs leading-relaxed text-white/55">
-                Facebook Marketplace and Gumtree open in a new tab so you can compare prices.
-              </p>
-            </div>
+          <details className="mt-4 rounded-2xl border border-white/10 bg-white/[0.04] p-3">
+            <summary className="cursor-pointer text-xs font-black uppercase tracking-[0.18em] text-[#FF6B00]">
+              More marketplaces
+            </summary>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               <button
                 type="button"
                 onClick={() => handlePlatformTab("ebay")}
                 className="soft-button min-h-11 rounded-2xl px-4 py-2 text-sm font-bold"
               >
-                View live eBay results
-                <span className="mt-0.5 block text-[11px] font-semibold text-white/50">
-                  Live results shown inside CaterBids.
-                </span>
+                eBay
               </button>
               <a
                 href={externalPlatformUrl("facebook")}
@@ -826,7 +811,7 @@ function SearchContent() {
                 aria-label="Opens Facebook Marketplace search in a new tab"
                 className="soft-button flex min-h-11 items-center justify-center rounded-2xl px-4 py-2 text-sm font-bold"
               >
-                Search Facebook ↗
+                Facebook ↗
               </a>
               <a
                 href={externalPlatformUrl("gumtree")}
@@ -835,10 +820,10 @@ function SearchContent() {
                 aria-label="Opens Gumtree search in a new tab"
                 className="soft-button flex min-h-11 items-center justify-center rounded-2xl px-4 py-2 text-sm font-bold"
               >
-                Search Gumtree ↗
+                Gumtree ↗
               </a>
             </div>
-          </div>
+          </details>
         </div>
 
         {notice && (
@@ -897,24 +882,22 @@ function SearchContent() {
         {filteredCaterBidsResults.length === 0 && (
           <div className="premium-card mb-8 flex flex-col items-center rounded-3xl p-8 text-center">
             <AlertCircle className="h-10 w-10 text-white/30" />
-            <h3 className="mt-4 text-xl font-black">No CaterBids listings found in this area yet</h3>
-            <p className="mt-2 max-w-md text-sm leading-relaxed text-white/65">
-              {conditionFilter === "all"
-                ? "Be the first to list your catering equipment on CaterBidsUK for free during beta."
-                : noConditionResultsText(conditionFilter)}
+            <h3 className="mt-4 text-xl font-black">No CaterBids listings yet</h3>
+            <p className="mt-2 max-w-md text-sm text-white/65">
+              {conditionFilter === "all" ? "Try another search or sell your item." : noConditionResultsText(conditionFilter)}
             </p>
             <div className="mt-5 flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
               <button
                 onClick={() => router.push("/post-listing")}
                 className="premium-button min-h-11 rounded-2xl px-5 py-3 text-sm font-bold text-white"
               >
-                List for Free
+                Sell an item
               </button>
               <button
                 onClick={saveThisSearch}
                 className="soft-button min-h-11 rounded-2xl px-5 py-3 text-sm font-bold"
               >
-                Save This Search
+                Save search
               </button>
             </div>
           </div>
@@ -956,16 +939,14 @@ function SearchContent() {
         <section className="premium-card mt-8 rounded-3xl border-[#FF6B00]/25 p-5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h3 className="text-xl font-black">Got catering equipment to sell?</h3>
-              <p className="mt-1 text-sm leading-relaxed text-white/65">
-                List it free on CaterBidsUK before paying marketplace fees elsewhere.
-              </p>
+              <h3 className="text-xl font-black">Sell catering equipment</h3>
+              <p className="mt-1 text-sm text-white/65">Create a listing in minutes.</p>
             </div>
             <Link
               href="/post-listing"
               className="premium-button inline-flex min-h-12 items-center justify-center rounded-2xl px-5 py-3 text-sm font-black"
             >
-              Create Free Listing
+              Sell an item
             </Link>
           </div>
         </section>
@@ -1027,10 +1008,7 @@ function SearchContent() {
         </div>
 
         <section id="supplier-results" className="mt-10 scroll-mt-24">
-          <SectionHeader title="Trusted Used Supplier Results" count={supplierResults.length} loading={loadingSuppliers} />
-          <p className="-mt-1 mb-4 text-sm text-white/60">
-            Second-hand, refurbished and reconditioned catering equipment from trusted UK suppliers.
-          </p>
+          <SectionHeader title="Supplier Results" count={supplierResults.length} loading={loadingSuppliers} />
 
           {supplierError && (
             <div className="premium-card mb-6 rounded-3xl border-orange-400/40 p-4">
@@ -1070,26 +1048,25 @@ function SearchContent() {
         </section>
 
         {/* Other Platforms */}
-        <h3 className="mb-1 mt-10 text-base font-bold">Search other platforms</h3>
-        <p className="mb-3 text-sm text-white/60">
-          Facebook Marketplace and Gumtree open in a new tab so you can compare prices.
-        </p>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <details className="mt-10">
+          <summary className="cursor-pointer text-base font-bold text-white">More marketplaces</summary>
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <PlatformButton
             icon={<Users className="h-5 w-5 text-blue-400" />}
-            label="Search Facebook ↗"
+            label="Facebook ↗"
             color="from-blue-500/10 to-transparent"
             href={externalPlatformUrl("facebook")}
             ariaLabel="Opens Facebook Marketplace search in a new tab"
           />
           <PlatformButton
             icon={<TreePine className="h-5 w-5 text-green-400" />}
-            label="Search Gumtree ↗"
+            label="Gumtree ↗"
             color="from-green-500/10 to-transparent"
             href={externalPlatformUrl("gumtree")}
             ariaLabel="Opens Gumtree search in a new tab"
           />
-        </div>
+          </div>
+        </details>
 
         <SearchFooter />
       </div>
@@ -1178,9 +1155,9 @@ function PlatformTabs({
 }) {
   const tabs: { key: PlatformTab; label: string }[] = [
     { key: "caterbids", label: "CaterBids" },
-    { key: "ebay", label: "View live eBay results" },
-    { key: "facebook", label: "Search Facebook ↗" },
-    { key: "gumtree", label: "Search Gumtree ↗" },
+    { key: "ebay", label: "eBay" },
+    { key: "facebook", label: "Facebook ↗" },
+    { key: "gumtree", label: "Gumtree ↗" },
   ]
 
   return (
@@ -1229,9 +1206,9 @@ function ComparePricesCard({
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-xs font-black uppercase tracking-[0.2em] text-[#FF6B00]">Cross-platform check</p>
-          <h3 className="mt-2 text-xl font-black">Compare prices across the web</h3>
+          <h3 className="mt-2 text-xl font-black">More marketplaces</h3>
           <p className="mt-1 text-sm leading-relaxed text-white/65">
-            Check this search on Facebook Marketplace and Gumtree before you buy.
+            Compare this search elsewhere.
           </p>
         </div>
         <div className="grid gap-2 sm:min-w-56">
@@ -1242,7 +1219,7 @@ function ComparePricesCard({
             aria-label="Opens Facebook Marketplace search in a new tab"
             className="soft-button flex min-h-11 items-center justify-center rounded-2xl px-4 py-2 text-sm font-bold"
           >
-            Search Facebook ↗
+            Facebook ↗
           </a>
           <a
             href={gumtreeUrl}
@@ -1251,7 +1228,7 @@ function ComparePricesCard({
             aria-label="Opens Gumtree search in a new tab"
             className="soft-button flex min-h-11 items-center justify-center rounded-2xl px-4 py-2 text-sm font-bold"
           >
-            Search Gumtree ↗
+            Gumtree ↗
           </a>
         </div>
       </div>
@@ -1350,10 +1327,6 @@ function ListingCard({
               ))}
             </div>
           )}
-
-          <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-white/50">
-            {item.description || ''}
-          </p>
 
           <div className="mt-3 flex items-center gap-1 text-xs font-bold text-[#FF6B00]">
             {item.created_at && (
@@ -1507,9 +1480,10 @@ function SupplierResultCard({ item }: { item: SupplierResult }) {
           {item.title}
         </h4>
         {item.snippet && (
-          <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-white/55">
-            {item.snippet}
-          </p>
+          <details className="mt-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/60">
+            <summary className="cursor-pointer font-bold text-white/75">More details</summary>
+            <p className="mt-2 leading-relaxed">{item.snippet}</p>
+          </details>
         )}
 
         <a

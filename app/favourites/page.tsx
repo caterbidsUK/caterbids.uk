@@ -77,18 +77,14 @@ export default function FavouritesPage() {
             <Heart size={24} className="fill-[#FF6B00]" />
           </div>
           <h2 className="mt-4 text-3xl font-black">Favourites</h2>
-          <p className="mt-2 text-sm text-white/60">
-            Saved CaterBids and eBay listings from your searches.
-          </p>
+          <p className="mt-2 text-sm text-white/60">Saved listings.</p>
         </section>
 
         {favourites.length === 0 ? (
           <section className="premium-card mt-5 rounded-[2rem] p-8 text-center">
             <Heart className="mx-auto h-10 w-10 text-white/30" />
             <h3 className="mt-4 text-xl font-black">No favourites yet</h3>
-            <p className="mt-2 text-sm text-white/60">
-              Tap Save Favourite on any search result to keep it here.
-            </p>
+            <p className="mt-2 text-sm text-white/60">Save listings from search.</p>
             <Link
               href="/search"
               className="premium-button mt-5 inline-flex rounded-2xl px-5 py-3 text-sm font-bold"

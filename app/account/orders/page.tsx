@@ -64,7 +64,7 @@ export default async function OrdersPage() {
           </div>
           <h1 className="mt-4 text-3xl font-black">Orders</h1>
           <p className="mt-2 text-sm leading-relaxed text-white/60">
-            Stripe test payments will appear here after the webhook creates a CaterBids order.
+            Purchases and sales.
           </p>
         </section>
 
@@ -72,7 +72,7 @@ export default async function OrdersPage() {
           <section className="rounded-3xl border border-[#FF6B00]/30 bg-[#FF6B00]/10 p-5 text-orange-100">
             <h2 className="font-black">Orders table not ready</h2>
             <p className="mt-2 text-sm leading-relaxed text-orange-100/75">
-              Run the Supabase orders SQL, then refresh this page.
+              Orders are not available yet.
             </p>
           </section>
         )}
@@ -82,8 +82,7 @@ export default async function OrdersPage() {
             <PackageCheck className="mx-auto h-10 w-10 text-white/30" />
             <h2 className="mt-4 text-xl font-black">No orders yet</h2>
             <p className="mt-2 text-sm text-white/60">
-              No orders found for this logged-in account yet. If you just paid,
-              check the Stripe webhook terminal.
+              Orders will appear here.
             </p>
             <Link href="/search" className="premium-button mt-5 inline-flex rounded-2xl px-5 py-3 text-sm font-bold">
               Search listings
@@ -174,9 +173,10 @@ export default async function OrdersPage() {
                 )}
 
                 {order.stripe_session_id && (
-                  <p className="mt-4 break-all rounded-2xl bg-black/15 p-3 text-[11px] text-white/45">
-                    Stripe session: {order.stripe_session_id}
-                  </p>
+                  <details className="mt-4 rounded-2xl bg-black/15 p-3 text-[11px] text-white/45">
+                    <summary className="cursor-pointer font-bold text-white/60">More details</summary>
+                    <p className="mt-2 break-all">Stripe session: {order.stripe_session_id}</p>
+                  </details>
                 )}
               </article>
               )
