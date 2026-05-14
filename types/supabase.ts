@@ -412,6 +412,7 @@ export interface Database {
           listing_id: string
           buyer_id: string | null
           seller_id: string | null
+          delivery_order_id: string | null
           stripe_session_id: string | null
           stripe_payment_intent_id: string | null
           item_title: string | null
@@ -462,6 +463,7 @@ export interface Database {
           listing_id: string
           buyer_id?: string | null
           seller_id?: string | null
+          delivery_order_id?: string | null
           stripe_session_id?: string | null
           stripe_payment_intent_id?: string | null
           item_title?: string | null
@@ -512,6 +514,7 @@ export interface Database {
           listing_id?: string
           buyer_id?: string | null
           seller_id?: string | null
+          delivery_order_id?: string | null
           stripe_session_id?: string | null
           stripe_payment_intent_id?: string | null
           item_title?: string | null
@@ -554,6 +557,171 @@ export interface Database {
           payment_status?: string | null
           order_status?: string | null
           delivery_status?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      delivery_orders: {
+        Row: {
+          id: string
+          order_id: string | null
+          listing_id: string
+          buyer_id: string | null
+          seller_id: string | null
+          stripe_checkout_session_id: string | null
+          stripe_payment_intent_id: string | null
+          collection_postcode: string | null
+          delivery_postcode: string | null
+          weight_kg: number | null
+          length_cm: number | null
+          width_cm: number | null
+          height_cm: number | null
+          pallet_count: number | null
+          insurance_value: number | null
+          selected_service_name: string | null
+          selected_service_price: number | null
+          estimated_delivery_time: string | null
+          courier_provider: string | null
+          status: string
+          courier_name: string | null
+          courier_reference: string | null
+          tracking_number: string | null
+          tracking_url: string | null
+          is_test: boolean
+          paid_at: string | null
+          requested_at: string | null
+          booked_at: string | null
+          collected_at: string | null
+          delivered_at: string | null
+          cancelled_at: string | null
+          failed_at: string | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          order_id?: string | null
+          listing_id: string
+          buyer_id?: string | null
+          seller_id?: string | null
+          stripe_checkout_session_id?: string | null
+          stripe_payment_intent_id?: string | null
+          collection_postcode?: string | null
+          delivery_postcode?: string | null
+          weight_kg?: number | null
+          length_cm?: number | null
+          width_cm?: number | null
+          height_cm?: number | null
+          pallet_count?: number | null
+          insurance_value?: number | null
+          selected_service_name?: string | null
+          selected_service_price?: number | null
+          estimated_delivery_time?: string | null
+          courier_provider?: string | null
+          status?: string
+          courier_name?: string | null
+          courier_reference?: string | null
+          tracking_number?: string | null
+          tracking_url?: string | null
+          is_test?: boolean
+          paid_at?: string | null
+          requested_at?: string | null
+          booked_at?: string | null
+          collected_at?: string | null
+          delivered_at?: string | null
+          cancelled_at?: string | null
+          failed_at?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          order_id?: string | null
+          listing_id?: string
+          buyer_id?: string | null
+          seller_id?: string | null
+          stripe_checkout_session_id?: string | null
+          stripe_payment_intent_id?: string | null
+          collection_postcode?: string | null
+          delivery_postcode?: string | null
+          weight_kg?: number | null
+          length_cm?: number | null
+          width_cm?: number | null
+          height_cm?: number | null
+          pallet_count?: number | null
+          insurance_value?: number | null
+          selected_service_name?: string | null
+          selected_service_price?: number | null
+          estimated_delivery_time?: string | null
+          courier_provider?: string | null
+          status?: string
+          courier_name?: string | null
+          courier_reference?: string | null
+          tracking_number?: string | null
+          tracking_url?: string | null
+          is_test?: boolean
+          paid_at?: string | null
+          requested_at?: string | null
+          booked_at?: string | null
+          collected_at?: string | null
+          delivered_at?: string | null
+          cancelled_at?: string | null
+          failed_at?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      email_events: {
+        Row: {
+          id: string
+          dedupe_key: string
+          order_id: string | null
+          delivery_order_id: string | null
+          recipient_user_id: string | null
+          recipient_email: string | null
+          template: string
+          subject: string
+          body: string
+          status: string
+          provider: string | null
+          sent_at: string | null
+          error: string | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          dedupe_key: string
+          order_id?: string | null
+          delivery_order_id?: string | null
+          recipient_user_id?: string | null
+          recipient_email?: string | null
+          template: string
+          subject: string
+          body: string
+          status?: string
+          provider?: string | null
+          sent_at?: string | null
+          error?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          dedupe_key?: string
+          order_id?: string | null
+          delivery_order_id?: string | null
+          recipient_user_id?: string | null
+          recipient_email?: string | null
+          template?: string
+          subject?: string
+          body?: string
+          status?: string
+          provider?: string | null
+          sent_at?: string | null
+          error?: string | null
           created_at?: string | null
           updated_at?: string | null
         }

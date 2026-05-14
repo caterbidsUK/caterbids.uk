@@ -4,31 +4,35 @@ import { useState } from "react"
 
 type InterparcelBookingButtonProps = {
   orderId: string
+  deliveryOrderId?: string | null
   ready: boolean
   missingFields: string[]
+  testMode?: boolean
 }
 
 export default function InterparcelBookingButton({
   orderId,
+  deliveryOrderId,
   ready,
   missingFields,
+  testMode = false,
 }: InterparcelBookingButtonProps) {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
 
-  async function bookDelivery() {
+  async function confirmDelivery() {
     setLoading(true)
     setMessage("")
     setError("")
 
     try {
-      const res = await fetch("/api/delivery/interparcel/book", {
+      const res = await fetch(testMode ? "/api/delivery/test-confirm" : "/api/delivery/interparcel/book", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ orderId }),
+        body: JSON.stringify({ orderId, deliveryOrderId }),
       })
       const data = await res.json()
 
@@ -37,8 +41,11 @@ export default function InterparcelBookingButton({
         throw new Error(missing ? `${data.error} Missing: ${missing}` : data.error || "Could not book delivery.")
       }
 
-      if (data.booked) {
-        setMessage(`Interparcel booking created: ${data.booking?.bookingReference || "booked"}`)
+      if (data.confirmed) {
+        setMessage("Test courier confirmation saved.")
+        window.location.reload()
+      } else if (data.booked) {
+        setMessage(`Courier confirmed: ${data.booking?.bookingReference || "confirmed"}`)
         window.location.reload()
       } else {
         setMessage(data.message || "Delivery data is ready. Final courier confirmation will follow.")
@@ -56,14 +63,16 @@ export default function InterparcelBookingButton({
         <>
           <button
             type="button"
-            onClick={bookDelivery}
+            onClick={confirmDelivery}
             disabled={loading}
             className="w-full rounded-2xl bg-[#FF6B00] px-4 py-3 text-sm font-black text-white disabled:cursor-wait disabled:opacity-60"
           >
-            {loading ? "Checking delivery data..." : "Book Interparcel Delivery"}
+            {loading ? "Checking delivery data..." : testMode ? "Simulate courier confirmation" : "Request courier confirmation"}
           </button>
           <p className="mt-2 text-xs text-white/55">
-            TEST READY / Preview only. No final courier booking is created unless live Interparcel API credentials are configured.
+            {testMode
+              ? "Local/test only. This creates clearly labelled test tracking values."
+              : "No final courier booking is created until the live courier API confirms it."}
           </p>
         </>
       ) : (

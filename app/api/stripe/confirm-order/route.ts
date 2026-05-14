@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from "next/server"
 import Stripe from "stripe"
 import { stripe } from "@/lib/stripe"
 import { createAdminClient } from "@/lib/supabase/admin"
+import {
+  deliveryOrderIdFromMetadata,
+  isMissingDeliveryOrdersTable,
+  upsertDeliveryOrderAfterPayment,
+} from "@/lib/delivery/deliveryOrders"
+import { sendPaymentSuccessEmails } from "@/lib/email/orderNotifications"
 
 export const runtime = "nodejs"
 
@@ -30,6 +36,18 @@ function isMissingColumnError(error: unknown) {
   return code === "PGRST204" || message.includes("schema cache") || message.includes("column")
 }
 
+function normaliseOrderDeliveryStatus(value: string | null | undefined, fallback: string) {
+  if (!value || value === "pending_payment" || value === "awaiting_booking" || value === "not_booked") {
+    return fallback
+  }
+
+  if (value === "booked" || value === "test_booked") {
+    return "courier_confirmed"
+  }
+
+  return value
+}
+
 async function upsertOrderWithSchemaFallback(
   supabase: ReturnType<typeof createAdminClient>,
   payload: Record<string, unknown>
@@ -46,6 +64,7 @@ async function upsertOrderWithSchemaFallback(
 
   const {
     delivery_provider: _deliveryProvider,
+    delivery_order_id: _deliveryOrderId,
     delivery_quote_id: _deliveryQuoteId,
     delivery_postcode: _deliveryPostcode,
     collection_postcode: _collectionPostcode,
@@ -126,27 +145,26 @@ export async function POST(req: NextRequest) {
       sellerId = nullableUuid(listingData?.seller_id) || nullableUuid(listingData?.user_id)
     }
     const sellerUuid = nullableUuid(sellerId)
-    const nextDeliveryStatus = deliveryPrice > 0 ? "awaiting_booking" : "not_required"
+    const nextDeliveryStatus = deliveryPrice > 0 ? "booking_requested" : "not_required"
     const deliveryProvider =
-      metadata.deliveryProvider || (deliveryPrice > 0 ? "CaterBids Delivery Estimate" : null)
+      metadata.courier_provider || metadata.deliveryProvider || (deliveryPrice > 0 ? "Interparcel" : null)
+    const metadataDeliveryOrderId = deliveryOrderIdFromMetadata(metadata)
 
     console.log("ORDER SELLER ID:", sellerId)
     console.log("ORDER DELIVERY:", metadata.deliveryName, metadata.deliveryPrice)
 
     const { data: existingOrder } = await supabase
       .from("orders")
-      .select("delivery_status")
+      .select("id,delivery_status,delivery_order_id")
       .eq("stripe_session_id", session.id)
       .maybeSingle()
-    const resolvedDeliveryStatus =
-      existingOrder?.delivery_status && existingOrder.delivery_status !== "pending_payment"
-        ? existingOrder.delivery_status
-        : nextDeliveryStatus
+    const resolvedDeliveryStatus = normaliseOrderDeliveryStatus(existingOrder?.delivery_status, nextDeliveryStatus)
 
     const { error: orderError } = await upsertOrderWithSchemaFallback(supabase, {
       listing_id: listingId,
       buyer_id: buyerUuid,
       seller_id: sellerUuid,
+      delivery_order_id: metadataDeliveryOrderId || existingOrder?.delivery_order_id || null,
       stripe_session_id: session.id,
       stripe_payment_intent_id: paymentIntentId(session.payment_intent),
       item_title: metadata.title || "CaterBids item",
@@ -206,6 +224,45 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const { data: savedOrder, error: savedOrderError } = await supabase
+      .from("orders")
+      .select("*")
+      .eq("stripe_session_id", session.id)
+      .maybeSingle()
+
+    if (savedOrderError) {
+      throw savedOrderError
+    }
+
+    const deliveryOrderResult = await upsertDeliveryOrderAfterPayment({
+      supabase,
+      session,
+      orderId: savedOrder?.id || existingOrder?.id || null,
+      listingData,
+    })
+
+    if (deliveryOrderResult.error) {
+      if (isMissingDeliveryOrdersTable(deliveryOrderResult.error)) {
+        throw new Error("Delivery order table is not ready. Run the delivery_orders migration.")
+      }
+      throw deliveryOrderResult.error
+    }
+
+    if (savedOrder?.id && deliveryOrderResult.data?.id) {
+      const { error: orderDeliveryLinkError } = await supabase
+        .from("orders")
+        .update({
+          delivery_order_id: deliveryOrderResult.data.id,
+          delivery_status: "booking_requested",
+          updated_at: new Date().toISOString(),
+        } as any)
+        .eq("id", savedOrder.id)
+
+      if (orderDeliveryLinkError && !isMissingColumnError(orderDeliveryLinkError)) {
+        throw orderDeliveryLinkError
+      }
+    }
+
     try {
       const { error: listingError } = await supabase
         .from("listings")
@@ -225,12 +282,54 @@ export async function POST(req: NextRequest) {
 
     console.log("CONFIRM ORDER CREATED:", session.id)
 
+    const { data: finalOrder } = await supabase
+      .from("orders")
+      .select("*")
+      .eq("stripe_session_id", session.id)
+      .maybeSingle()
+
+    if (finalOrder) {
+      await sendPaymentSuccessEmails({
+        supabase,
+        order: finalOrder,
+        deliveryOrder: deliveryOrderResult.data,
+      })
+    }
+
     return NextResponse.json({
       success: true,
       orderCreated: true,
       stripeSessionId: session.id,
       listingId,
       buyerLinked: Boolean(buyerId),
+      order: finalOrder
+        ? {
+            id: finalOrder.id,
+            itemTitle: finalOrder.item_title,
+            itemPrice: finalOrder.item_price,
+            totalPrice: finalOrder.total_price,
+            paymentStatus: finalOrder.payment_status,
+            deliveryStatus: deliveryOrderResult.data?.status || finalOrder.delivery_status,
+            deliveryName: deliveryOrderResult.data?.selected_service_name || finalOrder.delivery_name,
+            deliveryPrice: deliveryOrderResult.data?.selected_service_price || finalOrder.delivery_price,
+            collectionPostcode: deliveryOrderResult.data?.collection_postcode || finalOrder.collection_postcode,
+            deliveryPostcode: deliveryOrderResult.data?.delivery_postcode || finalOrder.buyer_delivery_postcode || finalOrder.delivery_postcode,
+          }
+        : null,
+      deliveryOrder: deliveryOrderResult.data
+        ? {
+            id: deliveryOrderResult.data.id,
+            status: deliveryOrderResult.data.status,
+            selectedServiceName: deliveryOrderResult.data.selected_service_name,
+            selectedServicePrice: deliveryOrderResult.data.selected_service_price,
+            collectionPostcode: deliveryOrderResult.data.collection_postcode,
+            deliveryPostcode: deliveryOrderResult.data.delivery_postcode,
+            courierProvider: deliveryOrderResult.data.courier_provider,
+            trackingNumber: deliveryOrderResult.data.tracking_number,
+            trackingUrl: deliveryOrderResult.data.tracking_url,
+            isTest: deliveryOrderResult.data.is_test,
+          }
+        : null,
     })
   } catch (error) {
     console.error("Confirm order failed:", error)

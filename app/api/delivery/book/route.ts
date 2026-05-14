@@ -154,8 +154,9 @@ async function bookWithLiveDeliveryApi(payload: BookingPayload) {
 async function saveBooking(session: Stripe.Checkout.Session, payload: BookingPayload, booking: BookingResult) {
   const supabase = createAdminClient()
   const now = new Date().toISOString()
+  const deliveryStatus = booking.trackingNumber && booking.trackingUrl ? "tracking_assigned" : "courier_confirmed"
   const detailedUpdate = {
-    delivery_status: booking.mode === "live" ? "booked" : "test_booked",
+    delivery_status: deliveryStatus,
     delivery_provider: booking.provider,
     delivery_quote_id: payload.quoteId,
     delivery_postcode: payload.deliveryPostcode,
@@ -172,6 +173,19 @@ async function saveBooking(session: Stripe.Checkout.Session, payload: BookingPay
     .from("orders")
     .update(detailedUpdate)
     .eq("stripe_session_id", session.id)
+
+  await supabase
+    .from("delivery_orders")
+    .update({
+      status: deliveryStatus,
+      courier_name: booking.provider,
+      courier_reference: booking.bookingReference,
+      tracking_number: booking.trackingNumber || null,
+      tracking_url: booking.trackingUrl || null,
+      booked_at: now,
+      updated_at: now,
+    })
+    .eq("stripe_checkout_session_id", session.id)
 
   if (!detailedError) return
 
@@ -237,7 +251,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         success: true,
         booked: false,
-        status: "awaiting_booking",
+        status: "booking_requested",
         paymentIntentId: paymentIntentId(session.payment_intent),
         message:
           "Delivery request received. Final courier confirmation will follow when the Interparcel booking API is connected.",
@@ -251,7 +265,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       booked: true,
-      status: booking.mode === "live" ? "booked" : "test_booked",
+      status: booking.trackingNumber && booking.trackingUrl ? "tracking_assigned" : "courier_confirmed",
       paymentIntentId: paymentIntentId(session.payment_intent),
       booking,
       payload,

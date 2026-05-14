@@ -3,6 +3,45 @@
 import { Suspense, useEffect, useRef, useState } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 
+type ConfirmOrderResponse = {
+  success?: boolean
+  listingId?: string
+  buyerLinked?: boolean
+  order?: {
+    id?: string
+    itemTitle?: string | null
+    itemPrice?: number | null
+    totalPrice?: number | null
+    paymentStatus?: string | null
+    deliveryStatus?: string | null
+    deliveryName?: string | null
+    deliveryPrice?: number | null
+    collectionPostcode?: string | null
+    deliveryPostcode?: string | null
+  } | null
+  deliveryOrder?: {
+    id?: string
+    status?: string | null
+    selectedServiceName?: string | null
+    selectedServicePrice?: number | null
+    collectionPostcode?: string | null
+    deliveryPostcode?: string | null
+    courierProvider?: string | null
+  } | null
+  error?: string
+}
+
+function money(value: number | null | undefined) {
+  return Number(value || 0).toLocaleString("en-GB", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}
+
+function statusLabel(value: string | null | undefined) {
+  return (value || "booking_requested").replace(/_/g, " ")
+}
+
 function CheckoutSuccessContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -16,6 +55,7 @@ function CheckoutSuccessContent() {
     "idle" | "request_received" | "not_required"
   >("idle")
   const [deliveryMessage, setDeliveryMessage] = useState("")
+  const [confirmation, setConfirmation] = useState<ConfirmOrderResponse | null>(null)
 
   useEffect(() => {
     if (!sessionId || hasConfirmed.current) return
@@ -31,11 +71,13 @@ function CheckoutSuccessContent() {
       body: JSON.stringify({ sessionId }),
     })
       .then(async (res) => {
-        const data = await res.json()
+        const data = (await res.json()) as ConfirmOrderResponse
 
         if (!res.ok || !data.success) {
           throw new Error(data.error || "Unable to save order")
         }
+
+        setConfirmation(data)
 
         setOrderStatus("saved")
 
@@ -70,12 +112,12 @@ function CheckoutSuccessContent() {
 
         setOrderMessage(
           data.buyerLinked
-            ? "Your order has been saved to your CaterBids account."
-            : "Your order has been saved, but it was not linked to a logged-in buyer account."
+            ? "Order saved to your CaterBids account."
+            : "Order saved."
         )
 
         setDeliveryStatus("request_received")
-        setDeliveryMessage("Delivery request received. CaterBids will confirm final courier booking details.")
+        setDeliveryMessage("CaterBids will confirm final courier booking details.")
       })
       .catch((error) => {
         console.error("Order confirmation failed:", error)
@@ -83,6 +125,14 @@ function CheckoutSuccessContent() {
         setOrderMessage("Payment succeeded, but CaterBids could not save the order yet. Check the dev terminal.")
       })
   }, [sessionId])
+
+  const deliveryOrder = confirmation?.deliveryOrder
+  const order = confirmation?.order
+  const selectedDeliveryName = deliveryOrder?.selectedServiceName || order?.deliveryName || "Delivery option"
+  const selectedDeliveryPrice = deliveryOrder?.selectedServicePrice ?? order?.deliveryPrice
+  const collectionPostcode = deliveryOrder?.collectionPostcode || order?.collectionPostcode || "Pending"
+  const deliveryPostcode = deliveryOrder?.deliveryPostcode || order?.deliveryPostcode || "Pending"
+  const visibleDeliveryStatus = deliveryOrder?.status || order?.deliveryStatus || "booking_requested"
 
   return (
     <main className="min-h-screen bg-[#001B35] px-4 py-8 text-white">
@@ -93,13 +143,7 @@ function CheckoutSuccessContent() {
 
         <h1 className="mt-2 text-3xl font-black">Payment successful</h1>
 
-        <p className="mt-3 text-sm text-slate-600">Your payment is complete.</p>
-
-        {sessionId && (
-          <div className="mt-4 break-all rounded-2xl bg-slate-50 p-4 text-xs text-slate-600">
-            Session ID: {sessionId}
-          </div>
-        )}
+        <p className="mt-3 text-sm text-slate-600">Order saved. Delivery request received.</p>
 
         {sessionId && (
           <div
@@ -113,26 +157,49 @@ function CheckoutSuccessContent() {
           >
             {orderStatus === "saving"
               ? "Saving your order to CaterBids..."
-              : orderMessage || "Order confirmation pending."}
+              : orderMessage || "Order saved."}
           </div>
         )}
 
         <div className="mt-5 rounded-2xl border border-orange-200 bg-orange-50 p-4">
-          <h2 className="font-black text-[#002E5D]">Delivery booking</h2>
-          <p className="mt-1 text-sm text-slate-700">
-            {deliveryStatus === "idle"
-              ? "Delivery booking will run after order confirmation."
-              : deliveryMessage || "Final courier confirmation will follow."}
-          </p>
+          <h2 className="font-black text-[#002E5D]">Delivery status: {statusLabel(visibleDeliveryStatus)}</h2>
+          <div className="mt-3 grid gap-2 text-sm">
+            <div className="flex justify-between gap-3 rounded-xl bg-white px-3 py-2">
+              <span className="font-semibold text-slate-600">Selected delivery</span>
+              <span className="text-right font-black">{selectedDeliveryName}</span>
+            </div>
+            <div className="flex justify-between gap-3 rounded-xl bg-white px-3 py-2">
+              <span className="font-semibold text-slate-600">Delivery price</span>
+              <span className="font-black">£{money(selectedDeliveryPrice)}</span>
+            </div>
+            <div className="flex justify-between gap-3 rounded-xl bg-white px-3 py-2">
+              <span className="font-semibold text-slate-600">Collection</span>
+              <span className="font-black">{collectionPostcode}</span>
+            </div>
+            <div className="flex justify-between gap-3 rounded-xl bg-white px-3 py-2">
+              <span className="font-semibold text-slate-600">Delivery</span>
+              <span className="font-black">{deliveryPostcode}</span>
+            </div>
+          </div>
           <p className="mt-3 rounded-xl bg-white px-3 py-2 text-xs font-bold text-[#002E5D]">
-            CaterBids will confirm the courier details.
+            {deliveryStatus === "idle"
+              ? "Final courier confirmation will follow."
+              : deliveryMessage || "Final courier confirmation will follow."}
           </p>
         </div>
 
         <button
           type="button"
-          onClick={() => router.push("/")}
+          onClick={() => router.push("/account/orders")}
           className="mt-5 w-full rounded-2xl bg-[#FF6B00] px-5 py-4 text-base font-black text-white"
+        >
+          View order
+        </button>
+
+        <button
+          type="button"
+          onClick={() => router.push("/")}
+          className="mt-3 w-full rounded-2xl border border-[#002E5D]/15 bg-white px-5 py-4 text-base font-black text-[#002E5D]"
         >
           Back to CaterBids
         </button>

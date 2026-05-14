@@ -3,6 +3,7 @@ import { stripe } from "@/lib/stripe"
 import { createClient } from "@/lib/supabase/server"
 import { getCurrentUser } from "@/lib/supabase/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { createDeliveryOrderBeforePayment } from "@/lib/delivery/deliveryOrders"
 
 type CheckoutRequestBody = {
   listingId?: string
@@ -12,6 +13,7 @@ type CheckoutRequestBody = {
   deliveryPrice?: number | string
   deliveryQuoteId?: string
   deliveryProvider?: string
+  estimatedDeliveryTime?: string
   deliveryPostcode?: string
   buyerDeliveryFullAddress?: string
   buyerDeliveryPostcode?: string
@@ -85,6 +87,7 @@ export async function POST(req: NextRequest) {
       deliveryPrice,
       deliveryQuoteId,
       deliveryProvider,
+      estimatedDeliveryTime,
       deliveryPostcode,
       buyerDeliveryFullAddress,
       buyerDeliveryPostcode,
@@ -169,6 +172,7 @@ export async function POST(req: NextRequest) {
     }
 
     const total = Number(itemPrice || 0) + Number(deliveryPrice || 0)
+    const supabaseAdmin = createAdminClient()
     const deliveryRequestPayload = {
       listing_id: listingId,
       buyer_id: checkoutBuyerId,
@@ -209,6 +213,49 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    let deliveryOrderId = ""
+
+    if (deliveryAmount > 0) {
+      const { data: deliveryOrder, error: deliveryOrderError } = await createDeliveryOrderBeforePayment(supabaseAdmin, {
+        order_id: pendingOrder?.id || null,
+        listing_id: listingId,
+        buyer_id: checkoutBuyerId,
+        seller_id: sellerId,
+        collection_postcode: collectionPostcode || (listing as any)?.collection_postcode || null,
+        delivery_postcode: buyerDeliveryPostcode || deliveryPostcode || null,
+        weight_kg: Number(weightKg || (listing as any)?.pallet_weight_kg || (listing as any)?.weight_kg || 0) || null,
+        length_cm: Number(lengthCm || (listing as any)?.pallet_length_cm || (listing as any)?.length_cm || 0) || null,
+        width_cm: Number(widthCm || (listing as any)?.pallet_width_cm || (listing as any)?.width_cm || 0) || null,
+        height_cm: Number(heightCm || (listing as any)?.pallet_height_cm || (listing as any)?.height_cm || 0) || null,
+        pallet_count: Number(palletCount || (listing as any)?.pallet_count || 1) || 1,
+        insurance_value: Number(insuranceValue || (listing as any)?.insurance_value || itemPrice || 0) || null,
+        selected_service_name: deliveryName || "CaterBids Delivery",
+        selected_service_price: Number(deliveryPrice || 0),
+        estimated_delivery_time: estimatedDeliveryTime || null,
+        courier_provider: "Interparcel",
+      })
+
+      if (deliveryOrderError) {
+        console.error("Delivery order create failed:", deliveryOrderError)
+        return NextResponse.json(
+          { error: "Could not create the delivery order before checkout. Run the delivery_orders migration, then try again." },
+          { status: 500 }
+        )
+      }
+
+      deliveryOrderId = deliveryOrder?.id || ""
+
+      if (pendingOrder?.id && deliveryOrderId) {
+        await supabaseAdmin
+          .from("orders")
+          .update({
+            delivery_order_id: deliveryOrderId,
+            updated_at: new Date().toISOString(),
+          } as any)
+          .eq("id", pendingOrder.id)
+      }
+    }
+
     const lineItems = [
       {
         price_data: {
@@ -241,16 +288,21 @@ export async function POST(req: NextRequest) {
       mode: "payment",
       payment_method_types: ["card"],
       line_items: lineItems,
-      success_url: `${siteUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+      success_url: `${siteUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}${deliveryOrderId ? `&delivery_order_id=${deliveryOrderId}` : ""}`,
       cancel_url: `${siteUrl}${returnUrl || "/"}`,
       metadata: {
         listingId,
+        listing_id: listingId,
         title,
         itemPrice: String(itemPrice || 0),
         deliveryName: deliveryName || "",
         deliveryPrice: String(deliveryPrice || 0),
+        selected_service_name: deliveryName || "",
+        selected_service_price: String(deliveryPrice || 0),
         deliveryQuoteId: deliveryQuoteId || "",
         deliveryProvider: deliveryProvider || "",
+        courier_provider: "Interparcel",
+        estimated_delivery_time: estimatedDeliveryTime || "",
         deliveryPostcode: deliveryPostcode || "",
         buyerDeliveryFullAddress: buyerDeliveryFullAddress || "",
         buyerDeliveryPostcode: buyerDeliveryPostcode || "",
@@ -265,22 +317,37 @@ export async function POST(req: NextRequest) {
         tailLiftRequired: tailLiftRequired || "",
         palletCount: String(palletCount || ""),
         insuranceValue: String(insuranceValue || ""),
+        order_id: pendingOrder?.id || "",
         deliveryRequestId: pendingOrder?.id || "",
+        deliveryOrderId,
+        delivery_order_id: deliveryOrderId,
         total: String(total),
         buyerId: checkoutBuyerId,
+        buyer_id: checkoutBuyerId,
         sellerId: sellerId || "",
+        seller_id: sellerId || "",
       },
     })
 
     if (pendingOrder?.id && session.id) {
       // Real Interparcel booking will use this same order/request after payment.
-      await createAdminClient()
+      await supabaseAdmin
         .from("orders")
         .update({
           stripe_session_id: session.id,
           updated_at: new Date().toISOString(),
         } as any)
         .eq("id", pendingOrder.id)
+    }
+
+    if (deliveryOrderId && session.id) {
+      await supabaseAdmin
+        .from("delivery_orders")
+        .update({
+          stripe_checkout_session_id: session.id,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", deliveryOrderId)
     }
 
     return NextResponse.json({

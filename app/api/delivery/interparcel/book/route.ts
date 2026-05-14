@@ -70,32 +70,10 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const hasLiveInterparcelConfig =
-      Boolean(process.env.INTERPARCEL_API_KEY) && Boolean(process.env.INTERPARCEL_API_BASE_URL)
-
-    if (!hasLiveInterparcelConfig) {
-      return NextResponse.json({
-        success: true,
-        booked: false,
-        status: "awaiting_booking",
-        message:
-          "Interparcel API key missing. Delivery data is ready, but no final courier booking has been made.",
-      })
-    }
-
-    const suffix = order.id.slice(0, 8).toUpperCase()
-    // TODO: Replace this placeholder with the confirmed Interparcel booking endpoint payload.
-    const bookingReference = `IP-PENDING-${suffix}`
-    const trackingNumber = `IP${Date.now()}`
-
     const { data: updatedOrder, error: updateError } = await supabaseAdmin
       .from("orders")
       .update({
-        delivery_status: "booked",
-        delivery_provider: "Interparcel",
-        delivery_booking_reference: bookingReference,
-        delivery_tracking_number: trackingNumber,
-        delivery_label_url: null,
+        delivery_status: "booking_requested",
         updated_at: new Date().toISOString(),
       } as any)
       .eq("id", order.id)
@@ -108,15 +86,12 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      booked: true,
-      mode: "live_placeholder",
+      booked: false,
+      mode: "live_not_connected",
+      status: "booking_requested",
       order: updatedOrder,
-      booking: {
-        provider: "Interparcel",
-        bookingReference,
-        trackingNumber,
-        labelUrl: null,
-      },
+      message:
+        "Delivery request is ready. No courier booking has been made because the real Interparcel booking API is not connected.",
     })
   } catch (error) {
     console.error("Interparcel booking failed:", error)

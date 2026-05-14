@@ -48,6 +48,7 @@ export default function BuyCheckoutBox({
       returnUrl: `/listing?id=${listingId}`,
       deliveryQuoteId: selectedDelivery?.id || "",
       deliveryProvider: selectedDelivery?.provider || "",
+      estimatedDeliveryTime: selectedDelivery?.eta || "",
       deliveryPostcode: selectedDelivery?.deliveryPostcode || "",
       collectionPostcode: selectedDelivery?.collectionPostcode || "",
       weightKg: String(selectedDelivery?.weightKg || ""),
@@ -117,7 +118,7 @@ export default function BuyCheckoutBox({
         disabled={checkoutDisabled}
         className="mt-4 w-full rounded-2xl bg-[#FF6B00] px-5 py-4 text-base font-black text-white shadow-lg shadow-orange-500/20 hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 disabled:shadow-none"
       >
-        {deliveryAvailable ? "Pay and book" : "Pay"}
+        {deliveryAvailable ? "Pay and book delivery" : "Pay"}
       </button>
 
       <button

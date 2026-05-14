@@ -22,6 +22,7 @@ function CheckoutContent() {
   const collectionPostcode = searchParams.get("collectionPostcode") || ""
   const deliveryQuoteId = searchParams.get("deliveryQuoteId") || ""
   const deliveryProvider = searchParams.get("deliveryProvider") || ""
+  const estimatedDeliveryTime = searchParams.get("estimatedDeliveryTime") || ""
   const weightKg = searchParams.get("weightKg") || ""
   const lengthCm = searchParams.get("lengthCm") || ""
   const widthCm = searchParams.get("widthCm") || ""
@@ -241,6 +242,7 @@ function CheckoutContent() {
                     deliveryPrice,
                     deliveryQuoteId,
                     deliveryProvider,
+                    estimatedDeliveryTime,
                     deliveryPostcode,
                     buyerDeliveryFullAddress,
                     buyerDeliveryPostcode,
@@ -280,7 +282,7 @@ function CheckoutContent() {
             disabled={!canContinueToPayment}
             className="mt-5 w-full rounded-2xl bg-[#FF6B00] px-5 py-4 text-base font-black text-white shadow-lg shadow-orange-500/20 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 disabled:shadow-none"
           >
-            {checkoutLoading ? "Opening secure payment..." : deliveryPrice > 0 ? "Pay and book" : "Pay"}
+            {checkoutLoading ? "Opening secure payment..." : deliveryPrice > 0 ? "Pay and book delivery" : "Pay"}
           </button>
 
           {checkoutUrl && (

@@ -4,6 +4,7 @@ import { ArrowLeft, Home, PackageCheck } from "lucide-react"
 import { createClient } from "@/lib/supabase/server"
 import InterparcelBookingButton from "@/components/InterparcelBookingButton"
 import { validateDeliveryBooking } from "@/lib/delivery/validateDeliveryBooking"
+import { isLocalCourierTestMode, isRealTrackingAvailable } from "@/lib/delivery/deliveryOrders"
 
 function money(value: number | null | undefined) {
   return Number(value || 0).toLocaleString("en-GB", {
@@ -31,6 +32,22 @@ export default async function OrdersPage() {
     .select("*")
     .or(`buyer_id.eq.${user.id},seller_id.eq.${user.id}`)
     .order("created_at", { ascending: false })
+  const { data: deliveryOrders } = await supabase
+    .from("delivery_orders")
+    .select("*")
+    .or(`buyer_id.eq.${user.id},seller_id.eq.${user.id}`)
+    .order("created_at", { ascending: false })
+  const deliveryOrdersByOrderId = new Map(
+    (deliveryOrders || [])
+      .filter((deliveryOrder) => deliveryOrder.order_id)
+      .map((deliveryOrder) => [deliveryOrder.order_id, deliveryOrder])
+  )
+  const deliveryOrdersByStripeSession = new Map(
+    (deliveryOrders || [])
+      .filter((deliveryOrder) => deliveryOrder.stripe_checkout_session_id)
+      .map((deliveryOrder) => [deliveryOrder.stripe_checkout_session_id, deliveryOrder])
+  )
+  const testCourierMode = isLocalCourierTestMode()
 
   return (
     <main className="app-bg min-h-screen px-4 pb-10 text-white">
@@ -95,6 +112,20 @@ export default async function OrdersPage() {
             {orders.map((order) => {
               const isSellerOrder = order.seller_id === user.id
               const deliveryValidation = validateDeliveryBooking(order)
+              const deliveryOrder =
+                deliveryOrdersByOrderId.get(order.id) ||
+                deliveryOrdersByStripeSession.get(order.stripe_session_id || "") ||
+                null
+              const deliveryStatus = deliveryOrder?.status || order.delivery_status || "not_required"
+              const selectedService = deliveryOrder?.selected_service_name || order.delivery_name || "Not selected"
+              const selectedServicePrice = deliveryOrder?.selected_service_price ?? order.delivery_price
+              const showTracking = isRealTrackingAvailable(deliveryOrder)
+              const canSimulateCourier =
+                testCourierMode &&
+                isSellerOrder &&
+                deliveryValidation.ready &&
+                deliveryOrder &&
+                deliveryStatus === "booking_requested"
 
               return (
               <article key={order.id} className="premium-card rounded-[2rem] p-5">
@@ -127,7 +158,7 @@ export default async function OrdersPage() {
                   <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
                     <p className="text-xs font-bold uppercase text-white/40">Delivery</p>
                     <p className="mt-1 font-black">
-                      {order.delivery_name || "Not selected"} - £{money(order.delivery_price)}
+                      {selectedService} - £{money(selectedServicePrice)}
                     </p>
                   </div>
                   <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
@@ -138,37 +169,45 @@ export default async function OrdersPage() {
 
                 <div className="mt-3 rounded-2xl border border-white/10 bg-white/5 p-3 text-sm">
                   <p className="text-xs font-bold uppercase text-white/40">Shipping</p>
-                  <p className="mt-1 font-black capitalize">{statusLabel(order.delivery_status)}</p>
-                  {order.delivery_booking_reference && (
-                    <p className="mt-1 break-all text-xs text-white/55">
-                      Booking: {order.delivery_booking_reference}
+                  <p className="mt-1 font-black capitalize">{statusLabel(deliveryStatus)}</p>
+                  {deliveryOrder?.courier_provider && (
+                    <p className="mt-1 text-xs text-white/55">
+                      Courier: {deliveryOrder.courier_provider}
                     </p>
                   )}
-                  {order.delivery_tracking_number && (
+                  {deliveryOrder?.courier_reference && (
                     <p className="mt-1 break-all text-xs text-white/55">
-                      Tracking: {order.delivery_tracking_number}
+                      Reference: {deliveryOrder.courier_reference}
+                      {deliveryOrder.is_test ? " (test)" : ""}
                     </p>
                   )}
-                  {order.delivery_tracking_url && (
+                  {showTracking && (
                     <Link
-                      href={order.delivery_tracking_url}
+                      href={deliveryOrder.tracking_url || "#"}
                       className="mt-2 inline-flex text-xs font-black text-[#FF9A4A] underline-offset-4 hover:underline"
                     >
                       Open tracking
                     </Link>
                   )}
-                  {order.buyer_delivery_postcode && (
+                  {isSellerOrder && (order.collection_full_address || order.collection_postcode || deliveryOrder?.collection_postcode) && (
                     <p className="mt-2 text-xs text-white/55">
-                      Buyer delivery: {order.buyer_delivery_postcode}
+                      Collection: {order.collection_full_address || deliveryOrder?.collection_postcode || order.collection_postcode}
+                    </p>
+                  )}
+                  {(deliveryOrder?.delivery_postcode || order.buyer_delivery_postcode) && (
+                    <p className="mt-2 text-xs text-white/55">
+                      Buyer delivery: {deliveryOrder?.delivery_postcode || order.buyer_delivery_postcode}
                     </p>
                   )}
                 </div>
 
-                {isSellerOrder && order.delivery_booking_required && order.delivery_status !== "booked" && (
+                {canSimulateCourier && (
                   <InterparcelBookingButton
                     orderId={order.id}
+                    deliveryOrderId={deliveryOrder.id}
                     ready={deliveryValidation.ready}
                     missingFields={deliveryValidation.missingFields}
+                    testMode
                   />
                 )}
 
