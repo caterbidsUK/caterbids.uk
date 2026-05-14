@@ -97,10 +97,21 @@ begin
       and table_name = 'delivery_orders'
       and column_name = 'status'
   ) then
-    update public.delivery_orders
-    set delivery_status = status
-    where delivery_status is null
-      and status is not null;
+    execute $sql$
+      update public.delivery_orders
+      set delivery_status = status
+      where status in (
+        'pending_payment',
+        'paid',
+        'booking_requested',
+        'courier_confirmed',
+        'tracking_assigned',
+        'collected',
+        'delivered',
+        'cancelled',
+        'failed'
+      )
+    $sql$;
   end if;
 end $$;
 
