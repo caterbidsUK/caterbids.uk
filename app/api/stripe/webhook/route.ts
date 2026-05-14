@@ -7,6 +7,7 @@ import {
   isMissingDeliveryOrdersTable,
   upsertDeliveryOrderAfterPayment,
 } from "@/lib/delivery/deliveryOrders"
+import { resolveFullUkPostcode } from "@/lib/delivery/postcodes"
 import { sendPaymentSuccessEmails } from "@/lib/email/orderNotifications"
 
 export const runtime = "nodejs"
@@ -166,6 +167,19 @@ export async function POST(req: NextRequest) {
     const deliveryProvider =
       metadata.courier_provider || metadata.deliveryProvider || (deliveryPrice > 0 ? "Interparcel" : null)
     const metadataDeliveryOrderId = deliveryOrderIdFromMetadata(metadata)
+    const fullCollectionPostcode = resolveFullUkPostcode(
+      metadata.collection_postcode,
+      metadata.collectionPostcode,
+      listingData?.collection_postcode,
+      listingData?.collection_full_address,
+      listingData?.location
+    )
+    const fullDeliveryPostcode = resolveFullUkPostcode(
+      metadata.buyer_delivery_postcode,
+      metadata.buyerDeliveryPostcode,
+      metadata.delivery_postcode,
+      metadata.deliveryPostcode
+    )
 
     console.log("ORDER SELLER ID:", sellerId)
     console.log("ORDER DELIVERY:", metadata.deliveryName, metadata.deliveryPrice)
@@ -190,11 +204,11 @@ export async function POST(req: NextRequest) {
       delivery_price: deliveryPrice,
       delivery_provider: deliveryProvider,
       delivery_quote_id: metadata.deliveryQuoteId || null,
-      delivery_postcode: metadata.buyerDeliveryPostcode || metadata.deliveryPostcode || null,
-      collection_postcode: metadata.collectionPostcode || null,
+      delivery_postcode: fullDeliveryPostcode || null,
+      collection_postcode: fullCollectionPostcode || null,
       delivery_booking_required: deliveryPrice > 0,
       buyer_delivery_full_address: metadata.buyerDeliveryFullAddress || null,
-      buyer_delivery_postcode: metadata.buyerDeliveryPostcode || metadata.deliveryPostcode || null,
+      buyer_delivery_postcode: fullDeliveryPostcode || null,
       buyer_phone: metadata.buyerPhone || null,
       buyer_access_restrictions: metadata.buyerAccessRestrictions || null,
       collection_full_address: listingData?.collection_full_address || null,

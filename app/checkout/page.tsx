@@ -1,8 +1,9 @@
 "use client"
 
-import { Suspense, useState } from "react"
+import { Suspense, useEffect, useState } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import { resolveFullUkPostcode } from "@/lib/delivery/postcodes"
 
 function money(value: number) {
   return Number.isFinite(value) ? value.toLocaleString("en-GB", { maximumFractionDigits: 2 }) : "0"
@@ -19,7 +20,7 @@ function CheckoutContent() {
   const deliveryPrice = Number(searchParams.get("deliveryPrice") || 0)
   const total = Number(searchParams.get("total") || itemPrice + deliveryPrice)
   const deliveryPostcode = searchParams.get("deliveryPostcode") || ""
-  const collectionPostcode = searchParams.get("collectionPostcode") || ""
+  const collectionPostcodeParam = searchParams.get("collectionPostcode") || ""
   const deliveryQuoteId = searchParams.get("deliveryQuoteId") || ""
   const deliveryProvider = searchParams.get("deliveryProvider") || ""
   const estimatedDeliveryTime = searchParams.get("estimatedDeliveryTime") || ""
@@ -39,15 +40,59 @@ function CheckoutContent() {
   const [buyerDeliveryPostcode, setBuyerDeliveryPostcode] = useState(deliveryPostcode)
   const [buyerPhone, setBuyerPhone] = useState("")
   const [buyerAccessRestrictions, setBuyerAccessRestrictions] = useState("")
+  const [resolvedCollectionPostcode, setResolvedCollectionPostcode] = useState(
+    resolveFullUkPostcode(collectionPostcodeParam)
+  )
+  const displayedCollectionPostcode =
+    resolvedCollectionPostcode || "Collection postcode not provided"
+
+  useEffect(() => {
+    let isCurrent = true
+
+    async function loadListingCollectionPostcode() {
+      if (!listingId) return
+
+      const supabase = createClient()
+      const { data } = await supabase
+        .from("listings")
+        .select("collection_postcode,collection_full_address,location")
+        .eq("id", listingId)
+        .maybeSingle()
+
+      if (!isCurrent) return
+
+      setResolvedCollectionPostcode(
+        resolveFullUkPostcode(
+          collectionPostcodeParam,
+          data?.collection_postcode,
+          data?.collection_full_address,
+          data?.location
+        )
+      )
+    }
+
+    loadListingCollectionPostcode()
+
+    return () => {
+      isCurrent = false
+    }
+  }, [collectionPostcodeParam, listingId])
+
   const deliveryDetailsComplete =
     deliveryPrice <= 0 ||
-    Boolean(buyerDeliveryFullAddress.trim() && buyerDeliveryPostcode.trim() && buyerPhone.trim())
+    Boolean(
+      resolvedCollectionPostcode &&
+        buyerDeliveryFullAddress.trim() &&
+        resolveFullUkPostcode(buyerDeliveryPostcode) &&
+        buyerPhone.trim()
+    )
   const missingDeliveryDetails =
     deliveryPrice <= 0
       ? []
       : [
+          !resolvedCollectionPostcode ? "seller collection postcode" : "",
           !buyerDeliveryFullAddress.trim() ? "delivery address" : "",
-          !buyerDeliveryPostcode.trim() ? "delivery postcode" : "",
+          !resolveFullUkPostcode(buyerDeliveryPostcode) ? "full delivery postcode" : "",
           !buyerPhone.trim() ? "buyer phone number" : "",
         ].filter(Boolean)
   const canContinueToPayment =
@@ -105,7 +150,7 @@ function CheckoutContent() {
                 <div>
                   <p className="font-black text-[#002E5D]">Delivery details</p>
                   <p className="mt-1 leading-relaxed">
-                    From <span className="font-bold text-[#002E5D]">{collectionPostcode || "pending"}</span>
+                    From <span className="font-bold text-[#002E5D]">{displayedCollectionPostcode}</span>
                     {" "}to <span className="font-bold text-[#002E5D]">{buyerDeliveryPostcode || "pending"}</span>
                   </p>
                   <p className="mt-1 leading-relaxed">
@@ -224,7 +269,9 @@ function CheckoutContent() {
                   return
                 }
 
-                if (deliveryPrice > 0 && (!buyerDeliveryFullAddress.trim() || !buyerDeliveryPostcode.trim() || !buyerPhone.trim())) {
+                const fullBuyerDeliveryPostcode = resolveFullUkPostcode(buyerDeliveryPostcode)
+
+                if (deliveryPrice > 0 && (!resolvedCollectionPostcode || !buyerDeliveryFullAddress.trim() || !fullBuyerDeliveryPostcode || !buyerPhone.trim())) {
                   alert("Please add delivery address, delivery postcode and phone number before payment.")
                   return
                 }
@@ -243,12 +290,12 @@ function CheckoutContent() {
                     deliveryQuoteId,
                     deliveryProvider,
                     estimatedDeliveryTime,
-                    deliveryPostcode,
+                    deliveryPostcode: fullBuyerDeliveryPostcode || deliveryPostcode,
                     buyerDeliveryFullAddress,
-                    buyerDeliveryPostcode,
+                    buyerDeliveryPostcode: fullBuyerDeliveryPostcode || buyerDeliveryPostcode,
                     buyerPhone,
                     buyerAccessRestrictions,
-                    collectionPostcode,
+                    collectionPostcode: resolvedCollectionPostcode,
                     weightKg,
                     lengthCm,
                     widthCm,

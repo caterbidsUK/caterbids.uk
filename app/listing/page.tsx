@@ -26,6 +26,7 @@ import BuyCheckoutBox from "@/components/BuyCheckoutBox"
 import type { DeliveryQuote } from "@/components/DeliveryQuoteBox"
 import type { Database } from '@/types/supabase'
 import { CATEGORY_OPTIONS, categoryByTitle, subcategoriesForCategory } from "@/lib/categories"
+import { resolveFullUkPostcode } from "@/lib/delivery/postcodes"
 import {
   BUYER_WARNING,
   CONDITION_OPTIONS,
@@ -1125,6 +1126,11 @@ function ListingContent() {
   const checkoutSellerId = isUuid(safeListingId(listing.seller_id || listing.user_id))
     ? safeListingId(listing.seller_id || listing.user_id)
     : ""
+  const fullCollectionPostcode = resolveFullUkPostcode(
+    listing.collection_postcode,
+    listing.collection_full_address,
+    listing.location
+  )
   const safetyRows = [
     ["Condition", valueOrNotProvided(listing.condition)],
     ["Tested status", valueOrNotProvided(listing.tested_status)],
@@ -1135,7 +1141,7 @@ function ListingContent() {
     ["Manuals", listing.manuals_available ? "Available" : "Not provided"],
     ["VAT", listing.vat_included ? "Included" : "Not stated"],
     ["Delivery", valueOrNotProvided(listing.delivery_option)],
-    ["Collection postcode", valueOrNotProvided(listing.collection_postcode)],
+    ["Collection postcode", fullCollectionPostcode || "Collection postcode not provided"],
     ["Weight", listingWeightKg ? `${listingWeightKg} kg` : "Not provided"],
     ["Package size", listingLengthCm && listingWidthCm && listingHeightCm ? `${listingLengthCm} x ${listingWidthCm} x ${listingHeightCm} cm` : "Not provided"],
     ["Pallet ready", listing.pallet_ready ? "Yes" : "Not stated"],
@@ -1400,7 +1406,9 @@ function ListingContent() {
                   </div>
                   <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
                     <p className="font-black uppercase text-white/40">Collection postcode</p>
-                    <p className="mt-1 font-bold text-white">{listing.collection_postcode || "Not provided"}</p>
+                    <p className="mt-1 font-bold text-white">
+                      {fullCollectionPostcode || "Collection postcode not provided"}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -1412,7 +1420,7 @@ function ListingContent() {
           {!isSoldListing && hasDeliveryOption && (
             <DeliveryQuoteBox
               listingId={safeListingId(listing.id)}
-              collectionPostcode={listing.collection_postcode}
+              collectionPostcode={fullCollectionPostcode}
               weightKg={listingWeightKg}
               lengthCm={listingLengthCm}
               widthCm={listingWidthCm}

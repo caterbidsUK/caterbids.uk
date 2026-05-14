@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server"
 import { getCurrentUser } from "@/lib/supabase/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createDeliveryOrderBeforePayment } from "@/lib/delivery/deliveryOrders"
+import { resolveFullUkPostcode } from "@/lib/delivery/postcodes"
 
 type CheckoutRequestBody = {
   listingId?: string
@@ -171,6 +172,28 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    const fullCollectionPostcode = resolveFullUkPostcode(
+      collectionPostcode,
+      (listing as any)?.collection_postcode,
+      (listing as any)?.collection_full_address,
+      (listing as any)?.location
+    )
+    const fullDeliveryPostcode = resolveFullUkPostcode(buyerDeliveryPostcode, deliveryPostcode)
+
+    if (deliveryAmount > 0 && !fullCollectionPostcode) {
+      return NextResponse.json(
+        { error: "Collection postcode not provided. Seller must add a full collection postcode before delivery checkout." },
+        { status: 400 }
+      )
+    }
+
+    if (deliveryAmount > 0 && !fullDeliveryPostcode) {
+      return NextResponse.json(
+        { error: "Enter a full delivery postcode before payment." },
+        { status: 400 }
+      )
+    }
+
     const total = Number(itemPrice || 0) + Number(deliveryPrice || 0)
     const supabaseAdmin = createAdminClient()
     const deliveryRequestPayload = {
@@ -183,11 +206,11 @@ export async function POST(req: NextRequest) {
       delivery_price: Number(deliveryPrice || 0),
       delivery_provider: deliveryProvider || (deliveryAmount > 0 ? "Interparcel-ready CaterBids Delivery" : null),
       delivery_quote_id: deliveryQuoteId || null,
-      delivery_postcode: buyerDeliveryPostcode || deliveryPostcode || null,
-      collection_postcode: collectionPostcode || (listing as any)?.collection_postcode || null,
+      delivery_postcode: fullDeliveryPostcode || null,
+      collection_postcode: fullCollectionPostcode || null,
       delivery_booking_required: deliveryAmount > 0,
       buyer_delivery_full_address: buyerDeliveryFullAddress || null,
-      buyer_delivery_postcode: buyerDeliveryPostcode || deliveryPostcode || null,
+      buyer_delivery_postcode: fullDeliveryPostcode || null,
       buyer_phone: buyerPhone || null,
       buyer_access_restrictions: buyerAccessRestrictions || null,
       pallet_weight_kg: Number(weightKg || (listing as any)?.pallet_weight_kg || (listing as any)?.weight_kg || 0) || null,
@@ -221,8 +244,8 @@ export async function POST(req: NextRequest) {
         listing_id: listingId,
         buyer_id: checkoutBuyerId,
         seller_id: sellerId,
-        collection_postcode: collectionPostcode || (listing as any)?.collection_postcode || null,
-        delivery_postcode: buyerDeliveryPostcode || deliveryPostcode || null,
+        collection_postcode: fullCollectionPostcode || null,
+        delivery_postcode: fullDeliveryPostcode || null,
         weight_kg: Number(weightKg || (listing as any)?.pallet_weight_kg || (listing as any)?.weight_kg || 0) || null,
         length_cm: Number(lengthCm || (listing as any)?.pallet_length_cm || (listing as any)?.length_cm || 0) || null,
         width_cm: Number(widthCm || (listing as any)?.pallet_width_cm || (listing as any)?.width_cm || 0) || null,
@@ -312,12 +335,15 @@ export async function POST(req: NextRequest) {
         deliveryProvider: deliveryProvider || "",
         courier_provider: "Interparcel",
         estimated_delivery_time: estimatedDeliveryTime || "",
-        deliveryPostcode: deliveryPostcode || "",
+        deliveryPostcode: fullDeliveryPostcode || "",
+        delivery_postcode: fullDeliveryPostcode || "",
         buyerDeliveryFullAddress: buyerDeliveryFullAddress || "",
-        buyerDeliveryPostcode: buyerDeliveryPostcode || "",
+        buyerDeliveryPostcode: fullDeliveryPostcode || "",
+        buyer_delivery_postcode: fullDeliveryPostcode || "",
         buyerPhone: buyerPhone || "",
         buyerAccessRestrictions: buyerAccessRestrictions || "",
-        collectionPostcode: collectionPostcode || "",
+        collectionPostcode: fullCollectionPostcode || "",
+        collection_postcode: fullCollectionPostcode || "",
         weightKg: String(weightKg || ""),
         lengthCm: String(lengthCm || ""),
         widthCm: String(widthCm || ""),

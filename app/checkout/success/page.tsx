@@ -130,7 +130,8 @@ function CheckoutSuccessContent() {
   const order = confirmation?.order
   const selectedDeliveryName = deliveryOrder?.selectedServiceName || order?.deliveryName || "Delivery option"
   const selectedDeliveryPrice = deliveryOrder?.selectedServicePrice ?? order?.deliveryPrice
-  const collectionPostcode = deliveryOrder?.collectionPostcode || order?.collectionPostcode || "Pending"
+  const collectionPostcode =
+    deliveryOrder?.collectionPostcode || order?.collectionPostcode || "Collection postcode not provided"
   const deliveryPostcode = deliveryOrder?.deliveryPostcode || order?.deliveryPostcode || "Pending"
   const visibleDeliveryStatus = deliveryOrder?.status || order?.deliveryStatus || "booking_requested"
 

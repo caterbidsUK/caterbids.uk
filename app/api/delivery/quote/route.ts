@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { CaterBidsDeliveryOption } from "@/lib/delivery/options"
+import { resolveFullUkPostcode } from "@/lib/delivery/postcodes"
 
 export async function POST(req: NextRequest) {
   try {
@@ -17,16 +18,19 @@ export async function POST(req: NextRequest) {
       insuranceValue,
     } = body
 
-    if (!collectionPostcode) {
+    const fullCollectionPostcode = resolveFullUkPostcode(collectionPostcode)
+    const fullDeliveryPostcode = resolveFullUkPostcode(deliveryPostcode)
+
+    if (!fullCollectionPostcode) {
       return NextResponse.json(
-        { error: "Collection postcode is required" },
+        { error: "Full collection postcode is required" },
         { status: 400 }
       )
     }
 
-    if (!deliveryPostcode) {
+    if (!fullDeliveryPostcode) {
       return NextResponse.json(
-        { error: "Delivery postcode is required" },
+        { error: "Full delivery postcode is required" },
         { status: 400 }
       )
     }
@@ -88,8 +92,8 @@ export async function POST(req: NextRequest) {
       mode: "test_booking_ready",
       bookingReady: true,
       interparcelReady: true,
-      collectionPostcode,
-      deliveryPostcode,
+      collectionPostcode: fullCollectionPostcode,
+      deliveryPostcode: fullDeliveryPostcode,
       package: {
         weightKg: weight,
         lengthCm: length,

@@ -3,6 +3,7 @@ import Stripe from "stripe"
 import { stripe } from "@/lib/stripe"
 import { createAdminClient } from "@/lib/supabase/admin"
 import type { Database } from "@/types/supabase"
+import { resolveFullUkPostcode } from "@/lib/delivery/postcodes"
 
 export const runtime = "nodejs"
 
@@ -77,8 +78,13 @@ function buildPayload(session: Stripe.Checkout.Session): BookingPayload {
     quoteId: safeText(metadata.deliveryQuoteId) || "caterbids-delivery",
     serviceName: safeText(metadata.deliveryName) || "CaterBids Delivery",
     provider: safeText(metadata.deliveryProvider) || "CaterBids Delivery Test",
-    collectionPostcode: safeText(metadata.collectionPostcode).toUpperCase(),
-    deliveryPostcode: safeText(metadata.buyerDeliveryPostcode || metadata.deliveryPostcode).toUpperCase(),
+    collectionPostcode: resolveFullUkPostcode(metadata.collection_postcode, metadata.collectionPostcode),
+    deliveryPostcode: resolveFullUkPostcode(
+      metadata.buyer_delivery_postcode,
+      metadata.buyerDeliveryPostcode,
+      metadata.delivery_postcode,
+      metadata.deliveryPostcode
+    ),
     package: {
       weightKg: numberFromMetadata(metadata.weightKg),
       lengthCm: numberFromMetadata(metadata.lengthCm),

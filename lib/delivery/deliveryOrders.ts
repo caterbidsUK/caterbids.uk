@@ -1,6 +1,7 @@
 import type Stripe from "stripe"
 import type { createAdminClient } from "@/lib/supabase/admin"
 import type { Database } from "@/types/supabase"
+import { resolveFullUkPostcode } from "@/lib/delivery/postcodes"
 
 export const DELIVERY_ORDER_STATUSES = [
   "pending_payment",
@@ -161,8 +162,19 @@ export async function upsertDeliveryOrderAfterPayment({
     seller_id: nullableUuid(metadata.seller_id || metadata.sellerId),
     stripe_checkout_session_id: session.id,
     stripe_payment_intent_id: paymentIntentId(session.payment_intent),
-    collection_postcode: metadata.collectionPostcode || String(listingData?.collection_postcode || "") || null,
-    delivery_postcode: metadata.buyerDeliveryPostcode || metadata.deliveryPostcode || null,
+    collection_postcode: resolveFullUkPostcode(
+      metadata.collection_postcode,
+      metadata.collectionPostcode,
+      listingData?.collection_postcode,
+      listingData?.collection_full_address,
+      listingData?.location
+    ) || null,
+    delivery_postcode: resolveFullUkPostcode(
+      metadata.buyer_delivery_postcode,
+      metadata.buyerDeliveryPostcode,
+      metadata.delivery_postcode,
+      metadata.deliveryPostcode
+    ) || null,
     weight_kg: numberFromMetadata(metadata.weightKg) || Number(listingData?.pallet_weight_kg || listingData?.weight_kg || 0) || null,
     length_cm: numberFromMetadata(metadata.lengthCm) || Number(listingData?.pallet_length_cm || listingData?.length_cm || 0) || null,
     width_cm: numberFromMetadata(metadata.widthCm) || Number(listingData?.pallet_width_cm || listingData?.width_cm || 0) || null,

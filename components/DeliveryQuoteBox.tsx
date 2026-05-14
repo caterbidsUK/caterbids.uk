@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { resolveFullUkPostcode } from "@/lib/delivery/postcodes"
 
 export type DeliveryQuote = {
   id: string
@@ -56,6 +57,7 @@ export default function DeliveryQuoteBox({
   const [error, setError] = useState("")
   const [selectedQuote, setSelectedQuote] = useState<DeliveryQuote | null>(null)
   const [quoteProvider, setQuoteProvider] = useState("")
+  const fullCollectionPostcode = resolveFullUkPostcode(collectionPostcode)
 
   async function getQuote() {
     setError("")
@@ -69,6 +71,17 @@ export default function DeliveryQuoteBox({
       return
     }
 
+    if (!fullCollectionPostcode) {
+      setError("Collection postcode not provided.")
+      return
+    }
+
+    const fullDeliveryPostcode = resolveFullUkPostcode(postcode)
+    if (!fullDeliveryPostcode) {
+      setError("Enter a full delivery postcode.")
+      return
+    }
+
     setLoading(true)
 
     try {
@@ -77,8 +90,8 @@ export default function DeliveryQuoteBox({
         "http://157.245.42.103:3001"
 
       const requestBody = {
-        collectionPostcode,
-        deliveryPostcode: postcode,
+        collectionPostcode: fullCollectionPostcode,
+        deliveryPostcode: fullDeliveryPostcode,
         weightKg,
         lengthCm,
         widthCm,
@@ -109,8 +122,8 @@ export default function DeliveryQuoteBox({
           ? data.quotes.map((quote: DeliveryQuote) => ({
               ...quote,
               provider: data.provider || "Live delivery API",
-              collectionPostcode,
-              deliveryPostcode: postcode,
+              collectionPostcode: fullCollectionPostcode,
+              deliveryPostcode: fullDeliveryPostcode,
               weightKg,
               lengthCm,
               widthCm,
@@ -132,8 +145,8 @@ export default function DeliveryQuoteBox({
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            collectionPostcode,
-            deliveryPostcode: postcode,
+            collectionPostcode: fullCollectionPostcode,
+            deliveryPostcode: fullDeliveryPostcode,
             weightKg,
             lengthCm,
             widthCm,
@@ -156,8 +169,8 @@ export default function DeliveryQuoteBox({
             ? fallbackData.quotes.map((quote: DeliveryQuote) => ({
                 ...quote,
                 provider: "Local beta fallback",
-                collectionPostcode,
-                deliveryPostcode: postcode,
+                collectionPostcode: fullCollectionPostcode,
+                deliveryPostcode: fullDeliveryPostcode,
                 weightKg,
                 lengthCm,
                 widthCm,
