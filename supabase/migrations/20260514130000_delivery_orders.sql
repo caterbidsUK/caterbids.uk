@@ -130,6 +130,10 @@ where delivery_status is null
     'failed'
   );
 
+update public.delivery_orders
+set is_test = false
+where is_test is null;
+
 alter table public.delivery_orders
   alter column delivery_status set not null,
   alter column courier_provider set default 'Interparcel',
@@ -154,10 +158,6 @@ alter table public.delivery_orders
       'failed'
     )
   );
-
-create unique index if not exists delivery_orders_stripe_session_unique_idx
-  on public.delivery_orders (stripe_checkout_session_id)
-  where stripe_checkout_session_id is not null;
 
 alter table public.orders
   add column if not exists delivery_order_id uuid references public.delivery_orders(id) on delete set null;
