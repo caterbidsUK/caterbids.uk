@@ -65,24 +65,11 @@ export default function HomePage() {
         </header>
 
         <section className="premium-shell relative mt-2 overflow-hidden rounded-[2rem]">
-          <div className="absolute inset-0 bg-[url('/home-header-2026.png')] bg-cover bg-center" />
-          <div className="absolute inset-0 bg-gradient-to-t from-[#001633]/85 via-[#001633]/35 to-transparent" />
-          <div className="relative flex min-h-[300px] flex-col justify-end p-6 sm:min-h-[420px] sm:p-8">
-            <h1 className="max-w-xl text-3xl font-black leading-tight sm:text-5xl">
-              Buy and sell used catering equipment across the UK.
-            </h1>
-            <p className="mt-3 max-w-md text-base font-semibold text-white/82">
-              List in minutes. Find equipment faster.
-            </p>
-            <div className="mt-5 flex flex-wrap gap-3">
-              <a href="/search?q=all&category=All%20Categories&location=All%20UK" className="premium-button rounded-2xl px-5 py-3 text-sm font-black">
-                Search
-              </a>
-              <a href="/post-listing" className="soft-button rounded-2xl px-5 py-3 text-sm font-black">
-                Sell an item
-              </a>
-            </div>
-          </div>
+          <h1 className="sr-only">Buy and sell used catering equipment across the UK.</h1>
+          <div
+            aria-hidden="true"
+            className="min-h-[300px] bg-[url('/home-header-2026.png')] bg-cover bg-center sm:min-h-[420px]"
+          />
         </section>
 
         <form
