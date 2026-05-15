@@ -150,7 +150,7 @@ export default function HomePage() {
           </a>
         </section>
 
-        <section className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <section className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
           <CategoryCard
             title="Catering Equipment"
             description="Ovens, fridges and fryers"
@@ -166,8 +166,9 @@ export default function HomePage() {
           <CategoryCard
             title="Catering Businesses"
             description="Cafes, takeaways and restaurants"
-            image="/home-equipment-card.png"
+            image="/home-header-2026.png"
             href="/category/catering-businesses"
+            imagePosition="center"
           />
         </section>
 
@@ -267,30 +268,33 @@ function CategoryCard({
   description,
   image,
   href,
+  imagePosition = "center",
 }: {
   title: string
   description: string
   image: string
   href: string
+  imagePosition?: string
 }) {
   return (
     <a
       href={href}
       className="group overflow-hidden rounded-3xl bg-white text-left text-[#002E5D] shadow-xl shadow-black/15 transition-transform focus-visible:outline-none active:scale-[0.99]"
     >
-      <div className="relative h-36 overflow-hidden sm:h-32">
+      <div className="relative h-56 overflow-hidden rounded-t-3xl sm:h-44 md:h-48">
         <img
           src={image}
           alt={title}
           className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+          style={{ objectPosition: imagePosition }}
         />
         <div className="absolute inset-0 bg-gradient-to-t from-[#001633]/35 to-transparent" />
       </div>
 
-      <div className="p-4">
+      <div className="px-4 py-3">
         <div className="text-base font-black">{title}</div>
         <div className="mt-1 text-sm font-medium text-slate-600">{description}</div>
-        <div className="mt-3 flex items-center gap-1 text-sm font-black text-[#002E5D] transition-colors group-hover:text-[#FF6B00]">
+        <div className="mt-2 flex items-center gap-1 text-sm font-black text-[#FF6B00] transition-colors group-hover:text-[#E35F00]">
           Browse{" "}
           <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
         </div>
