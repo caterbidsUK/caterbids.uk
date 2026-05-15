@@ -136,6 +136,10 @@ export default function HomePage() {
         </form>
 
         <section className="mt-5 rounded-[2rem] border border-white/10 bg-[#002E5D] p-5 shadow-2xl shadow-black/20 sm:p-7">
+          <div
+            aria-hidden="true"
+            className="-mx-5 -mt-5 mb-5 h-44 rounded-t-[2rem] bg-[url('/home-header-2026.png')] bg-cover bg-center sm:-mx-7 sm:-mt-7 sm:h-64"
+          />
           <h1 className="max-w-xl text-3xl font-black leading-tight text-white sm:text-5xl">
             Buy and sell catering equipment across the UK.
           </h1>
@@ -156,21 +160,18 @@ export default function HomePage() {
             description="Ovens, fridges and fryers"
             image="/home-equipment-card.png"
             href="/category/catering-equipment"
-            imagePosition="center 58%"
           />
           <CategoryCard
             title="Catering Vans & Trailers"
             description="Mobile catering units"
             image="/home-van-card.png"
             href="/category/catering-vans-trailers"
-            imagePosition="center 54%"
           />
           <CategoryCard
             title="Catering Businesses"
             description="Cafes, takeaways and restaurants"
-            image="/home-header-2026.png"
+            image="/home-equipment-card.png"
             href="/category/catering-businesses"
-            imagePosition="center 42%"
           />
         </section>
 
