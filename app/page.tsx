@@ -156,19 +156,21 @@ export default function HomePage() {
             description="Ovens, fridges and fryers"
             image="/home-equipment-card.png"
             href="/category/catering-equipment"
+            imagePosition="center 58%"
           />
           <CategoryCard
             title="Catering Vans & Trailers"
             description="Mobile catering units"
             image="/home-van-card.png"
             href="/category/catering-vans-trailers"
+            imagePosition="center 54%"
           />
           <CategoryCard
             title="Catering Businesses"
             description="Cafes, takeaways and restaurants"
             image="/home-header-2026.png"
             href="/category/catering-businesses"
-            imagePosition="center"
+            imagePosition="center 42%"
           />
         </section>
 
@@ -281,7 +283,7 @@ function CategoryCard({
       href={href}
       className="group overflow-hidden rounded-3xl bg-white text-left text-[#002E5D] shadow-xl shadow-black/15 transition-transform focus-visible:outline-none active:scale-[0.99]"
     >
-      <div className="relative h-56 overflow-hidden rounded-t-3xl sm:h-44 md:h-48">
+      <div className="relative h-64 overflow-hidden rounded-t-3xl sm:h-56 md:h-60">
         <img
           src={image}
           alt={title}
@@ -291,10 +293,10 @@ function CategoryCard({
         <div className="absolute inset-0 bg-gradient-to-t from-[#001633]/35 to-transparent" />
       </div>
 
-      <div className="px-4 py-3">
+      <div className="px-4 py-2.5">
         <div className="text-base font-black">{title}</div>
         <div className="mt-1 text-sm font-medium text-slate-600">{description}</div>
-        <div className="mt-2 flex items-center gap-1 text-sm font-black text-[#FF6B00] transition-colors group-hover:text-[#E35F00]">
+        <div className="mt-1.5 flex items-center gap-1 text-sm font-black text-[#FF6B00] transition-colors group-hover:text-[#E35F00]">
           Browse{" "}
           <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
         </div>
