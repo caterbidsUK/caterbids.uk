@@ -6,6 +6,7 @@ import {
 } from "@/lib/categories"
 import { POWER_TYPE_OPTIONS } from "@/lib/listing-trust"
 import { findValidatedCaterBotSource } from "@/lib/caterbot/sourceValidation"
+import { isCaterBotWebSearchConfigured } from "@/lib/caterbot/webSearch"
 
 const CONDITIONS = ["New", "Used", "Refurbished", "Spares or Repair"] as const
 const QUICKLIST_AI_WARNING =
@@ -398,7 +399,14 @@ async function withValidatedSource(suggestion: QuickListAiSuggestion) {
   const source = await findValidatedCaterBotSource({
     brand: suggestion.brand,
     model: plateIdentifier,
+    productTitle: suggestion.suggested_title || suggestion.title,
+    category: suggestion.category,
     equipmentType: equipmentSearchText || suggestion.subcategory || suggestion.category,
+    fuelType: suggestion.gas_type || suggestion.power_type || suggestion.gas_or_electric,
+    voltage: suggestion.voltage,
+    phase: suggestion.electrical_phase,
+    amps: suggestion.amps,
+    powerRating: suggestion.kw_rating,
     candidateUrls,
   })
 
@@ -411,9 +419,10 @@ async function withValidatedSource(suggestion: QuickListAiSuggestion) {
       manual_source_type: "",
       manual_source_validated: false,
       manual_source_last_checked_at: new Date().toISOString(),
-      manual_source_match_notes:
-        plateIdentifier
-          ? `CaterBot could not verify a reliable manual/spec source containing the exact plate identifier ${plateIdentifier}.`
+      manual_source_match_notes: !isCaterBotWebSearchConfigured()
+        ? "CaterBot source search is not connected yet. You can still list using plate details."
+        : plateIdentifier
+          ? "CaterBot could not verify an exact manual/spec source. Please add a link manually."
           : "CaterBot needs a clear model or GC number from the data plate before it can verify a manual/spec source.",
       manual_source_useful_details: [],
       ai_spec_confidence: "low",
@@ -633,12 +642,12 @@ async function analyseWithOpenAI({
       status: aiResponse.status,
       message,
     })
-    throw new Error(`CaterBot could not complete OpenAI image analysis. ${message}`)
+    throw new Error(`CaterBot could not complete image analysis. ${message}`)
   }
 
   const content = safeText(data?.choices?.[0]?.message?.content)
   if (!content) {
-    throw new Error("CaterBot could not complete OpenAI image analysis. Empty response.")
+    throw new Error("CaterBot could not complete image analysis. Empty response.")
   }
   const parsed = extractJson(content)
 

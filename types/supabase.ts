@@ -10,6 +10,10 @@ export interface Database {
           business: string | null
           location: string | null
           phone: string | null
+          seller_contact_name: string | null
+          collection_full_address: string | null
+          collection_city: string | null
+          collection_postcode: string | null
           avatar_url: string | null
           verified: boolean
           created_at: string | null
@@ -21,6 +25,10 @@ export interface Database {
           business?: string | null
           location?: string | null
           phone?: string | null
+          seller_contact_name?: string | null
+          collection_full_address?: string | null
+          collection_city?: string | null
+          collection_postcode?: string | null
           avatar_url?: string | null
           verified?: boolean
           created_at?: string | null
@@ -32,6 +40,10 @@ export interface Database {
           business?: string | null
           location?: string | null
           phone?: string | null
+          seller_contact_name?: string | null
+          collection_full_address?: string | null
+          collection_city?: string | null
+          collection_postcode?: string | null
           avatar_url?: string | null
           verified?: boolean
           created_at?: string | null
@@ -80,6 +92,7 @@ export interface Database {
           length_cm: number | null
           width_cm: number | null
           height_cm: number | null
+          depth_cm: number | null
           pallet_weight_kg: number | null
           pallet_length_cm: number | null
           pallet_width_cm: number | null
@@ -97,6 +110,21 @@ export interface Database {
           access_restrictions: string | null
           delivery_notes: string | null
           delivery_details_confirmed: boolean | null
+          estimated_weight: string | null
+          estimated_weight_kg: number | null
+          gross_weight_kg: number | null
+          packed_width_cm: number | null
+          packed_depth_cm: number | null
+          packed_height_cm: number | null
+          packed_dimensions: string | null
+          delivery_type: string | null
+          shipping_class: string | null
+          pallet_delivery_recommended: boolean | null
+          specialist_delivery_recommended: boolean | null
+          forklift_required: boolean | null
+          two_person_lift_recommended: boolean | null
+          shipping_confidence: string | null
+          shipping_details_confirmed_by_seller: boolean | null
           ai_delivery_confidence: number | null
           manual_source_url: string | null
           spec_source_url: string | null
@@ -109,6 +137,15 @@ export interface Database {
           specs_verified_by_seller: boolean | null
           specs_last_checked_at: string | null
           source_rejected_by_seller: boolean | null
+          equipment_spec_id: string | null
+          spec_plate_image_url: string | null
+          spec_plate_ocr_text: string | null
+          spec_brand: string | null
+          spec_model: string | null
+          spec_serial_number: string | null
+          spec_gc_number: string | null
+          spec_moderation_status: string | null
+          spec_moderation_notes: string | null
           image_url: string | null
           images: string[] | null
           city: string | null
@@ -148,6 +185,7 @@ export interface Database {
           length_cm?: number | null
           width_cm?: number | null
           height_cm?: number | null
+          depth_cm?: number | null
           pallet_weight_kg?: number | null
           pallet_length_cm?: number | null
           pallet_width_cm?: number | null
@@ -165,6 +203,21 @@ export interface Database {
           access_restrictions?: string | null
           delivery_notes?: string | null
           delivery_details_confirmed?: boolean | null
+          estimated_weight?: string | null
+          estimated_weight_kg?: number | null
+          gross_weight_kg?: number | null
+          packed_width_cm?: number | null
+          packed_depth_cm?: number | null
+          packed_height_cm?: number | null
+          packed_dimensions?: string | null
+          delivery_type?: string | null
+          shipping_class?: string | null
+          pallet_delivery_recommended?: boolean | null
+          specialist_delivery_recommended?: boolean | null
+          forklift_required?: boolean | null
+          two_person_lift_recommended?: boolean | null
+          shipping_confidence?: string | null
+          shipping_details_confirmed_by_seller?: boolean | null
           ai_delivery_confidence?: number | null
           manual_source_url?: string | null
           spec_source_url?: string | null
@@ -177,6 +230,15 @@ export interface Database {
           specs_verified_by_seller?: boolean | null
           specs_last_checked_at?: string | null
           source_rejected_by_seller?: boolean | null
+          equipment_spec_id?: string | null
+          spec_plate_image_url?: string | null
+          spec_plate_ocr_text?: string | null
+          spec_brand?: string | null
+          spec_model?: string | null
+          spec_serial_number?: string | null
+          spec_gc_number?: string | null
+          spec_moderation_status?: string | null
+          spec_moderation_notes?: string | null
           image_url?: string | null
           images?: string[] | null
           city?: string | null
@@ -216,6 +278,7 @@ export interface Database {
           length_cm?: number | null
           width_cm?: number | null
           height_cm?: number | null
+          depth_cm?: number | null
           pallet_weight_kg?: number | null
           pallet_length_cm?: number | null
           pallet_width_cm?: number | null
@@ -233,6 +296,21 @@ export interface Database {
           access_restrictions?: string | null
           delivery_notes?: string | null
           delivery_details_confirmed?: boolean | null
+          estimated_weight?: string | null
+          estimated_weight_kg?: number | null
+          gross_weight_kg?: number | null
+          packed_width_cm?: number | null
+          packed_depth_cm?: number | null
+          packed_height_cm?: number | null
+          packed_dimensions?: string | null
+          delivery_type?: string | null
+          shipping_class?: string | null
+          pallet_delivery_recommended?: boolean | null
+          specialist_delivery_recommended?: boolean | null
+          forklift_required?: boolean | null
+          two_person_lift_recommended?: boolean | null
+          shipping_confidence?: string | null
+          shipping_details_confirmed_by_seller?: boolean | null
           ai_delivery_confidence?: number | null
           manual_source_url?: string | null
           spec_source_url?: string | null
@@ -245,6 +323,15 @@ export interface Database {
           specs_verified_by_seller?: boolean | null
           specs_last_checked_at?: string | null
           source_rejected_by_seller?: boolean | null
+          equipment_spec_id?: string | null
+          spec_plate_image_url?: string | null
+          spec_plate_ocr_text?: string | null
+          spec_brand?: string | null
+          spec_model?: string | null
+          spec_serial_number?: string | null
+          spec_gc_number?: string | null
+          spec_moderation_status?: string | null
+          spec_moderation_notes?: string | null
           image_url?: string | null
           images?: string[] | null
           city?: string | null
@@ -695,6 +782,327 @@ export interface Database {
           delivered_at?: string | null
           cancelled_at?: string | null
           failed_at?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      Sources: {
+        Row: {
+          id: string
+          domain: string
+          source_name: string | null
+          source_type: "Manufacturer" | "Dealer" | "Catalog" | "Other"
+          default_trust: number
+          notes: string | null
+          last_checked: string | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          domain: string
+          source_name?: string | null
+          source_type?: "Manufacturer" | "Dealer" | "Catalog" | "Other"
+          default_trust?: number
+          notes?: string | null
+          last_checked?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          domain?: string
+          source_name?: string | null
+          source_type?: "Manufacturer" | "Dealer" | "Catalog" | "Other"
+          default_trust?: number
+          notes?: string | null
+          last_checked?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      EquipmentSpecs: {
+        Row: {
+          id: string
+          brand: string
+          model: string
+          category: string
+          ext_height_cm: number | null
+          ext_width_cm: number | null
+          ext_depth_cm: number | null
+          pack_height_cm: number | null
+          pack_width_cm: number | null
+          pack_depth_cm: number | null
+          weight_net_kg: number | null
+          weight_gross_kg: number | null
+          pallet_required: boolean
+          power_type: string | null
+          voltage: string | null
+          phase: number | null
+          current_a: number | null
+          gas_type: string | null
+          gas_connection: string | null
+          lifting_notes: string | null
+          disassembly_notes: string | null
+          hazardous_notes: string | null
+          source_url: string | null
+          source_name: string | null
+          source_type: "Manufacturer" | "Dealer" | "Catalog" | "Other"
+          confidence: number
+          last_checked: string
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          brand: string
+          model: string
+          category: string
+          ext_height_cm?: number | null
+          ext_width_cm?: number | null
+          ext_depth_cm?: number | null
+          pack_height_cm?: number | null
+          pack_width_cm?: number | null
+          pack_depth_cm?: number | null
+          weight_net_kg?: number | null
+          weight_gross_kg?: number | null
+          pallet_required?: boolean
+          power_type?: string | null
+          voltage?: string | null
+          phase?: number | null
+          current_a?: number | null
+          gas_type?: string | null
+          gas_connection?: string | null
+          lifting_notes?: string | null
+          disassembly_notes?: string | null
+          hazardous_notes?: string | null
+          source_url?: string | null
+          source_name?: string | null
+          source_type?: "Manufacturer" | "Dealer" | "Catalog" | "Other"
+          confidence?: number
+          last_checked?: string
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          brand?: string
+          model?: string
+          category?: string
+          ext_height_cm?: number | null
+          ext_width_cm?: number | null
+          ext_depth_cm?: number | null
+          pack_height_cm?: number | null
+          pack_width_cm?: number | null
+          pack_depth_cm?: number | null
+          weight_net_kg?: number | null
+          weight_gross_kg?: number | null
+          pallet_required?: boolean
+          power_type?: string | null
+          voltage?: string | null
+          phase?: number | null
+          current_a?: number | null
+          gas_type?: string | null
+          gas_connection?: string | null
+          lifting_notes?: string | null
+          disassembly_notes?: string | null
+          hazardous_notes?: string | null
+          source_url?: string | null
+          source_name?: string | null
+          source_type?: "Manufacturer" | "Dealer" | "Catalog" | "Other"
+          confidence?: number
+          last_checked?: string
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      listing_equipment_specs: {
+        Row: {
+          id: string
+          listing_id: string
+          equipment_spec_id: string | null
+          seller_id: string | null
+          brand: string
+          model: string
+          serial_number: string | null
+          gc_number: string | null
+          category: string
+          spec_plate_image_url: string | null
+          ocr_text: string | null
+          seller_height_cm: number | null
+          seller_width_cm: number | null
+          seller_depth_cm: number | null
+          seller_weight_kg: number | null
+          seller_forklift_required: boolean | null
+          seller_condition_notes: string | null
+          power_type: string | null
+          voltage: string | null
+          phase: number | null
+          current_a: number | null
+          gas_type: string | null
+          gas_connection: string | null
+          source_url: string | null
+          source_name: string | null
+          source_type: "Manufacturer" | "Dealer" | "Catalog" | "Other"
+          confidence: number
+          verification_status: string
+          moderation_notes: string | null
+          conflict_details: string | null
+          last_checked: string | null
+          reported_at: string | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          listing_id: string
+          equipment_spec_id?: string | null
+          seller_id?: string | null
+          brand: string
+          model: string
+          serial_number?: string | null
+          gc_number?: string | null
+          category: string
+          spec_plate_image_url?: string | null
+          ocr_text?: string | null
+          seller_height_cm?: number | null
+          seller_width_cm?: number | null
+          seller_depth_cm?: number | null
+          seller_weight_kg?: number | null
+          seller_forklift_required?: boolean | null
+          seller_condition_notes?: string | null
+          power_type?: string | null
+          voltage?: string | null
+          phase?: number | null
+          current_a?: number | null
+          gas_type?: string | null
+          gas_connection?: string | null
+          source_url?: string | null
+          source_name?: string | null
+          source_type?: "Manufacturer" | "Dealer" | "Catalog" | "Other"
+          confidence?: number
+          verification_status?: string
+          moderation_notes?: string | null
+          conflict_details?: string | null
+          last_checked?: string | null
+          reported_at?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          listing_id?: string
+          equipment_spec_id?: string | null
+          seller_id?: string | null
+          brand?: string
+          model?: string
+          serial_number?: string | null
+          gc_number?: string | null
+          category?: string
+          spec_plate_image_url?: string | null
+          ocr_text?: string | null
+          seller_height_cm?: number | null
+          seller_width_cm?: number | null
+          seller_depth_cm?: number | null
+          seller_weight_kg?: number | null
+          seller_forklift_required?: boolean | null
+          seller_condition_notes?: string | null
+          power_type?: string | null
+          voltage?: string | null
+          phase?: number | null
+          current_a?: number | null
+          gas_type?: string | null
+          gas_connection?: string | null
+          source_url?: string | null
+          source_name?: string | null
+          source_type?: "Manufacturer" | "Dealer" | "Catalog" | "Other"
+          confidence?: number
+          verification_status?: string
+          moderation_notes?: string | null
+          conflict_details?: string | null
+          last_checked?: string | null
+          reported_at?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      equipment_spec_reports: {
+        Row: {
+          id: string
+          equipment_spec_id: string | null
+          listing_id: string | null
+          reporter_id: string | null
+          reason: string
+          details: string | null
+          status: string
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          equipment_spec_id?: string | null
+          listing_id?: string | null
+          reporter_id?: string | null
+          reason: string
+          details?: string | null
+          status?: string
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          equipment_spec_id?: string | null
+          listing_id?: string | null
+          reporter_id?: string | null
+          reason?: string
+          details?: string | null
+          status?: string
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      equipment_spec_jobs: {
+        Row: {
+          id: string
+          listing_id: string | null
+          equipment_spec_id: string | null
+          job_type: string
+          status: string
+          attempts: number
+          run_after: string
+          locked_at: string | null
+          error: string | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          listing_id?: string | null
+          equipment_spec_id?: string | null
+          job_type?: string
+          status?: string
+          attempts?: number
+          run_after?: string
+          locked_at?: string | null
+          error?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          listing_id?: string | null
+          equipment_spec_id?: string | null
+          job_type?: string
+          status?: string
+          attempts?: number
+          run_after?: string
+          locked_at?: string | null
+          error?: string | null
           created_at?: string | null
           updated_at?: string | null
         }

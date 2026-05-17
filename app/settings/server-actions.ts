@@ -21,6 +21,10 @@ export async function updateProfile(formData: FormData) {
   const business = formData.get('business') as string | null
   const location = formData.get('location') as string | null
   const phone = formData.get('phone') as string | null
+  const seller_contact_name = formData.get('seller_contact_name') as string | null
+  const collection_full_address = formData.get('collection_full_address') as string | null
+  const collection_city = formData.get('collection_city') as string | null
+  const collection_postcode = formData.get('collection_postcode') as string | null
   const file = formData.get('avatar') as File | null
   const fallbackAvatarUrl = formData.get('fallback_avatar_url') as string | null
   const fallbackProfile = {
@@ -29,6 +33,10 @@ export async function updateProfile(formData: FormData) {
     business,
     location,
     phone,
+    seller_contact_name,
+    collection_full_address,
+    collection_city,
+    collection_postcode,
     avatar_url: (formData.get('existing_avatar_url') as string | null) || '',
     verified: false,
     created_at: null,
@@ -68,6 +76,10 @@ export async function updateProfile(formData: FormData) {
       business, 
       location, 
       phone, 
+      seller_contact_name,
+      collection_full_address,
+      collection_city,
+      collection_postcode,
       avatar_url,
       updated_at: new Date().toISOString()
     })

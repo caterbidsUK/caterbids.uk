@@ -61,10 +61,18 @@ export default function HomePage() {
           </a>
         </header>
 
+        <section className="premium-shell relative mt-2 overflow-hidden rounded-[2rem]">
+          <h1 className="sr-only">Buy and sell catering equipment across the UK.</h1>
+          <div
+            aria-hidden="true"
+            className="min-h-[300px] bg-[url('/home-header-2026.png')] bg-cover bg-center sm:min-h-[420px]"
+          />
+        </section>
+
         <form
           action="/search"
           method="get"
-          className="relative z-20 mx-auto mt-1 w-full max-w-3xl overflow-hidden rounded-3xl border border-white/15 bg-white shadow-2xl shadow-black/25"
+          className="relative z-20 mx-auto -mt-6 w-full max-w-3xl overflow-hidden rounded-3xl border border-white/15 bg-white shadow-2xl shadow-black/25"
         >
           <div className="flex items-center gap-3 px-5 py-5 border-b border-gray-200">
             <Search size={22} className="text-gray-400 shrink-0" />
@@ -135,11 +143,7 @@ export default function HomePage() {
           </div>
         </form>
 
-        <section className="mt-5 rounded-[2rem] border border-white/10 bg-[#002E5D] p-5 shadow-2xl shadow-black/20 sm:p-7">
-          <div
-            aria-hidden="true"
-            className="-mx-5 -mt-5 mb-5 h-44 rounded-t-[2rem] bg-[url('/home-header-2026.png')] bg-cover bg-center sm:-mx-7 sm:-mt-7 sm:h-64"
-          />
+        <section className="mt-4 rounded-[2rem] border border-white/10 bg-[#002E5D] p-5 shadow-2xl shadow-black/20 sm:p-7">
           <h1 className="max-w-xl text-3xl font-black leading-tight text-white sm:text-5xl">
             Buy and sell catering equipment across the UK.
           </h1>

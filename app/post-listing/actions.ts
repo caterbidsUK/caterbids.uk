@@ -2,6 +2,8 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentUser } from '@/lib/supabase/auth'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { runEquipmentSpecPipeline } from '@/lib/equipment-specs/pipeline'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
@@ -37,6 +39,13 @@ type ListingInput = {
   access_restrictions?: string | null
   delivery_notes?: string | null
   delivery_details_confirmed?: boolean | null
+  estimated_weight?: string | null
+  delivery_type?: string | null
+  shipping_class?: string | null
+  shipping_confidence?: string | null
+  shipping_details_confirmed_by_seller?: boolean | null
+  pallet_delivery_recommended?: boolean | null
+  specialist_delivery_recommended?: boolean | null
   pallet_ready?: boolean | null
   tail_lift_required?: boolean | null
   forklift_available?: boolean | null
@@ -53,6 +62,24 @@ type ListingInput = {
   ai_spec_confidence?: string | null
   specs_verified_by_seller?: boolean | null
   source_rejected_by_seller?: boolean | null
+  spec_plate_image_url?: string | null
+  spec_brand?: string | null
+  spec_model?: string | null
+  spec_serial_number?: string | null
+  spec_gc_number?: string | null
+  spec_category?: string | null
+  spec_power_type?: string | null
+  spec_phase?: string | null
+  spec_voltage?: string | null
+  spec_current_a?: number | null
+  spec_gas_type?: string | null
+  spec_gas_connection?: string | null
+  spec_height_cm?: number | null
+  spec_width_cm?: number | null
+  spec_depth_cm?: number | null
+  spec_weight_kg?: number | null
+  spec_forklift_required?: boolean | null
+  spec_condition_notes?: string | null
   image?: string | null
   images?: string[] | null
   city?: string | null
@@ -84,6 +111,13 @@ const optionalListingColumns = [
   'access_restrictions',
   'delivery_notes',
   'delivery_details_confirmed',
+  'estimated_weight',
+  'delivery_type',
+  'shipping_class',
+  'shipping_confidence',
+  'shipping_details_confirmed_by_seller',
+  'pallet_delivery_recommended',
+  'specialist_delivery_recommended',
   'ai_delivery_confidence',
   'manual_source_url',
   'spec_source_url',
@@ -96,6 +130,15 @@ const optionalListingColumns = [
   'specs_verified_by_seller',
   'source_rejected_by_seller',
   'specs_last_checked_at',
+  'equipment_spec_id',
+  'spec_plate_image_url',
+  'spec_plate_ocr_text',
+  'spec_brand',
+  'spec_model',
+  'spec_serial_number',
+  'spec_gc_number',
+  'spec_moderation_status',
+  'spec_moderation_notes',
 ] as const
 
 function withoutOptionalListingColumns(payload: Record<string, unknown>) {
@@ -172,6 +215,13 @@ export async function createListing(
     access_restrictions: (formData.get('access_restrictions') as string)?.trim() || null,
     delivery_notes: (formData.get('delivery_notes') as string)?.trim() || null,
     delivery_details_confirmed: formData.get('delivery_details_confirmed') === 'on',
+    estimated_weight: (formData.get('estimated_weight') as string)?.trim() || null,
+    delivery_type: (formData.get('delivery_type') as string)?.trim() || null,
+    shipping_class: (formData.get('shipping_class') as string)?.trim() || null,
+    shipping_confidence: (formData.get('shipping_confidence') as string)?.trim() || null,
+    shipping_details_confirmed_by_seller: formData.get('shipping_details_confirmed_by_seller') === 'true',
+    pallet_delivery_recommended: formData.get('pallet_delivery_recommended') === 'true',
+    specialist_delivery_recommended: formData.get('specialist_delivery_recommended') === 'true',
     manual_source_url: (formData.get('manual_source_url') as string)?.trim() || null,
     spec_source_url: (formData.get('spec_source_url') as string)?.trim() || null,
     manual_source_name: (formData.get('manual_source_name') as string)?.trim() || null,
@@ -182,6 +232,24 @@ export async function createListing(
     ai_spec_confidence: (formData.get('ai_spec_confidence') as string)?.trim() || null,
     specs_verified_by_seller: formData.get('specs_verified_by_seller') === 'on',
     source_rejected_by_seller: formData.get('source_rejected_by_seller') === 'true',
+    spec_plate_image_url: (formData.get('spec_plate_image_url') as string)?.trim() || null,
+    spec_brand: (formData.get('spec_brand') as string)?.trim() || null,
+    spec_model: (formData.get('spec_model') as string)?.trim() || null,
+    spec_serial_number: (formData.get('spec_serial_number') as string)?.trim() || null,
+    spec_gc_number: (formData.get('spec_gc_number') as string)?.trim() || null,
+    spec_category: (formData.get('spec_category') as string)?.trim() || null,
+    spec_power_type: (formData.get('spec_power_type') as string)?.trim() || null,
+    spec_phase: (formData.get('spec_phase') as string)?.trim() || null,
+    spec_voltage: (formData.get('spec_voltage') as string)?.trim() || null,
+    spec_current_a: optionalNumber(formData.get('spec_current_a')),
+    spec_gas_type: (formData.get('spec_gas_type') as string)?.trim() || null,
+    spec_gas_connection: (formData.get('spec_gas_connection') as string)?.trim() || null,
+    spec_height_cm: optionalNumber(formData.get('spec_height_cm')),
+    spec_width_cm: optionalNumber(formData.get('spec_width_cm')),
+    spec_depth_cm: optionalNumber(formData.get('spec_depth_cm')),
+    spec_weight_kg: optionalNumber(formData.get('spec_weight_kg')),
+    spec_forklift_required: formData.get('spec_forklift_required') === 'on',
+    spec_condition_notes: (formData.get('spec_condition_notes') as string)?.trim() || null,
     pallet_ready: formData.get('pallet_ready') === 'on',
     tail_lift_required: formData.get('tail_lift_required') === 'on',
     forklift_available: formData.get('forklift_available') === 'on',
@@ -269,6 +337,13 @@ export async function createListing(
     access_restrictions: input.access_restrictions,
     delivery_notes: input.delivery_notes,
     delivery_details_confirmed: input.delivery_details_confirmed,
+    estimated_weight: input.estimated_weight,
+    delivery_type: input.delivery_type,
+    shipping_class: input.shipping_class,
+    shipping_confidence: input.shipping_confidence,
+    shipping_details_confirmed_by_seller: input.shipping_details_confirmed_by_seller,
+    pallet_delivery_recommended: input.pallet_delivery_recommended,
+    specialist_delivery_recommended: input.specialist_delivery_recommended,
     ai_delivery_confidence: null,
     manual_source_url: sourceCanBePublished ? input.manual_source_url : null,
     spec_source_url: sourceCanBePublished ? input.spec_source_url : null,
@@ -283,6 +358,13 @@ export async function createListing(
     specs_verified_by_seller: sourceCanBePublished,
     specs_last_checked_at: sourceCanBePublished ? new Date().toISOString() : null,
     source_rejected_by_seller: Boolean(input.source_rejected_by_seller),
+    spec_plate_image_url: input.spec_plate_image_url,
+    spec_brand: input.spec_brand,
+    spec_model: input.spec_model,
+    spec_serial_number: input.spec_serial_number,
+    spec_gc_number: input.spec_gc_number,
+    spec_moderation_status: input.spec_brand && input.spec_model ? 'pending' : null,
+    spec_moderation_notes: input.spec_brand && input.spec_model ? 'Shipping specs queued for verification.' : null,
     image_url: input.image || input.images?.[0] || null,
     images: input.images || [],
     seller_id: user.id,
@@ -322,6 +404,37 @@ export async function createListing(
   revalidatePath('/')
 
   if (createdListing?.id) {
+    if (input.spec_brand && input.spec_model) {
+      try {
+        await runEquipmentSpecPipeline(createAdminClient(), {
+          listingId: createdListing.id,
+          sellerId: user.id,
+          brand: input.spec_brand,
+          model: input.spec_model,
+          serialNumber: input.spec_serial_number,
+          gcNumber: input.spec_gc_number,
+          category: input.spec_category || input.subcategory || input.category,
+          specPlateImageUrl: input.spec_plate_image_url,
+          powerType: input.spec_power_type,
+          voltage: input.spec_voltage,
+          phase: input.spec_phase,
+          currentA: input.spec_current_a,
+          gasType: input.spec_gas_type,
+          gasConnection: input.spec_gas_connection,
+          heightCm: input.spec_height_cm || input.height_cm,
+          widthCm: input.spec_width_cm || input.width_cm,
+          depthCm: input.spec_depth_cm || input.length_cm,
+          weightKg: input.spec_weight_kg || input.weight_kg,
+          forkliftRequired: input.spec_forklift_required,
+          conditionNotes: input.spec_condition_notes || input.delivery_notes,
+          sourceUrl: input.spec_source_url || input.manual_source_url,
+          listingTitle: input.title,
+        })
+      } catch (error) {
+        console.warn('Equipment specs verification could not complete:', error)
+      }
+    }
+
     redirect(`/listing?id=${createdListing.id}`)
   }
 }

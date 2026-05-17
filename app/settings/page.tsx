@@ -109,6 +109,10 @@ function SettingsClient({ initialProfile }: { initialProfile: Profile | null }) 
     business: '',
     location: '',
     phone: '',
+    seller_contact_name: '',
+    collection_full_address: '',
+    collection_city: '',
+    collection_postcode: '',
     avatar_url: '',
     verified: false,
     created_at: null,
@@ -122,6 +126,10 @@ function SettingsClient({ initialProfile }: { initialProfile: Profile | null }) 
     business: '',
     location: '',
     phone: '',
+    seller_contact_name: '',
+    collection_full_address: '',
+    collection_city: '',
+    collection_postcode: '',
     avatar_url: '',
     verified: false,
     created_at: null,
@@ -173,6 +181,10 @@ function SettingsClient({ initialProfile }: { initialProfile: Profile | null }) 
         business: localProfile?.business || data?.business || '',
         location: localProfile?.location || data?.location || '',
         phone: localProfile?.phone || data?.phone || '',
+        seller_contact_name: localProfile?.seller_contact_name || data?.seller_contact_name || '',
+        collection_full_address: localProfile?.collection_full_address || data?.collection_full_address || '',
+        collection_city: localProfile?.collection_city || data?.collection_city || data?.location || '',
+        collection_postcode: localProfile?.collection_postcode || data?.collection_postcode || '',
         avatar_url: localProfile?.avatar_url || data?.avatar_url || '',
         verified: data?.verified || false,
         created_at: data?.created_at || null,
@@ -389,6 +401,40 @@ function SettingsClient({ initialProfile }: { initialProfile: Profile | null }) 
                   value={draftProfile.phone}
                   onChange={(value) => setDraftProfile({ ...draftProfile, phone: value })}
                 />
+
+                <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
+                  <h4 className="text-lg font-black text-white">Seller collection details</h4>
+                  <p className="mt-1 text-sm text-white/55">
+                    Used to auto-fill delivery details when you list an item.
+                  </p>
+
+                  <div className="mt-4 space-y-4">
+                    <InputField
+                      label="Collection contact name"
+                      name="seller_contact_name"
+                      value={draftProfile.seller_contact_name || draftProfile.name}
+                      onChange={(value) => setDraftProfile({ ...draftProfile, seller_contact_name: value })}
+                    />
+                    <InputField
+                      label="Collection full address"
+                      name="collection_full_address"
+                      value={draftProfile.collection_full_address}
+                      onChange={(value) => setDraftProfile({ ...draftProfile, collection_full_address: value })}
+                    />
+                    <InputField
+                      label="Collection city"
+                      name="collection_city"
+                      value={draftProfile.collection_city || draftProfile.location}
+                      onChange={(value) => setDraftProfile({ ...draftProfile, collection_city: value })}
+                    />
+                    <InputField
+                      label="Collection postcode"
+                      name="collection_postcode"
+                      value={draftProfile.collection_postcode}
+                      onChange={(value) => setDraftProfile({ ...draftProfile, collection_postcode: value.toUpperCase() })}
+                    />
+                  </div>
+                </div>
                 <button
                   type="submit"
                   disabled={isPending}
@@ -425,6 +471,8 @@ function SettingsClient({ initialProfile }: { initialProfile: Profile | null }) 
                 <InfoRow icon={<MapPin size={20} />} label={draftProfile.location} />
                 <InfoRow icon={<Mail size={20} />} label={draftProfile.email} />
                 <InfoRow icon={<Phone size={20} />} label={draftProfile.phone} />
+                <InfoRow icon={<MapPin size={20} />} label={draftProfile.collection_full_address || 'Collection address not added'} />
+                <InfoRow icon={<MapPin size={20} />} label={[draftProfile.collection_city, draftProfile.collection_postcode].filter(Boolean).join(' ') || 'Collection postcode not added'} />
               </div>
             )}
           </section>

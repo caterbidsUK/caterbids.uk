@@ -41,6 +41,10 @@ import {
 } from "@/lib/listing-trust"
 
 type Listing = Database['public']['Tables']['listings']['Row']
+type EquipmentSpec = Database['public']['Tables']['EquipmentSpecs']['Row']
+type ListingEquipmentSpec = Database['public']['Tables']['listing_equipment_specs']['Row'] & {
+  EquipmentSpecs?: EquipmentSpec | null
+}
 
 const listingConditions = CONDITION_OPTIONS
 const LOCAL_LISTINGS_KEY = "caterbids_listings"
@@ -182,6 +186,8 @@ function ListingContent() {
   const [editError, setEditError] = useState("")
   const [messageError, setMessageError] = useState("")
   const [openingMessage, setOpeningMessage] = useState(false)
+  const [verifiedSpec, setVerifiedSpec] = useState<ListingEquipmentSpec | null>(null)
+  const [specReportSent, setSpecReportSent] = useState(false)
 
   function userOwnsListing(item: Partial<Listing> | null | undefined) {
     const userId = safeListingId(item?.user_id)
@@ -637,6 +643,38 @@ function ListingContent() {
 
     return () => window.clearTimeout(timer)
   }, [listing])
+
+  useEffect(() => {
+    async function fetchVerifiedSpecs() {
+      const listingId = safeListingId(listing?.id || id)
+      if (!listingId) {
+        setVerifiedSpec(null)
+        return
+      }
+
+      try {
+        const supabase = createClient()
+        const { data, error } = await supabase
+          .from("listing_equipment_specs")
+          .select("*, EquipmentSpecs(*)")
+          .eq("listing_id", listingId)
+          .maybeSingle()
+
+        if (error) {
+          console.warn("Verified specs unavailable:", error.message || error)
+          setVerifiedSpec(null)
+          return
+        }
+
+        setVerifiedSpec((data as ListingEquipmentSpec | null) || null)
+      } catch (error) {
+        console.warn("Verified specs unavailable:", error)
+        setVerifiedSpec(null)
+      }
+    }
+
+    fetchVerifiedSpecs()
+  }, [id, listing])
 
   const editListingPanel = editingListing ? (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 px-4 py-4 backdrop-blur-sm sm:items-center">
@@ -1111,7 +1149,7 @@ function ListingContent() {
   const isListingOwner = userOwnsListing(listing)
   const isSoldListing = listing.status === "sold"
   const manualSourceUrl = listing.manual_source_url || listing.spec_source_url || ""
-  const manualSourceName = listing.manual_source_name || "Manual / spec source"
+  const manualSourceName = listing.manual_source_name || "Verified manual/spec source"
   const specConfidence = listing.ai_spec_confidence || ""
   const specsVerifiedBySeller = Boolean(listing.specs_verified_by_seller)
   const manualSourceValidated = Boolean(listing.manual_source_validated)
@@ -1147,6 +1185,60 @@ function ListingContent() {
     ["Pallet ready", listing.pallet_ready ? "Yes" : "Not stated"],
     ["Tail-lift", listing.tail_lift_required === false ? "Not required" : "Available / may be required"],
   ]
+  const canonicalSpec = verifiedSpec?.EquipmentSpecs
+  const showVerifiedSpecs =
+    Boolean(verifiedSpec && canonicalSpec && verifiedSpec.verification_status === "verified" && showCaterBotSource)
+  const specRows = canonicalSpec
+    ? [
+        [
+          "Dimensions",
+          canonicalSpec.ext_height_cm && canonicalSpec.ext_width_cm && canonicalSpec.ext_depth_cm
+            ? `${canonicalSpec.ext_height_cm} x ${canonicalSpec.ext_width_cm} x ${canonicalSpec.ext_depth_cm} cm`
+            : "Not confirmed",
+        ],
+        ["Net weight", canonicalSpec.weight_net_kg ? `${canonicalSpec.weight_net_kg} kg` : "Not confirmed"],
+        ["Packed weight", canonicalSpec.weight_gross_kg ? `${canonicalSpec.weight_gross_kg} kg` : "Not confirmed"],
+        [
+          "Power / gas",
+          [
+            canonicalSpec.power_type,
+            canonicalSpec.voltage,
+            canonicalSpec.phase ? `${canonicalSpec.phase} phase` : "",
+            canonicalSpec.current_a ? `${canonicalSpec.current_a}A` : "",
+            canonicalSpec.gas_type,
+            canonicalSpec.gas_connection,
+          ]
+            .filter(Boolean)
+            .join(" · ") || "Not confirmed",
+        ],
+        ["Pallet", canonicalSpec.pallet_required ? "Required" : "Not stated"],
+        ["Handling", canonicalSpec.lifting_notes || verifiedSpec?.seller_forklift_required ? "Mechanical handling may be required" : "Not stated"],
+        ["Hazards", canonicalSpec.hazardous_notes || "Not stated"],
+      ]
+    : []
+
+  async function reportIncorrectSpecs() {
+    if (!verifiedSpec) return
+    setSpecReportSent(false)
+
+    try {
+      const res = await fetch("/api/equipment-specs/report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          equipmentSpecId: verifiedSpec.equipment_spec_id,
+          listingId: safeListingId(listing?.id || id),
+          reason: "incorrect_specs",
+        }),
+      })
+
+      if (!res.ok) throw new Error("Could not report specs")
+      setSpecReportSent(true)
+    } catch (error) {
+      console.warn("Could not report specs:", error)
+      setMessageError("Could not report specs. Please try again.")
+    }
+  }
 
   return (
     <main className="app-bg min-h-screen pb-10 text-white">
@@ -1354,6 +1446,60 @@ function ListingContent() {
             </p>
           </details>
 
+          {showVerifiedSpecs && canonicalSpec && (
+            <section className="premium-card rounded-3xl border-[#FF6B00]/25 p-5">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-[#FF6B00]">
+                    Verified Specs
+                  </p>
+                  <h2 className="mt-1 text-xl font-black text-white">
+                    Shipping specs
+                  </h2>
+                </div>
+                <span className="inline-flex w-fit rounded-full border border-green-400/25 bg-green-500/10 px-3 py-1 text-xs font-black text-green-200">
+                  {canonicalSpec.confidence}% confidence
+                </span>
+              </div>
+
+              <div className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
+                {specRows.map(([label, value]) => (
+                  <div key={label} className="rounded-2xl border border-white/10 bg-[#002E5D]/35 p-3">
+                    <p className="text-[10px] font-black uppercase tracking-[0.14em] text-white/40">{label}</p>
+                    <p className="mt-1 font-bold text-white/82">{value}</p>
+                  </div>
+                ))}
+              </div>
+
+              <p className="mt-4 text-xs leading-relaxed text-white/60">
+                Source:{" "}
+                {canonicalSpec.source_url && showCaterBotSource ? (
+                  <a
+                    href={canonicalSpec.source_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-black text-[#FF9A4A] underline-offset-4 hover:underline"
+                  >
+                    {canonicalSpec.source_name || `${canonicalSpec.brand} ${canonicalSpec.model} spec sheet`}
+                  </a>
+                ) : (
+                  canonicalSpec.source_name || "Source not provided"
+                )}{" "}
+                - data confidence: {canonicalSpec.confidence}%
+              </p>
+              <p className="mt-3 rounded-2xl border border-white/10 bg-white/5 p-3 text-xs leading-relaxed text-white/55">
+                Specs are provided for convenience. Buyers should confirm dimensions, weight and requirements with the manufacturer before purchase.
+              </p>
+              <button
+                type="button"
+                onClick={reportIncorrectSpecs}
+                className="mt-3 text-xs font-black text-[#FF9A4A] underline-offset-4 hover:underline"
+              >
+                {specReportSent ? "Report sent" : "Report incorrect specs"}
+              </button>
+            </section>
+          )}
+
           {/* Trade Checks */}
           <details className="premium-card rounded-3xl p-5">
             <summary className="cursor-pointer list-none text-sm font-black uppercase tracking-wider text-white/70">
@@ -1466,10 +1612,10 @@ function ListingContent() {
           {showCaterBotSource && (
             <details className="premium-card rounded-3xl border-[#FF6B00]/25 p-5">
               <summary className="cursor-pointer list-none text-sm font-black uppercase tracking-wider text-white/70">
-                Manuals & AI notes
+                Product specs supported by CaterBot
               </summary>
               <div className="mt-3 rounded-2xl border border-white/10 bg-white/5 p-4">
-                <p className="text-sm font-black text-white">Seller-confirmed source.</p>
+                <p className="text-sm font-black text-white">Seller-confirmed product source available.</p>
                 <p className="mt-1 text-xs text-white/55">
                   {manualSourceName}
                   {specConfidence ? ` · CaterBot spec confidence: ${specConfidence}` : ""}
@@ -1485,7 +1631,7 @@ function ListingContent() {
                 </a>
               </div>
               <p className="mt-3 text-xs leading-relaxed text-white/55">
-                Check specs before purchase.
+                Specs are provided to help buyers check details. Please confirm suitability before purchase.
               </p>
             </details>
           )}

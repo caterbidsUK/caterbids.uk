@@ -68,11 +68,88 @@ type QuickListAiResponse = {
   detail?: string
 }
 
+type CaterBotSourceValidationResponse = {
+  success?: boolean
+  sourceFound?: boolean
+  error?: string
+  searchProvider?: string | null
+  checkedAt?: string
+  sourceStatus?: string
+  shipping?: {
+    deliveryType?: string
+    shippingClass?: string
+    palletDeliveryRecommended?: boolean
+    specialistDeliveryRecommended?: boolean
+    forkliftRequired?: boolean
+    tailLiftRequired?: boolean
+    twoPersonLiftRecommended?: boolean
+    shippingConfidence?: string
+    deliveryNotes?: string
+  }
+  source?: {
+    url?: string
+    sourceName?: string
+    sourceType?: string
+    confidence?: string
+    score?: number
+    sourceTitle?: string
+    sourceDomain?: string
+    confidenceScore?: number
+    matchedFields?: string[]
+    sourcePriorityRank?: number
+    checkedAt?: string
+    matchNotes?: string
+    usefulDetails?: string[]
+    extractedSpecs?: {
+      dimensions?: string
+      packedDimensions?: string
+      weight?: string
+      grossWeight?: string
+      voltage?: string
+      phase?: string
+      amps?: string
+      kwRating?: string
+      gasType?: string
+      capacity?: string
+    }
+  } | null
+}
+
 type DeliveryPreviewQuote = CaterBidsDeliveryOption
+type SellerProfileDetails = {
+  name?: string | null
+  business?: string | null
+  location?: string | null
+  phone?: string | null
+  seller_contact_name?: string | null
+  collection_full_address?: string | null
+  collection_city?: string | null
+  collection_postcode?: string | null
+}
+type DeliveryRecommendation = {
+  label: string
+  recommendation: string
+  palletRecommended: boolean
+  specialistRecommended: boolean
+}
 
 const LISTING_IMAGES_BUCKET = "listing-images"
+const LOCAL_PROFILE_KEY = "caterbids_profile"
 const QUICKLIST_AI_WARNING =
   "Seller checked details required. Not a safety certificate."
+const SHIPPING_SPEC_CATEGORIES = [
+  "Oven",
+  "Fryer",
+  "Refrigerator",
+  "Dishwasher",
+  "Mixer",
+  "Griddle",
+  "Freezer",
+  "Coffee Machine",
+  "Prep Equipment",
+  "Other",
+] as const
+const SHIPPING_POWER_TYPES = ["Electric", "Gas", "Both", "Not sure"] as const
 
 function isManualsLibUrl(url: string) {
   try {
@@ -104,10 +181,168 @@ function preferredManualSourceUrl(suggestion: QuickListAiResponse) {
   return manualsLibUrl || directSourceUrl || ""
 }
 
+function compactSearchModel(value: string) {
+  return value.replace(/[^a-z0-9]/gi, "")
+}
+
+function trustedSearchModelTerms(model: string) {
+  const raw = model.trim()
+  if (!raw) return []
+  const parts = raw.split(/[\/_\-\s]+/).filter(Boolean)
+  const base = parts.find((part) => /[a-z]/i.test(part) && /\d/.test(part)) || parts[0] || raw
+  const suffix = parts.filter((part) => part !== base).join("")
+  return Array.from(new Set([
+    raw,
+    raw.replace(/[\/_\-]+/g, " "),
+    compactSearchModel(raw),
+    base,
+    suffix ? `${base} ${suffix}` : "",
+  ].map((term) => term.trim()).filter(Boolean)))
+}
+
+function manufacturerDomainForTrustedSearch(brand: string) {
+  const brandKey = brand.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
+  const knownDomains: Record<string, string> = {
+    lincat: "lincat.co.uk",
+    falcon: "falconfoodservice.com",
+    rational: "rational-online.com",
+    hobart: "hobartuk.com",
+    foster: "fosterrefrigerator.com",
+    imperial: "imperialrange.com",
+  }
+  return knownDomains[brandKey] || `${brandKey.replace(/\s+/g, "")}.co.uk`
+}
+
+function externalSearchUrl(query: string) {
+  return `https://www.google.com/search?q=${encodeURIComponent(query)}`
+}
+
+function trustedSourceSearchLinks({
+  brand,
+  model,
+  title,
+  equipmentType,
+}: {
+  brand: string
+  model: string
+  title: string
+  equipmentType: string
+}) {
+  if (!brand.trim() || !model.trim()) return []
+
+  const modelTerms = trustedSearchModelTerms(model)
+  const primaryModel = modelTerms.find((term) => /[a-z]/i.test(term) && /\d/.test(term)) || model
+  const readableModel = modelTerms.find((term) => term.includes(" ")) || primaryModel
+  const titleText = `${title} ${equipmentType}`.toLowerCase()
+  const family = titleText.match(/\bopus\s*800\b/)?.[0] || ""
+  const categoryTerm =
+    /\bfryer\b/.test(titleText) ? "fryer" :
+    /\bgriddle|grill\b/.test(titleText) ? "griddle" :
+    /\boven\b/.test(titleText) ? "oven" :
+    /\bfridge|freezer|refrigerat/.test(titleText) ? "refrigeration" :
+    equipmentType
+  const searchTail = [brand, readableModel, family, categoryTerm].filter(Boolean).join(" ")
+  const manufacturerDomain = manufacturerDomainForTrustedSearch(brand)
+
+  return [
+    {
+      label: "Search Catering Appliance",
+      url: externalSearchUrl(`site:catering-appliance.com ${searchTail}`),
+    },
+    {
+      label: "Search ManualsLib",
+      url: externalSearchUrl(`site:manualslib.com ${brand} ${primaryModel} manual`),
+    },
+    {
+      label: "Search manufacturer site",
+      url: externalSearchUrl(`site:${manufacturerDomain} ${brand} ${primaryModel}`),
+    },
+    {
+      label: "Search Nisbets",
+      url: externalSearchUrl(`site:nisbets.co.uk ${brand} ${primaryModel}`),
+    },
+  ]
+}
+
 function deliveryOptionForDeliveryMethod(value: string) {
   if (value === "collection_only") return "Collection only"
-  if (value === "buyer_courier") return "Buyer arranges transport"
+  if (value === "buyer_courier") return "Seller arranged delivery"
   return "Delivery available through CaterBids"
+}
+
+function positiveNumber(value: string) {
+  const numberValue = Number(String(value || "").replace(/[^0-9.]/g, ""))
+  return Number.isFinite(numberValue) && numberValue > 0 ? numberValue : 0
+}
+
+function deliveryRecommendationFromSpecs({
+  weightKg,
+  lengthCm,
+  widthCm,
+  heightCm,
+  category,
+  subcategory,
+  powerType,
+  hasVerifiedSource,
+}: {
+  weightKg: string
+  lengthCm: string
+  widthCm: string
+  heightCm: string
+  category: string
+  subcategory: string
+  powerType: string
+  hasVerifiedSource: boolean
+}): DeliveryRecommendation {
+  const weight = positiveNumber(weightKg)
+  const dimensions = [positiveNumber(lengthCm), positiveNumber(widthCm), positiveNumber(heightCm)]
+  const maxDimension = Math.max(...dimensions, 0)
+  const hasCompleteSpecs = weight > 0 && dimensions.every((value) => value > 0)
+  const equipmentText = `${category} ${subcategory} ${powerType}`.toLowerCase()
+  const specialCase = /(gas|lpg|propane|refriger|fridge|freezer|extraction|canopy|trailer|van)/.test(equipmentText)
+
+  if (!hasCompleteSpecs) {
+    return {
+      label: "Seller confirmation needed",
+      recommendation: "CaterBot can improve delivery estimates when dimensions and weight are confirmed.",
+      palletRecommended: false,
+      specialistRecommended: false,
+    }
+  }
+
+  if (specialCase || weight >= 250 || maxDimension >= 220) {
+    return {
+      label: hasVerifiedSource ? "Source-based delivery estimate" : "Seller confirmation needed",
+      recommendation: "Specialist delivery or collection recommended.",
+      palletRecommended: true,
+      specialistRecommended: true,
+    }
+  }
+
+  if (weight <= 30 && maxDimension <= 120) {
+    return {
+      label: hasVerifiedSource ? "Source-based delivery estimate" : "Seller confirmation needed",
+      recommendation: "Parcel courier may be suitable.",
+      palletRecommended: false,
+      specialistRecommended: false,
+    }
+  }
+
+  if (weight <= 80 && maxDimension <= 160) {
+    return {
+      label: hasVerifiedSource ? "Source-based delivery estimate" : "Seller confirmation needed",
+      recommendation: "Heavy parcel or small pallet recommended.",
+      palletRecommended: true,
+      specialistRecommended: false,
+    }
+  }
+
+  return {
+    label: hasVerifiedSource ? "Source-based delivery estimate" : "Seller confirmation needed",
+    recommendation: "Pallet courier or specialist van recommended.",
+    palletRecommended: true,
+    specialistRecommended: false,
+  }
 }
 
 function formatPrice(price: string) {
@@ -125,6 +360,27 @@ function isMissingStorageBucketError(error: unknown) {
 function hasPositiveNumber(value: FormDataEntryValue | null) {
   const numberValue = Number(value || "")
   return Number.isFinite(numberValue) && numberValue > 0
+}
+
+function localProfileKey(userId: string) {
+  return `${LOCAL_PROFILE_KEY}:${userId}`
+}
+
+function readLocalSellerProfile(userId: string): SellerProfileDetails | null {
+  if (typeof window === "undefined") return null
+
+  try {
+    const saved =
+      localStorage.getItem(localProfileKey(userId)) ||
+      localStorage.getItem(LOCAL_PROFILE_KEY)
+    return saved ? (JSON.parse(saved) as SellerProfileDetails) : null
+  } catch {
+    return null
+  }
+}
+
+function upperPostcode(value?: string | null) {
+  return String(value || "").trim().toUpperCase()
 }
 
 export default function PostListingPage() {
@@ -191,13 +447,53 @@ export default function PostListingPage() {
   const [specConfidence, setSpecConfidence] = useState("")
   const [specsVerifiedBySeller, setSpecsVerifiedBySeller] = useState(false)
   const [sourceRejectedBySeller, setSourceRejectedBySeller] = useState(false)
+  const [manualLinkPanelOpen, setManualLinkPanelOpen] = useState(false)
+  const [manualLinkInput, setManualLinkInput] = useState("")
+  const [manualLinkError, setManualLinkError] = useState("")
+  const [manualLinkChecking, setManualLinkChecking] = useState(false)
+  const [specPlateValidation, setSpecPlateValidation] = useState("")
+  const [shippingSpecBrand, setShippingSpecBrand] = useState("")
+  const [shippingSpecModel, setShippingSpecModel] = useState("")
+  const [shippingSpecSerial, setShippingSpecSerial] = useState("")
+  const [shippingSpecGcNumber, setShippingSpecGcNumber] = useState("")
+  const [shippingSpecCategory, setShippingSpecCategory] = useState<(typeof SHIPPING_SPEC_CATEGORIES)[number]>("Griddle")
+  const [shippingSpecPowerType, setShippingSpecPowerType] =
+    useState<(typeof SHIPPING_POWER_TYPES)[number]>("Electric")
+  const [shippingSpecPhase, setShippingSpecPhase] = useState("")
+  const [shippingSpecVoltage, setShippingSpecVoltage] = useState("")
+  const [shippingSpecCurrent, setShippingSpecCurrent] = useState("")
+  const [shippingSpecGasType, setShippingSpecGasType] = useState("")
+  const [shippingSpecGasConnection, setShippingSpecGasConnection] = useState("")
+  const [shippingSpecHeight, setShippingSpecHeight] = useState("")
+  const [shippingSpecWidth, setShippingSpecWidth] = useState("")
+  const [shippingSpecDepth, setShippingSpecDepth] = useState("")
+  const [shippingSpecWeight, setShippingSpecWeight] = useState("")
+  const [shippingSpecForkliftRequired, setShippingSpecForkliftRequired] = useState(false)
+  const [shippingSpecNotes, setShippingSpecNotes] = useState("")
   const [quickListResult, setQuickListResult] = useState<QuickListAiResponse | null>(null)
   const [quickListApplied, setQuickListApplied] = useState(false)
   const [publishError, setPublishError] = useState("")
+  const [listingInfoConfirmed, setListingInfoConfirmed] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
   const [authChecked, setAuthChecked] = useState(false)
   const [isPublishing, startPublishing] = useTransition()
   const imagePreview = imagePreviews[0] || ""
+
+  function prefillSellerDetails(profile: SellerProfileDetails | null | undefined) {
+    if (!profile) return
+
+    const contactName = profile.seller_contact_name || profile.name || profile.business || ""
+    const sellerLocation = profile.collection_city || profile.location || ""
+    const sellerPostcode = upperPostcode(profile.collection_postcode)
+
+    setSellerContactName((current) => current || contactName)
+    setSellerPhone((current) => current || profile.phone || "")
+    setCollectionFullAddress((current) => current || profile.collection_full_address || "")
+    setCollectionCity((current) => current || sellerLocation)
+    setCollectionPostcode((current) => current || sellerPostcode)
+    setCity((current) => current || sellerLocation)
+    setLocation((current) => current || sellerLocation)
+  }
 
   useEffect(() => {
     async function loadUser() {
@@ -209,6 +505,19 @@ export default function PostListingPage() {
       setAuthChecked(true)
       if (!realUser) {
         router.replace(`/login?next=${encodeURIComponent("/post-listing")}`)
+        return
+      }
+
+      prefillSellerDetails(readLocalSellerProfile(realUser.id))
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", realUser.id)
+        .maybeSingle()
+
+      if (profile) {
+        prefillSellerDetails(profile)
       }
     }
 
@@ -285,6 +594,20 @@ export default function PostListingPage() {
     )
   }
 
+  function inspectImage(file: File) {
+    return new Promise<{ width: number; height: number }>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onerror = () => reject(reader.error)
+      reader.onload = () => {
+        const image = new Image()
+        image.onerror = () => reject(new Error("Could not load image"))
+        image.onload = () => resolve({ width: image.width, height: image.height })
+        image.src = reader.result as string
+      }
+      reader.readAsDataURL(file)
+    })
+  }
+
   function clearQuickListResult() {
     setQuickListResult(null)
     setQuickListApplied(false)
@@ -316,11 +639,67 @@ export default function PostListingPage() {
     setImagePreviews(await buildImagePreviews(newFiles))
   }
 
+  async function runSpecPlateOcrPreview(file: File) {
+    if (!userId) return
+
+    setAiLoading(true)
+    setAiError("")
+    setAiNotice("Reading spec plate...")
+
+    try {
+      const specPlateDataUrl = await resizeSpecPlateForAi(file)
+      const res = await fetch("/api/ai-listing", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          specPlate: {
+            imageBase64: getBase64Payload(specPlateDataUrl),
+            fileType: getDataUrlFileType(specPlateDataUrl, file.type),
+            fileName: file.name,
+          },
+        }),
+      })
+      const suggestion = (await res.json()) as QuickListAiResponse
+
+      if (!res.ok) {
+        setAiNotice("")
+        return
+      }
+
+      setQuickListResult(suggestion)
+      applySuggestionToShippingSpecs(suggestion)
+      setAiNotice("Spec plate read. Check brand, model and shipping specs.")
+    } catch (error) {
+      console.warn("Spec plate OCR preview failed:", error)
+      setAiNotice("")
+    } finally {
+      setAiLoading(false)
+    }
+  }
+
   async function handleSpecPlateSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = Array.from(e.target.files || []).find((selectedFile) =>
       ["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(selectedFile.type)
     )
     if (!file) return
+
+    try {
+      const { width, height } = await inspectImage(file)
+      if (Math.max(width, height) < 700 || Math.min(width, height) < 300) {
+        setAiError("Use a clearer spec plate photo so the brand and model can be read.")
+        e.target.value = ""
+        return
+      }
+      setSpecPlateValidation(
+        height > width * 1.35
+          ? "Spec plate added. Rotate or crop if the text is sideways."
+          : "Spec plate added."
+      )
+    } catch {
+      setSpecPlateValidation("Spec plate added.")
+    }
 
     setSpecPlateFile(file)
     setAiError("")
@@ -333,11 +712,13 @@ export default function PostListingPage() {
     }
 
     e.target.value = ""
+    void runSpecPlateOcrPreview(file)
   }
 
   function removeSpecPlate() {
     setSpecPlateFile(null)
     setSpecPlatePreview("")
+    setSpecPlateValidation("")
     setAiError("")
     clearQuickListResult()
   }
@@ -382,6 +763,55 @@ export default function PostListingPage() {
     if (lower.includes("dual fuel")) return "Dual Fuel"
 
     return "Unknown"
+  }
+
+  function shippingPowerTypeFrom(value?: string) {
+    const lower = (value || "").toLowerCase()
+    if (!lower || lower.includes("unknown") || lower.includes("not sure")) return "Not sure"
+    if (lower.includes("dual") || lower.includes("both")) return "Both"
+    if (lower.includes("gas") || lower.includes("lpg") || lower.includes("propane")) return "Gas"
+    return "Electric"
+  }
+
+  function shippingCategoryFrom(value?: string) {
+    const lower = (value || "").toLowerCase()
+    if (lower.includes("fryer")) return "Fryer"
+    if (lower.includes("fridge") || lower.includes("refriger")) return "Refrigerator"
+    if (lower.includes("freezer")) return "Freezer"
+    if (lower.includes("dish") || lower.includes("glass") || lower.includes("ware")) return "Dishwasher"
+    if (lower.includes("mixer")) return "Mixer"
+    if (lower.includes("griddle") || lower.includes("grill")) return "Griddle"
+    if (lower.includes("coffee") || lower.includes("espresso")) return "Coffee Machine"
+    if (lower.includes("prep") || lower.includes("processor") || lower.includes("slicer")) return "Prep Equipment"
+    if (lower.includes("oven") || lower.includes("range")) return "Oven"
+    return "Other"
+  }
+
+  function applySuggestionToShippingSpecs(suggestion: QuickListAiResponse) {
+    const parsedDimensions = parseDimensionsToCm(suggestion.dimensions)
+
+    setShippingSpecBrand(suggestion.brand || shippingSpecBrand)
+    setShippingSpecModel(suggestion.model || suggestion.gc_number || shippingSpecModel)
+    setShippingSpecSerial(suggestion.serial_number || shippingSpecSerial)
+    setShippingSpecGcNumber(suggestion.gc_number || shippingSpecGcNumber)
+    setShippingSpecCategory(shippingCategoryFrom(suggestion.subcategory || suggestion.category || suggestion.suggested_title))
+    setShippingSpecPowerType(shippingPowerTypeFrom(suggestion.power_type || suggestion.gas_or_electric || suggestion.gas_type))
+    setShippingSpecVoltage(suggestion.voltage || shippingSpecVoltage)
+    setShippingSpecCurrent(extractConfirmedNumber(suggestion.amps) || shippingSpecCurrent)
+    setShippingSpecPhase(
+      /3|three/i.test(suggestion.electrical_phase || suggestion.power_type || "") ? "3" :
+      /1|single/i.test(suggestion.electrical_phase || suggestion.power_type || "") ? "1" :
+      shippingSpecPhase
+    )
+    setShippingSpecGasType(suggestion.gas_type || shippingSpecGasType)
+    if (parsedDimensions) {
+      setShippingSpecWidth(parsedDimensions[0])
+      setShippingSpecDepth(parsedDimensions[1])
+      setShippingSpecHeight(parsedDimensions[2])
+    }
+    setShippingSpecWeight(extractConfirmedNumber(suggestion.estimated_weight_kg ?? suggestion.weight) || shippingSpecWeight)
+    setShippingSpecForkliftRequired(aiBoolean(suggestion.tail_lift_required, shippingSpecForkliftRequired))
+    setShippingSpecNotes(suggestion.delivery_notes || shippingSpecNotes)
   }
 
   function extractNumber(value: string) {
@@ -492,6 +922,25 @@ export default function PostListingPage() {
     return urls
   }
 
+  async function uploadSpecPlateImage(ownerId: string) {
+    if (!specPlateFile) return ""
+
+    const supabase = createClient()
+    const fileExt = specPlateFile.name.split(".").pop() || "jpg"
+    const fileName = `${ownerId}/spec-plates/${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`
+    const { error: uploadError } = await supabase.storage
+      .from(LISTING_IMAGES_BUCKET)
+      .upload(fileName, specPlateFile, {
+        cacheControl: "3600",
+        upsert: false,
+      })
+
+    if (uploadError) throw uploadError
+
+    const { data } = supabase.storage.from(LISTING_IMAGES_BUCKET).getPublicUrl(fileName)
+    return data?.publicUrl || ""
+  }
+
   async function scanQuickListAi() {
     if (!userId) {
       requireLogin()
@@ -547,11 +996,12 @@ export default function PostListingPage() {
       }
 
       setQuickListResult(suggestion)
+      applySuggestionToVisibleForm(suggestion)
 
       if (suggestion.description?.includes("CaterBot vision is not configured")) {
         setAiError("CaterBot needs clearer photos. You can still enter the details manually.")
       } else {
-        setAiNotice("CaterBot scan complete. Check the details below.")
+        setAiNotice("CaterBot filled what it could. Please check the details.")
       }
     } catch (error) {
       const message =
@@ -566,67 +1016,58 @@ export default function PostListingPage() {
     }
   }
 
-  function applyQuickListToListing() {
-    if (!userId) {
-      requireLogin()
-      return
-    }
-
-    if (!quickListResult) {
-      setAiError("Scan photos first, then review the CaterBot suggestions.")
-      return
-    }
-
-    const nextCategory = quickListResult.category || "Catering Equipment"
+  function applySuggestionToVisibleForm(suggestion: QuickListAiResponse) {
+    const nextCategory = suggestion.category || "Catering Equipment"
     const subcategories = subcategoriesForCategory(nextCategory)
     const nextSubcategory =
-      quickListResult.subcategory && subcategories.includes(quickListResult.subcategory)
-        ? quickListResult.subcategory
+      suggestion.subcategory && subcategories.includes(suggestion.subcategory)
+        ? suggestion.subcategory
         : subcategories[0] || ""
-    const nextDeliveryOption = deliveryOptionFromShippingClass(quickListResult.shipping_class)
-    const parsedDimensions = parseDimensionsToCm(quickListResult.dimensions)
-    const aiWeight = extractConfirmedNumber(quickListResult.estimated_weight_kg ?? quickListResult.weight)
-    const aiPalletLength = extractConfirmedNumber(quickListResult.pallet_length_cm)
-    const aiPalletWidth = extractConfirmedNumber(quickListResult.pallet_width_cm)
-    const aiPalletHeight = extractConfirmedNumber(quickListResult.pallet_height_cm)
-    const aiPalletCount = extractConfirmedNumber(quickListResult.pallet_count)
-    const preferredSourceUrl = preferredManualSourceUrl(quickListResult)
+    const nextDeliveryOption = deliveryOptionFromShippingClass(suggestion.shipping_class)
+    const parsedDimensions = parseDimensionsToCm(suggestion.dimensions)
+    const aiWeight = extractConfirmedNumber(suggestion.estimated_weight_kg ?? suggestion.weight)
+    const aiPalletLength = extractConfirmedNumber(suggestion.pallet_length_cm)
+    const aiPalletWidth = extractConfirmedNumber(suggestion.pallet_width_cm)
+    const aiPalletHeight = extractConfirmedNumber(suggestion.pallet_height_cm)
+    const aiPalletCount = extractConfirmedNumber(suggestion.pallet_count)
+    const preferredSourceUrl = preferredManualSourceUrl(suggestion)
 
-    setTitle(quickListResult.suggested_title || quickListResult.title || title)
+    setTitle(suggestion.suggested_title || suggestion.title || title)
     setCategory(nextCategory)
     setSubcategory(nextSubcategory)
-    setCondition(normaliseCondition(quickListResult.condition))
-    setDescription(buildDescriptionFromSuggestion(quickListResult))
-    setPowerType(normalisePowerType(quickListResult.power_type || quickListResult.gas_or_electric || ""))
-    setDimensions(quickListResult.dimensions)
+    setCondition(normaliseCondition(suggestion.condition))
+    setDescription(suggestion.description || description)
+    applySuggestionToShippingSpecs(suggestion)
+    setPowerType(normalisePowerType(suggestion.power_type || suggestion.gas_or_electric || ""))
+    setDimensions(suggestion.dimensions)
     setDeliveryOption(nextDeliveryOption)
     setDeliveryMethod(/courier|pallet|delivery/i.test(nextDeliveryOption) ? "caterbids_delivery" : "buyer_courier")
-    const validatedSource = Boolean(quickListResult.manual_source_validated)
+    const validatedSource = Boolean(suggestion.manual_source_validated)
     setManualsAvailable(validatedSource)
     setManualSourceUrl(validatedSource ? preferredSourceUrl : "")
     setSpecSourceUrl(validatedSource ? preferredSourceUrl : "")
-    setManualSourceName(quickListResult.manual_source_name || "Manual / spec source")
-    setManualSourceType(quickListResult.manual_source_type || "")
+    setManualSourceName(suggestion.manual_source_name || "Verified manual/spec source")
+    setManualSourceType(suggestion.manual_source_type || "")
     setManualSourceValidated(validatedSource)
-    setManualSourceLastCheckedAt(quickListResult.manual_source_last_checked_at || "")
+    setManualSourceLastCheckedAt(suggestion.manual_source_last_checked_at || "")
     setManualSourceMatchNotes(
-      quickListResult.manual_source_match_notes ||
+      suggestion.manual_source_match_notes ||
         "CaterBot could not verify a reliable manual/spec source for this item."
     )
     setManualSourceUsefulDetails(
-      Array.isArray(quickListResult.manual_source_useful_details)
-        ? quickListResult.manual_source_useful_details
+      Array.isArray(suggestion.manual_source_useful_details)
+        ? suggestion.manual_source_useful_details
         : []
     )
     setSpecConfidence(
-      String(quickListResult.ai_spec_confidence || quickListResult.confidence || formatConfidence(quickListResult.confidence_score))
+      String(suggestion.ai_spec_confidence || suggestion.confidence || formatConfidence(suggestion.confidence_score))
     )
     setSpecsVerifiedBySeller(false)
     setSourceRejectedBySeller(false)
     setPalletCount(aiPalletCount || "1")
     setInsuranceValue(price ? String(Number(price.replace(/[^0-9.]/g, "")) || "") : "")
-    if (quickListResult.delivery_notes) {
-      setDeliveryNotes(quickListResult.delivery_notes)
+    if (suggestion.delivery_notes) {
+      setDeliveryNotes(suggestion.delivery_notes)
     }
 
     if (aiWeight) {
@@ -646,17 +1087,32 @@ export default function PostListingPage() {
       setDeliverySizeUnknown(false)
     }
 
-    if (/pallet/i.test(quickListResult.shipping_class)) {
+    if (/pallet/i.test(suggestion.shipping_class)) {
       setPalletReady(true)
       setTailLiftRequired(true)
-    } else if (/specialist|quote/i.test(quickListResult.shipping_class)) {
+    } else if (/specialist|quote/i.test(suggestion.shipping_class)) {
       setTailLiftRequired(true)
     }
-    setTailLiftRequired(aiBoolean(quickListResult.tail_lift_required, /pallet|specialist|quote/i.test(quickListResult.shipping_class)))
-    setForkliftAvailable(aiBoolean(quickListResult.forklift_available, forkliftAvailable))
-    setCommercialPremises(aiBoolean(quickListResult.commercial_premises, commercialPremises))
+    setTailLiftRequired(aiBoolean(suggestion.tail_lift_required, /pallet|specialist|quote/i.test(suggestion.shipping_class)))
+    setForkliftAvailable(aiBoolean(suggestion.forklift_available, forkliftAvailable))
+    setCommercialPremises(aiBoolean(suggestion.commercial_premises, commercialPremises))
 
     setQuickListApplied(true)
+  }
+
+  function applyQuickListToListing() {
+    if (!userId) {
+      requireLogin()
+      return
+    }
+
+    if (!quickListResult) {
+      setAiError("Scan photos first, then review the CaterBot suggestions.")
+      return
+    }
+
+    applySuggestionToVisibleForm(quickListResult)
+    const validatedSource = Boolean(quickListResult.manual_source_validated)
     setAiNotice(
       validatedSource
         ? "CaterBot suggestions applied. Check the source before publishing."
@@ -678,6 +1134,148 @@ export default function PostListingPage() {
     setSourceRejectedBySeller(true)
   }
 
+  function productMatchIdentity() {
+    const brand = shippingSpecBrand || quickListResult?.brand || ""
+    const model = shippingSpecModel || quickListResult?.model || quickListResult?.gc_number || ""
+    return { brand: brand.trim(), model: model.trim() }
+  }
+
+  function applyValidatedManualSource(
+    source: NonNullable<CaterBotSourceValidationResponse["source"]>,
+    shipping?: CaterBotSourceValidationResponse["shipping"]
+  ) {
+    const sourceDimensions = source.extractedSpecs?.dimensions || ""
+    const sourcePackedDimensions = source.extractedSpecs?.packedDimensions || ""
+    const sourceWeight = source.extractedSpecs?.grossWeight || source.extractedSpecs?.weight || ""
+    const parsedDimensions = !/needs seller check/i.test(sourceDimensions) ? parseDimensionsToCm(sourceDimensions) : null
+    const parsedPackedDimensions = !/needs seller check/i.test(sourcePackedDimensions)
+      ? parseDimensionsToCm(sourcePackedDimensions)
+      : null
+    const parsedWeight = !/needs seller check/i.test(sourceWeight) ? extractConfirmedNumber(sourceWeight) : ""
+
+    if (parsedDimensions) {
+      setShippingSpecWidth(parsedDimensions[0])
+      setShippingSpecDepth(parsedDimensions[1])
+      setShippingSpecHeight(parsedDimensions[2])
+      setDeliverySizeUnknown(false)
+    }
+
+    const deliveryDimensions = parsedPackedDimensions || parsedDimensions
+    if (deliveryDimensions) {
+      setLengthCm(deliveryDimensions[1])
+      setWidthCm(deliveryDimensions[0])
+      setHeightCm(deliveryDimensions[2])
+      setDeliverySizeUnknown(false)
+    }
+
+    if (parsedWeight) {
+      setShippingSpecWeight(parsedWeight)
+      setWeightKg(parsedWeight)
+      setDeliverySizeUnknown(false)
+    }
+
+    if (source.extractedSpecs?.voltage && !/needs seller check/i.test(source.extractedSpecs.voltage)) {
+      setShippingSpecVoltage(source.extractedSpecs.voltage)
+    }
+    if (source.extractedSpecs?.phase && !/needs seller check/i.test(source.extractedSpecs.phase)) {
+      setShippingSpecPhase(/3|three/i.test(source.extractedSpecs.phase) ? "3" : "1")
+    }
+    if (source.extractedSpecs?.amps && !/needs seller check/i.test(source.extractedSpecs.amps)) {
+      setShippingSpecCurrent(extractConfirmedNumber(source.extractedSpecs.amps))
+    }
+    if (source.extractedSpecs?.gasType && !/needs seller check/i.test(source.extractedSpecs.gasType)) {
+      setShippingSpecGasType(source.extractedSpecs.gasType)
+    }
+
+    if (shipping?.deliveryType) setDeliveryOption(shipping.deliveryType)
+    if (shipping?.deliveryNotes) setDeliveryNotes(shipping.deliveryNotes)
+    if (shipping?.palletDeliveryRecommended) setPalletReady(true)
+    if (shipping?.tailLiftRequired) setTailLiftRequired(true)
+    if (shipping?.forkliftRequired) setShippingSpecForkliftRequired(true)
+
+    setManualSourceUrl(source.url || "")
+    setSpecSourceUrl(source.url || "")
+    setManualSourceName(source.sourceName || "Verified manual/spec source")
+    setManualSourceType(source.sourceType || "Verified source")
+    setManualSourceValidated(Boolean(source.url))
+    setManualSourceLastCheckedAt(source.checkedAt || new Date().toISOString())
+    setManualSourceMatchNotes(source.matchNotes || "CaterBot verified the source against this item's plate details.")
+    setManualSourceUsefulDetails(Array.isArray(source.usefulDetails) ? source.usefulDetails : [])
+    setSpecConfidence(source.confidence || "medium")
+    setSpecsVerifiedBySeller(false)
+    setSourceRejectedBySeller(false)
+    setManualLinkPanelOpen(false)
+    setManualLinkError("")
+    setAiNotice("Verified source found. Confirm it matches your item before publishing.")
+  }
+
+  async function validateManualSourceUrl(sourceUrl?: string) {
+    const { brand, model } = productMatchIdentity()
+
+    if (!brand || !model) {
+      setManualLinkError("Add the brand and model from the spec plate first.")
+      return
+    }
+
+    setManualLinkChecking(true)
+    setManualLinkError("")
+    setAiNotice("")
+
+    try {
+      const searchingWithoutManualUrl = !sourceUrl
+      const res = await fetch(
+        searchingWithoutManualUrl ? "/api/caterbot/source-search" : "/api/caterbot/validate-source",
+        {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          brand,
+          model,
+          product_title: title || quickListResult?.suggested_title || quickListResult?.title || "",
+          category,
+          equipmentType: shippingSpecCategory || subcategory || category,
+          equipment_type: shippingSpecCategory || subcategory || category,
+          fuel_type: shippingSpecPowerType || powerType,
+          voltage: shippingSpecVoltage,
+          phase: shippingSpecPhase,
+          amps: shippingSpecCurrent,
+          power_rating: quickListResult?.kw_rating || "",
+          gas_rating: shippingSpecGasType,
+          sourceUrl: sourceUrl || undefined,
+        }),
+      })
+      const data = (await res.json()) as CaterBotSourceValidationResponse
+      const checkedAt = data.source?.checkedAt || data.checkedAt || new Date().toISOString()
+      setManualSourceLastCheckedAt(checkedAt)
+
+      if (!res.ok || data.sourceFound === false || !data.source?.url) {
+        const message = data.error || `CaterBot could not verify a reliable manual/spec source for ${brand} ${model}.`
+        setManualSourceUrl("")
+        setSpecSourceUrl("")
+        setManualSourceName("")
+        setManualSourceType("")
+        setManualSourceValidated(false)
+        setSpecsVerifiedBySeller(false)
+        setSourceRejectedBySeller(false)
+        setSpecConfidence("low")
+        setManualSourceUsefulDetails([])
+        setManualSourceMatchNotes(message)
+        setManualLinkError(res.ok ? "" : message)
+        return
+      }
+
+      applyValidatedManualSource(data.source, data.shipping)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not verify that manual/spec source."
+      setManualLinkError(message)
+      setManualSourceValidated(false)
+      setSpecsVerifiedBySeller(false)
+      setManualSourceMatchNotes(message)
+    } finally {
+      setManualLinkChecking(false)
+    }
+  }
+
   function handlePublish(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setPublishError("")
@@ -695,19 +1293,31 @@ export default function PostListingPage() {
     const sizeUnknown = formData.get("delivery_size_unknown") === "on"
     const selectedDeliveryMethod = (formData.get("delivery_method") as string) || "collection_only"
     const usesCaterBidsDelivery = selectedDeliveryMethod === "caterbids_delivery"
+    const usesAnyDelivery = selectedDeliveryMethod !== "collection_only"
     const hasRequiredDeliverySize =
       hasPositiveNumber(formData.get("weight_kg")) &&
       hasPositiveNumber(formData.get("length_cm")) &&
       hasPositiveNumber(formData.get("width_cm")) &&
       hasPositiveNumber(formData.get("height_cm"))
+    const hasListingPhoto = imageFiles.length > 0 || imagePreviews.length > 0 || uploadedImageUrls.length > 0
 
     if (!requiredTitle || !requiredPrice || (!requiredLocation && !requiredCity)) {
       setPublishError("Add title, price and location.")
       return
     }
 
+    if (!hasListingPhoto) {
+      setPublishError("Add at least one item photo.")
+      return
+    }
+
+    if (formData.get("listing_info_confirmed") !== "on") {
+      setPublishError("Confirm the listing information is accurate.")
+      return
+    }
+
     if (usesCaterBidsDelivery && !hasRequiredDeliverySize) {
-      setPublishError("Add pallet weight, length, width and height.")
+      setPublishError("Add kg and cm to enable delivery quotes.")
       return
     }
 
@@ -721,18 +1331,28 @@ export default function PostListingPage() {
       return
     }
 
+    if (usesCaterBidsDelivery && !((formData.get("preferred_collection_date") as string) || "").trim()) {
+      setPublishError("Add preferred collection date.")
+      return
+    }
+
     if (usesCaterBidsDelivery && !hasPositiveNumber(formData.get("pallet_count"))) {
       setPublishError("Add number of pallets.")
       return
     }
 
-    if (usesCaterBidsDelivery && formData.get("delivery_details_confirmed") !== "on") {
+    if (usesAnyDelivery && formData.get("delivery_details_confirmed") !== "on") {
       setPublishError("Confirm delivery details.")
       return
     }
 
-    if (!usesCaterBidsDelivery && !sizeUnknown && !hasRequiredDeliverySize) {
-      setPublishError("Add weight and size, or tick unknown.")
+    if (selectedDeliveryMethod === "collection_only" && !((formData.get("collection_postcode") as string) || "").trim()) {
+      setPublishError("Add collection postcode.")
+      return
+    }
+
+    if (manualSourceHasVerifiedUrl && formData.get("specs_verified_by_seller") !== "on") {
+      setPublishError("Confirm the product source matches your item.")
       return
     }
 
@@ -758,14 +1378,17 @@ export default function PostListingPage() {
         setUploadedImageUrls(newImageUrls)
         formData.set("image", newImageUrls[0] || "")
         formData.set("images", JSON.stringify(newImageUrls))
+        const specPlateUrl = specPlateFile ? await uploadSpecPlateImage(userId) : ""
+        formData.set("spec_plate_image_url", specPlateUrl || specPlatePreview)
       } catch (error) {
-        if (isMissingStorageBucketError(error) && imagePreviews.length > 0) {
+        if (isMissingStorageBucketError(error) && (imagePreviews.length > 0 || specPlatePreview)) {
           console.warn(
             `${LISTING_IMAGES_BUCKET} bucket is missing. Publishing the Supabase listing with temporary image previews.`
           )
           setUploadedImageUrls(imagePreviews)
           formData.set("image", imagePreviews[0] || "")
           formData.set("images", JSON.stringify(imagePreviews))
+          formData.set("spec_plate_image_url", specPlatePreview)
         } else {
           setPublishError(error instanceof Error ? error.message : "Could not upload listing images.")
           return
@@ -841,6 +1464,51 @@ export default function PostListingPage() {
   const quickListManualSourceIsVerified = Boolean(quickListResult?.manual_source_validated)
   const quickListManualSourceUrl =
     quickListResult && quickListManualSourceIsVerified ? preferredManualSourceUrl(quickListResult) : ""
+  const manualSourceHasVerifiedUrl =
+    Boolean(manualSourceValidated) &&
+    Boolean(manualSourceUrl || specSourceUrl) &&
+    !sourceRejectedBySeller
+  const deliveryRecommendation = deliveryRecommendationFromSpecs({
+    weightKg,
+    lengthCm,
+    widthCm,
+    heightCm,
+    category,
+    subcategory,
+    powerType,
+    hasVerifiedSource: manualSourceHasVerifiedUrl,
+  })
+  const productMatch = productMatchIdentity()
+  const productMatchName = [productMatch.brand, productMatch.model].filter(Boolean).join(" ")
+  const productMatchFailureText = productMatchName
+    ? `CaterBot could not verify an exact manual/spec source for ${productMatchName}. Please add a link manually.`
+    : "CaterBot could not verify an exact manual/spec source. Please add a link manually."
+  const sourceStatusText = manualSourceHasVerifiedUrl
+    ? "Verified source found"
+    : /not connected/i.test(manualSourceMatchNotes)
+      ? "Not connected"
+      : /failed|could not complete/i.test(manualSourceMatchNotes)
+        ? "Search failed"
+        : manualSourceLastCheckedAt
+          ? "Search completed — no reliable match"
+          : "No reliable match"
+  const showCaterBotProductMatch =
+    Boolean(quickListResult) || manualSourceHasVerifiedUrl || Boolean(manualSourceMatchNotes) || sourceRejectedBySeller
+  const trustedSearchLinks = trustedSourceSearchLinks({
+    brand: productMatch.brand,
+    model: productMatch.model,
+    title: title || quickListResult?.suggested_title || quickListResult?.title || "",
+    equipmentType: [shippingSpecCategory, subcategory, category, shippingSpecPowerType, shippingSpecGasType]
+      .filter(Boolean)
+      .join(" "),
+  })
+  const deliveryMeasurementsReady = Boolean(weightKg && lengthCm && widthCm && heightCm)
+  const showGasFields = shippingSpecPowerType === "Gas" || shippingSpecPowerType === "Both"
+  const showElectricFields = shippingSpecPowerType === "Electric" || shippingSpecPowerType === "Both"
+  const itemDimensionsValue =
+    dimensions || (deliveryMeasurementsReady ? `${lengthCm} x ${widthCm} x ${heightCm} cm` : "")
+  const reviewLocation = city || location || collectionCity || "Not added"
+  const reviewDeliveryOption = deliveryOptionForDeliveryMethod(deliveryMethod)
 
   return (
     <main className="app-bg min-h-screen px-4 py-6 text-white">
@@ -867,36 +1535,20 @@ export default function PostListingPage() {
         BUY • SELL • SAVE
       </p>
 
-      {/* HEADER BOX */}
       <div className="premium-card mb-4 rounded-3xl p-4">
-        <h2 className="font-bold text-lg">Sell your item</h2>
-        <p className="text-sm text-white/60">
-          List in minutes.
-        </p>
+        <h2 className="text-xl font-black text-white">Sell your item</h2>
+        <p className="mt-1 text-sm text-white/60">Upload photos, check the details, publish.</p>
       </div>
 
-      {/* CaterBot */}
-      <div className="premium-card mb-4 rounded-3xl border-[#FF6B00]/35 p-4">
+      <div className="premium-card mb-4 rounded-3xl p-4">
         <div className="flex items-start gap-3">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#FF6B00]/18 text-[#FF6B00]">
-            <ScanSearch size={22} aria-hidden="true" />
+            <ImagePlus size={22} aria-hidden="true" />
           </div>
           <div>
-            <p className="text-xs font-black uppercase tracking-[0.16em] text-[#FF6B00]">
-              Step 1 · Photos
-            </p>
-            <h2 className="text-xl font-extrabold text-white">
-              List faster with CaterBot
-            </h2>
-            <p className="mt-1 text-sm leading-relaxed text-slate-300">
-              Upload photos and a data plate.
-            </p>
-            <details className="mt-2 text-xs text-white/55">
-              <summary className="cursor-pointer font-bold text-white/70">More details</summary>
-              <p className="mt-1 leading-relaxed">
-                CaterBot uses the model or GC number to find a matching ManualsLib source.
-              </p>
-            </details>
+            <p className="text-xs font-black uppercase tracking-[0.16em] text-[#FF6B00]">Add photos</p>
+            <h2 className="text-xl font-extrabold text-white">Photos</h2>
+            <p className="mt-1 text-sm leading-relaxed text-slate-300">Add item photos and the spec plate if you have it.</p>
           </div>
         </div>
 
@@ -998,20 +1650,10 @@ export default function PostListingPage() {
             type="button"
             onClick={scanQuickListAi}
             disabled={aiLoading || (imageFiles.length === 0 && !specPlateFile)}
-            className="premium-button flex items-center justify-center gap-2 rounded-2xl py-3 font-bold disabled:cursor-not-allowed disabled:opacity-60"
+            className="premium-button flex items-center justify-center gap-2 rounded-2xl py-3 font-bold disabled:cursor-not-allowed disabled:opacity-60 sm:col-span-2"
           >
             <ScanSearch size={18} aria-hidden="true" />
             {aiLoading ? "CaterBot checking..." : "CaterBot check & auto-fill"}
-          </button>
-
-          <button
-            type="button"
-            onClick={applyQuickListToListing}
-            disabled={!quickListResult}
-            className="soft-button flex items-center justify-center gap-2 rounded-2xl py-3 font-bold disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <ClipboardCheck size={18} aria-hidden="true" />
-            {quickListApplied ? "Applied to listing" : "Apply to listing"}
           </button>
         </div>
 
@@ -1027,976 +1669,688 @@ export default function PostListingPage() {
           </p>
         )}
 
-        {quickListResult && (
-          <div className="mt-4 rounded-2xl border border-white/10 bg-black/18 p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-xs font-black uppercase text-[#FF6B00]">
-                  CaterBot suggestions
-                </p>
-                <p className="mt-1 text-xs font-semibold text-white/55">
-                  Check the details before publishing.
-                </p>
-                <h3 className="mt-1 text-lg font-black text-white">
-                  {quickListResult.suggested_title}
-                </h3>
-              </div>
-              <span className="shrink-0 rounded-full border border-white/10 bg-white/8 px-3 py-1 text-xs font-bold text-white/75">
-                CaterBot confidence: {formatConfidence(quickListResult.confidence_score)}
-              </span>
-            </div>
-
-            <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
-              {[
-                ["category", quickListResult.subcategory || quickListResult.category],
-                ["brand", quickListResult.brand],
-                ["model", quickListResult.model],
-                ["serial_number", quickListResult.serial_number],
-                ["gc_number", quickListResult.gc_number],
-                ["dimensions", quickListResult.dimensions],
-                ["weight", quickListResult.weight],
-                ["estimated_weight_kg", quickListResult.estimated_weight_kg],
-                ["pallet_length_cm", quickListResult.pallet_length_cm],
-                ["pallet_width_cm", quickListResult.pallet_width_cm],
-                ["pallet_height_cm", quickListResult.pallet_height_cm],
-                ["pallet_count", quickListResult.pallet_count],
-                ["power_type", quickListResult.power_type],
-                ["gas_or_electric", quickListResult.gas_or_electric],
-                ["gas_type", quickListResult.gas_type],
-                ["voltage", quickListResult.voltage],
-                ["amps", quickListResult.amps],
-                ["kw_rating", quickListResult.kw_rating],
-                ["electrical_phase", quickListResult.electrical_phase],
-                ["shipping_class", quickListResult.shipping_class],
-                ["delivery_notes", quickListResult.delivery_notes],
-                [
-                  "manual/spec source",
-                  quickListManualSourceUrl ? "ManualsLib manual found" : "",
-                ],
-              ]
-                .filter(([, value]) => Boolean(value))
-                .map(([label, value]) => (
-                  <div key={label} className="rounded-xl border border-white/8 bg-white/5 px-3 py-2">
-                    <p className="font-black uppercase tracking-wide text-white/45">
-                      {label}
-                    </p>
-                    <p className="mt-1 font-bold text-white">
-                      {value}
-                    </p>
-                  </div>
-                ))}
-            </div>
-
-            <p className="mt-3 text-sm leading-relaxed text-white/70">
-              {quickListResult.description}
-            </p>
-
-            {quickListManualSourceUrl && (
-              <div className="mt-3 rounded-2xl border border-[#FF6B00]/25 bg-[#FF6B00]/10 p-3">
-                <p className="text-sm font-bold text-orange-100">
-                  ManualsLib match found.
-                </p>
-                <a
-                  href={quickListManualSourceUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-2 inline-flex text-sm font-bold text-[#FF9A4A] underline-offset-4 hover:underline"
-                >
-                  Open ManualsLib manual
-                </a>
-              </div>
-            )}
-          </div>
+        {quickListApplied && !aiError && (
+          <p className="mt-3 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm font-bold text-emerald-100">
+            Filled by CaterBot. Please check before publishing.
+          </p>
         )}
-
-        <details className="mt-3 text-xs text-white/55">
-          <summary className="cursor-pointer font-bold text-white/70">Safety note</summary>
-          <p className="mt-1 leading-relaxed">{SAFETY_DISCLAIMER}</p>
-        </details>
       </div>
 
       {/* FORM */}
-      <form onSubmit={handlePublish} className="premium-card rounded-3xl p-4">
-        <section className="mb-5">
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-[#FF6B00]">
-            Step 2 · Item details
-          </p>
-          <p className="mt-1 text-sm text-white/60">Tell buyers what the item is.</p>
+      <form onSubmit={handlePublish} className="space-y-4">
+        <section className="rounded-3xl bg-white p-5 text-[#002E5D] shadow-sm">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-[#FF6B00]">Check item details</p>
+              <h2 className="mt-1 text-xl font-black">Item details</h2>
+            </div>
+            {quickListApplied && (
+              <span className="rounded-full bg-[#FF6B00]/10 px-3 py-1 text-xs font-black text-[#FF6B00]">
+                Filled by CaterBot
+              </span>
+            )}
+          </div>
 
-          <label className="mt-4 mb-1 block text-sm font-bold text-white/80">
-            Listing title
-          </label>
-          <input
-            name="title"
-            placeholder="e.g. Lincat electric griddle"
-            className="premium-input w-full rounded-2xl p-3"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-          />
+          <div className="mt-4 space-y-3">
+            <label className="block">
+              <span className="mb-1 block text-sm font-black">Listing title</span>
+              <input
+                name="title"
+                placeholder="e.g. Lincat electric griddle"
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+              />
+            </label>
 
-          <label className="mt-3 mb-1 block text-sm font-bold text-white/80">
-            Category
-          </label>
-          <select
-            name="category"
-            className="premium-input w-full rounded-2xl p-3"
-            value={category}
-            onChange={(e) => {
-              const nextCategory = e.target.value
-              setCategory(nextCategory)
-              setSubcategory(subcategoriesForCategory(nextCategory)[0] || "")
-            }}
-          >
-            {CATEGORY_OPTIONS.filter((item) => item !== "All Categories").map((item) => (
-              <option key={item} className="text-black">
-                {item}
-              </option>
-            ))}
-          </select>
-
-          {subcategoriesForCategory(category).length > 0 && (
-            <>
-              <label className="mt-3 mb-1 block text-sm font-bold text-white/80">
-                Type
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block">
+                <span className="mb-1 block text-sm font-black">Category</span>
+                <select
+                  name="category"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                  value={category}
+                  onChange={(e) => {
+                    const nextCategory = e.target.value
+                    setCategory(nextCategory)
+                    setSubcategory(subcategoriesForCategory(nextCategory)[0] || "")
+                  }}
+                >
+                  {CATEGORY_OPTIONS.filter((item) => item !== "All Categories").map((item) => (
+                    <option key={item}>{item}</option>
+                  ))}
+                </select>
               </label>
-              <select
-                name="subcategory"
-                className="premium-input w-full rounded-2xl p-3"
-                value={subcategory}
-                onChange={(e) => setSubcategory(e.target.value)}
-              >
-                {subcategoriesForCategory(category).map((item) => (
-                  <option key={item} className="text-black">
-                    {item}
-                  </option>
-                ))}
-              </select>
-            </>
-          )}
 
-          <label className="mt-3 mb-1 block text-sm font-bold text-white/80">
-            Condition
-          </label>
-          <select
-            name="condition"
-            className="premium-input w-full rounded-2xl p-3"
-            value={condition}
-            onChange={(e) => setCondition(e.target.value)}
-          >
-            {CONDITION_OPTIONS.map((option) => (
-              <option key={option} className="text-black">
-                {option}
-              </option>
-            ))}
-          </select>
-        </section>
-
-        <section className="mb-5">
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-[#FF6B00]">
-            Step 3 · Price & location
-          </p>
-          <p className="mt-1 text-sm text-white/60">Add the price and collection area.</p>
-
-          <label className="mt-4 mb-1 block text-sm font-bold text-white/80">
-            Price
-          </label>
-          <input
-            name="price"
-            placeholder="e.g. 250"
-            className="premium-input w-full rounded-2xl p-3"
-            value={price}
-            onChange={(e) => setPrice(e.target.value)}
-          />
-
-          <label className="mt-3 mb-1 block text-sm font-bold text-white/80">
-            Collection area
-          </label>
-          <input
-            name="location"
-            placeholder="e.g. Birmingham"
-            className="premium-input w-full rounded-2xl p-3"
-            value={location}
-            onChange={(e) => setLocation(e.target.value)}
-          />
-
-          <label className="mt-3 mb-1 block text-sm font-bold text-white/80">
-            Town or city
-          </label>
-          <input
-            name="city"
-            placeholder="e.g. Birmingham"
-            className="premium-input w-full rounded-2xl p-3"
-            value={city}
-            onChange={(e) => setCity(e.target.value)}
-          />
-        </section>
-
-        <div className="mb-4 rounded-3xl border border-[#FF6B00]/20 bg-[#002E5D]/35 p-4">
-          <p className="mb-1 text-sm font-black text-[#FF6B00]">Item checks</p>
-          <p className="mb-4 text-xs leading-relaxed text-white/60">
-            Add power, size and paperwork.
-          </p>
-
-          <div className="mt-3">
-            <label className="mb-1 block text-xs font-bold text-white/80">
-              Power / Fuel Type
-            </label>
-
-            <select
-              name="power_type"
-              value={powerType}
-              onChange={(event) => setPowerType(event.target.value)}
-              className="w-full rounded-xl border border-gray-300 bg-[#243B63] px-4 py-3 text-sm font-semibold text-white focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
-            >
-              {POWER_TYPE_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <label className="mt-3 mb-1 block text-xs font-bold text-white/80">
-            Item dimensions
-          </label>
-          <input
-            name="dimensions"
-            placeholder="e.g. 900w x 700d x 900h mm"
-            className="premium-input w-full rounded-2xl p-3"
-            value={dimensions}
-            onChange={(event) => setDimensions(event.target.value)}
-          />
-
-          <label className="mt-3 mb-1 block text-xs font-bold text-white/80">
-            Service history
-          </label>
-          <textarea
-            name="service_history"
-            placeholder="Engineer checks, PAT or gas-safe notes"
-            className="premium-input min-h-24 w-full rounded-2xl p-3"
-          />
-
-          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div>
-              <label className="mb-1 block text-xs font-bold text-white/80">Warranty</label>
-              <select name="warranty_type" defaultValue="No warranty" className="premium-input w-full rounded-2xl p-3">
-                {WARRANTY_TYPE_OPTIONS.map((option) => (
-                  <option key={option} className="text-black">
-                    {option}
-                  </option>
-                ))}
-              </select>
+              {subcategoriesForCategory(category).length > 0 && (
+                <label className="block">
+                  <span className="mb-1 block text-sm font-black">Type</span>
+                  <select
+                    name="subcategory"
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                    value={subcategory}
+                    onChange={(e) => setSubcategory(e.target.value)}
+                  >
+                    {subcategoriesForCategory(category).map((item) => (
+                      <option key={item}>{item}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
             </div>
 
-            <div>
-              <label className="mb-1 block text-xs font-bold text-white/80">Tested status</label>
-              <select name="tested_status" defaultValue="Untested" className="premium-input w-full rounded-2xl p-3">
-                {TESTED_STATUS_OPTIONS.map((option) => (
-                  <option key={option} className="text-black">
-                    {option}
-                  </option>
-                ))}
-              </select>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block">
+                <span className="mb-1 block text-sm font-black">Condition</span>
+                <select
+                  name="condition"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                  value={condition}
+                  onChange={(e) => setCondition(e.target.value)}
+                >
+                  {CONDITION_OPTIONS.map((option) => (
+                    <option key={option}>{option}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="block">
+                <span className="mb-1 block text-sm font-black">Price</span>
+                <input
+                  name="price"
+                  placeholder="e.g. 250"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
+                />
+              </label>
             </div>
-          </div>
 
-          <label className="mt-3 mb-1 block text-xs font-bold text-white/80">
-            Delivery badge
-          </label>
-          <select
-            name="delivery_option"
-            value={deliveryOption}
-            onChange={(event) => setDeliveryOption(event.target.value)}
-            className="premium-input w-full rounded-2xl p-3"
-          >
-            {DELIVERY_OPTION_OPTIONS.map((option) => (
-              <option key={option} className="text-black">
-                {option}
-              </option>
-            ))}
-          </select>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block">
+                <span className="mb-1 block text-sm font-black">Brand</span>
+                <input
+                  name="spec_brand"
+                  value={shippingSpecBrand}
+                  onChange={(event) => setShippingSpecBrand(event.target.value)}
+                  placeholder="Optional"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                />
+              </label>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-white/80">
+              <label className="block">
+                <span className="mb-1 block text-sm font-black">Model</span>
+                <input
+                  name="spec_model"
+                  value={shippingSpecModel}
+                  onChange={(event) => setShippingSpecModel(event.target.value)}
+                  placeholder="Optional"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                />
+              </label>
+            </div>
+
+            <label className="block">
+              <span className="mb-1 block text-sm font-black">Town or city</span>
               <input
-                name="manuals_available"
-                type="checkbox"
-                checked={manualsAvailable}
-                onChange={(event) => setManualsAvailable(event.target.checked)}
-                className="h-4 w-4 accent-[#FF6B00]"
-              />
-              Manuals available
-            </label>
-            <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-white/80">
-              <input name="vat_included" type="checkbox" className="h-4 w-4 accent-[#FF6B00]" />
-              VAT included
-            </label>
-          </div>
-
-          <details className="mt-4 text-xs text-white/55">
-            <summary className="cursor-pointer font-bold text-white/70">Safety note</summary>
-            <p className="mt-2 leading-relaxed">{BUYER_WARNING}</p>
-            <p className="mt-2 leading-relaxed text-white/45">{SAFETY_DISCLAIMER}</p>
-          </details>
-        </div>
-
-        <div className="mb-4 rounded-3xl border border-[#FF6B00]/20 bg-white p-5 text-[#002E5D] shadow-sm">
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-[#FF6B00]">
-            Step 4 · Delivery
-          </p>
-          <h3 className="text-xl font-black">
-            Enter pallet details
-          </h3>
-
-          <p className="mt-1 text-sm text-slate-600">
-            Choose collection or delivery.
-          </p>
-
-          <p className="mt-3 rounded-2xl bg-[#FF6B00]/10 px-4 py-3 text-sm font-bold leading-relaxed text-[#8A3A00]">
-            Use checked kg and cm for delivery quotes.
-          </p>
-
-          <label className="mt-4 block text-xs font-bold uppercase tracking-wide text-[#002E5D]/70">
-            Delivery option
-          </label>
-          <select
-            name="delivery_method"
-            value={deliveryMethod}
-            onChange={(event) => {
-              const nextMethod = event.target.value
-              setDeliveryMethod(nextMethod)
-              setDeliveryOption(deliveryOptionForDeliveryMethod(nextMethod))
-            }}
-            className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-bold text-[#002E5D] focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
-          >
-            <option value="collection_only">Collection only</option>
-            <option value="caterbids_delivery">Delivery available through CaterBids</option>
-            <option value="buyer_courier">Buyer can arrange courier</option>
-          </select>
-
-          {deliveryMethod === "caterbids_delivery" && (
-            <p className="mt-3 rounded-2xl border border-[#FF6B00]/20 bg-[#FF6B00]/10 px-4 py-3 text-xs font-bold leading-relaxed text-[#8A3A00]">
-              Check any CaterBot estimates.
-            </p>
-          )}
-
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <label className="flex items-center gap-2 rounded-2xl bg-[#002E5D]/5 px-3 py-2 text-sm font-bold">
-              <input
-                name="delivery_available"
-                type="checkbox"
-                checked={deliveryAvailable}
-                onChange={(event) => {
-                  const checked = event.target.checked
-                  const nextMethod = checked ? "caterbids_delivery" : "collection_only"
-                  setDeliveryMethod(nextMethod)
-                  setDeliveryOption(deliveryOptionForDeliveryMethod(nextMethod))
+                name="city"
+                placeholder="e.g. Birmingham"
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                value={city}
+                onChange={(e) => {
+                  setCity(e.target.value)
+                  setLocation(e.target.value)
                 }}
-                className="h-4 w-4 accent-[#FF6B00]"
               />
-              Delivery available
             </label>
 
-            <label className="flex items-center gap-2 rounded-2xl bg-[#002E5D]/5 px-3 py-2 text-sm font-bold">
-              <input
-                name="pallet_ready"
-                type="checkbox"
-                checked={palletReady}
-                onChange={(event) => setPalletReady(event.target.checked)}
-                className="h-4 w-4 accent-[#FF6B00]"
+            <label className="block">
+              <span className="mb-1 block text-sm font-black">Short description</span>
+              <textarea
+                name="description"
+                placeholder="Briefly describe condition, use and what is included."
+                className="min-h-28 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
               />
-              Pallet ready
-            </label>
-
-            <label className="flex items-center gap-2 rounded-2xl bg-[#002E5D]/5 px-3 py-2 text-sm font-bold">
-              <input
-                name="tail_lift_required"
-                type="checkbox"
-                checked={tailLiftRequired}
-                onChange={(event) => setTailLiftRequired(event.target.checked)}
-                className="h-4 w-4 accent-[#FF6B00]"
-              />
-              Tail-lift required
-            </label>
-
-            <label className="flex items-center gap-2 rounded-2xl bg-[#002E5D]/5 px-3 py-2 text-sm font-bold">
-              <input
-                name="forklift_available"
-                type="checkbox"
-                checked={forkliftAvailable}
-                onChange={(event) => setForkliftAvailable(event.target.checked)}
-                className="h-4 w-4 accent-[#FF6B00]"
-              />
-              Forklift available
-            </label>
-
-            <label className="flex items-center gap-2 rounded-2xl bg-[#002E5D]/5 px-3 py-2 text-sm font-bold">
-              <input
-                name="ground_floor_collection"
-                type="checkbox"
-                checked={groundFloorCollection}
-                onChange={(event) => setGroundFloorCollection(event.target.checked)}
-                className="h-4 w-4 accent-[#FF6B00]"
-              />
-              Ground-floor collection
-            </label>
-
-            <label className="flex items-center gap-2 rounded-2xl bg-[#002E5D]/5 px-3 py-2 text-sm font-bold">
-              <input
-                name="commercial_premises"
-                type="checkbox"
-                checked={commercialPremises}
-                onChange={(event) => setCommercialPremises(event.target.checked)}
-                className="h-4 w-4 accent-[#FF6B00]"
-              />
-              Commercial premises
             </label>
           </div>
+
+          {showCaterBotProductMatch && (
+            <div className="mt-4 rounded-2xl border border-[#FF6B00]/20 bg-[#FF6B00]/10 p-3">
+              <p className="text-sm font-black">
+                {manualSourceHasVerifiedUrl ? "CaterBot found a product source." : "Manual/spec source not verified yet."}
+              </p>
+              {!manualSourceHasVerifiedUrl && (
+                <p className="mt-1 text-sm font-semibold text-[#002E5D]/70">
+                  CaterBot could not verify an exact manual/spec source. You can still list using your own checks.
+                </p>
+              )}
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                {manualSourceHasVerifiedUrl ? (
+                  <>
+                    <a
+                      href={manualSourceUrl || specSourceUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex flex-1 items-center justify-center rounded-2xl bg-[#FF6B00] px-4 py-3 text-sm font-black text-white"
+                    >
+                      Open source
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => setSpecsVerifiedBySeller(true)}
+                      className="inline-flex flex-1 items-center justify-center rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-black text-green-800"
+                    >
+                      {specsVerifiedBySeller ? "Source confirmed" : "Confirm source"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={rejectCaterBotSource}
+                      className="inline-flex flex-1 items-center justify-center rounded-2xl border border-red-200 bg-white px-4 py-3 text-sm font-black text-red-700"
+                    >
+                      Reject
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => validateManualSourceUrl()}
+                      disabled={manualLinkChecking}
+                      className="inline-flex flex-1 items-center justify-center rounded-2xl bg-[#FF6B00] px-4 py-3 text-sm font-black text-white disabled:cursor-wait disabled:opacity-60"
+                    >
+                      {manualLinkChecking ? "Searching sources..." : "Try again"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setManualLinkPanelOpen((current) => !current)
+                        setManualLinkError("")
+                      }}
+                      className="inline-flex flex-1 items-center justify-center rounded-2xl border border-[#002E5D]/15 bg-white px-4 py-3 text-sm font-black text-[#002E5D]"
+                    >
+                      Add link manually
+                    </button>
+                  </>
+                )}
+              </div>
+
+              {!manualSourceHasVerifiedUrl && trustedSearchLinks.length > 0 && (
+                <div className="mt-3 rounded-2xl border border-[#002E5D]/10 bg-white p-3">
+                  <p className="text-sm font-black">Search trusted sources</p>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                    {trustedSearchLinks.map((link) => (
+                      <a
+                        key={link.label}
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center justify-center rounded-xl border border-[#002E5D]/15 bg-slate-50 px-3 py-2 text-xs font-black text-[#002E5D]"
+                      >
+                        {link.label}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {manualLinkPanelOpen && (
+                <div className="mt-3 rounded-2xl border border-[#002E5D]/10 bg-white p-3">
+                  <label className="mb-1 block text-sm font-black">Manual/spec URL</label>
+                  <input
+                    value={manualLinkInput}
+                    onChange={(event) => setManualLinkInput(event.target.value)}
+                    placeholder="https://manufacturer.co.uk/model-spec-sheet"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => validateManualSourceUrl(manualLinkInput)}
+                    disabled={manualLinkChecking || !manualLinkInput.trim()}
+                    className="mt-2 w-full rounded-xl bg-[#FF6B00] px-4 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {manualLinkChecking ? "Validating..." : "Validate source link"}
+                  </button>
+                </div>
+              )}
+
+              {manualLinkError && (
+                <p className="mt-3 rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-bold text-orange-800">
+                  {manualLinkError}
+                </p>
+              )}
+            </div>
+          )}
+        </section>
+
+        <section className="rounded-3xl bg-white p-5 text-[#002E5D] shadow-sm">
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-[#FF6B00]">Power & safety</p>
+          <h2 className="mt-1 text-xl font-black">Power and safety</h2>
 
           <div className="mt-4">
-            <p className="mb-3 text-xs font-semibold text-slate-500">
-              Enter checked cm and kg.
-            </p>
-
-            <label className="mb-4 flex items-start gap-3 rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-bold text-[#8A3A00]">
-              <input
-                name="delivery_size_unknown"
-                type="checkbox"
-                checked={deliverySizeUnknown}
-                onChange={(event) => {
-                  const checked = event.target.checked
-                  setDeliverySizeUnknown(checked)
-                  if (checked) {
-                    setWeightKg("")
-                    setLengthCm("")
-                    setWidthCm("")
-                    setHeightCm("")
-                  }
-                }}
-                className="mt-0.5 h-4 w-4 accent-[#FF6B00]"
-              />
-              <span>
-                Weight and size unknown
-                <span className="mt-1 block text-xs font-semibold text-[#8A3A00]/75">
-                  Delivery quotes need confirmed kg and cm.
-                </span>
-              </span>
-            </label>
-
-            {deliveryMethod === "caterbids_delivery" && (
-              <div className="mb-4 grid gap-3 sm:grid-cols-2">
-                <div className="sm:col-span-2">
-                  <label className="mb-1 block text-xs font-black uppercase tracking-wide text-[#002E5D]">
-                    Collection full address
-                  </label>
-                  <textarea
-                    name="collection_full_address"
-                    value={collectionFullAddress}
-                    onChange={(event) => setCollectionFullAddress(event.target.value)}
-                    placeholder="Unit/building, street, loading bay or yard entrance"
-                    className="min-h-24 w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-500 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
-                  />
-                  <p className="mt-1 text-xs font-semibold text-slate-500">
-                    Used for courier collection after sale. Add the exact pickup address.
-                  </p>
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-xs font-black uppercase tracking-wide text-[#002E5D]">
-                    Collection city
-                  </label>
+            <p className="mb-2 text-sm font-black">Power/fuel type</p>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {SHIPPING_POWER_TYPES.map((option) => (
+                <label
+                  key={option}
+                  className={`flex items-center justify-center rounded-2xl border px-3 py-3 text-sm font-black ${
+                    shippingSpecPowerType === option
+                      ? "border-[#FF6B00] bg-[#FF6B00] text-white"
+                      : "border-slate-200 bg-white text-[#002E5D]"
+                  }`}
+                >
                   <input
-                    name="collection_city"
-                    value={collectionCity}
-                    onChange={(event) => setCollectionCity(event.target.value)}
-                    placeholder="e.g. Birmingham"
-                    className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-500 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                    type="radio"
+                    name="spec_power_type"
+                    value={option}
+                    checked={shippingSpecPowerType === option}
+                    onChange={() => setShippingSpecPowerType(option)}
+                    className="sr-only"
                   />
-                  <p className="mt-1 text-xs font-semibold text-slate-500">
-                    Town or city where the item will be collected.
-                  </p>
-                </div>
+                  {option}
+                </label>
+              ))}
+            </div>
+          </div>
 
-                <div>
-                  <label className="mb-1 block text-xs font-black uppercase tracking-wide text-[#002E5D]">
-                    Collection contact name
-                  </label>
+          {showGasFields && (
+            <label className="mt-4 block">
+              <span className="mb-1 block text-sm font-black">Gas type</span>
+              <select
+                name="spec_gas_type"
+                value={shippingSpecGasType}
+                onChange={(event) => setShippingSpecGasType(event.target.value)}
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+              >
+                <option value="">Not sure</option>
+                <option value="Natural Gas">Natural Gas</option>
+                <option value="LPG">LPG</option>
+                <option value="Propane">LPG / Propane</option>
+              </select>
+            </label>
+          )}
+
+          {showElectricFields && (
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <label className="block">
+                <span className="mb-1 block text-sm font-black">Voltage</span>
+                <input
+                  name="spec_voltage"
+                  value={shippingSpecVoltage}
+                  onChange={(event) => setShippingSpecVoltage(event.target.value)}
+                  placeholder="Seller to confirm"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-sm font-black">Phase</span>
+                <select
+                  name="spec_phase"
+                  value={shippingSpecPhase}
+                  onChange={(event) => setShippingSpecPhase(event.target.value)}
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                >
+                  <option value="">Not sure</option>
+                  <option value="1">1 phase</option>
+                  <option value="3">3 phase</option>
+                </select>
+              </label>
+            </div>
+          )}
+
+          <label className="mt-4 block">
+            <span className="mb-1 block text-sm font-black">Safety note / install note</span>
+            <textarea
+              name="service_history"
+              value={shippingSpecNotes}
+              onChange={(event) => setShippingSpecNotes(event.target.value)}
+              placeholder="Optional"
+              className="min-h-20 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+            />
+          </label>
+        </section>
+
+        <section className="rounded-3xl bg-white p-5 text-[#002E5D] shadow-sm">
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-[#FF6B00]">Delivery setup</p>
+          <h2 className="mt-1 text-xl font-black">Delivery setup</h2>
+
+          <label className="mt-4 block">
+            <span className="mb-1 block text-sm font-black">Delivery option</span>
+            <select
+              name="delivery_method"
+              value={deliveryMethod}
+              onChange={(event) => {
+                const nextMethod = event.target.value
+                setDeliveryMethod(nextMethod)
+                setDeliveryOption(deliveryOptionForDeliveryMethod(nextMethod))
+              }}
+              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+            >
+              <option value="collection_only">Collection only</option>
+              <option value="caterbids_delivery">Delivery available through CaterBids</option>
+              <option value="buyer_courier">Seller arranged delivery</option>
+            </select>
+          </label>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <label className="block">
+              <span className="mb-1 block text-sm font-black">Collection postcode</span>
+              <input
+                name="collection_postcode"
+                value={collectionPostcode}
+                onChange={(event) => setCollectionPostcode(event.target.value.toUpperCase())}
+                placeholder="e.g. B12 0AB"
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+              />
+            </label>
+          </div>
+
+          {deliveryMethod === "caterbids_delivery" && (
+            <div className="mt-4 space-y-3">
+              {!deliveryMeasurementsReady && (
+                <p className="rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-bold text-[#8A3A00]">
+                  Add kg and cm to enable delivery quotes.
+                </p>
+              )}
+              {deliveryMeasurementsReady && quickListApplied && (
+                <p className="rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-bold text-green-800">
+                  Please check these measurements.
+                </p>
+              )}
+
+              <label className="block">
+                <span className="mb-1 block text-sm font-black">Collection full address</span>
+                <textarea
+                  name="collection_full_address"
+                  value={collectionFullAddress}
+                  onChange={(event) => setCollectionFullAddress(event.target.value)}
+                  placeholder="Exact pickup address"
+                  className="min-h-24 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                />
+              </label>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block">
+                  <span className="mb-1 block text-sm font-black">Collection contact name</span>
                   <input
                     name="seller_contact_name"
                     value={sellerContactName}
                     onChange={(event) => setSellerContactName(event.target.value)}
-                    placeholder="e.g. Sam at reception"
-                    className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-500 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                    placeholder="Seller to confirm"
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
                   />
-                  <p className="mt-1 text-xs font-semibold text-slate-500">
-                    Person the driver should ask for.
-                  </p>
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-xs font-black uppercase tracking-wide text-[#002E5D]">
-                    Collection phone number
-                  </label>
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-sm font-black">Collection phone number</span>
                   <input
                     name="seller_phone"
                     value={sellerPhone}
                     onChange={(event) => setSellerPhone(event.target.value)}
-                    placeholder="e.g. 07123 456789"
-                    className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-500 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                    placeholder="Seller to confirm"
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
                   />
-                  <p className="mt-1 text-xs font-semibold text-slate-500">
-                    Required for delivery booking and collection issues.
-                  </p>
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-xs font-black uppercase tracking-wide text-[#002E5D]">
-                    Preferred collection date
-                  </label>
-                  <input
-                    name="preferred_collection_date"
-                    value={preferredCollectionDate}
-                    onChange={(event) => setPreferredCollectionDate(event.target.value)}
-                    type="date"
-                    className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-500 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
-                  />
-                  <p className="mt-1 text-xs font-semibold text-slate-500">
-                    Pick the earliest date the item can be collected.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-xs font-bold text-[#002E5D]">
-                  Collection postcode
                 </label>
-                <input
-                  name="collection_postcode"
-                  value={collectionPostcode}
-                  onChange={(event) => setCollectionPostcode(event.target.value.toUpperCase())}
-                  placeholder="e.g. B12 0AB"
-                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-gray-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
-                />
               </div>
 
-              <div>
-                <label className="mb-1 block text-xs font-bold text-[#002E5D]">
-                  Weight kg {deliverySizeUnknown ? "unknown" : "required"}
-                </label>
+              <label className="block">
+                <span className="mb-1 block text-sm font-black">Preferred collection date</span>
                 <input
-                  name="weight_kg"
-                  value={weightKg}
-                  onChange={(event) => setWeightKg(event.target.value)}
-                  placeholder="e.g. 120"
-                  type="number"
-                  min="0"
-                  required={!deliverySizeUnknown}
-                  disabled={deliverySizeUnknown}
-                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-gray-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                  name="preferred_collection_date"
+                  value={preferredCollectionDate}
+                  onChange={(event) => setPreferredCollectionDate(event.target.value)}
+                  type="date"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
                 />
-              </div>
+              </label>
 
-              <div>
-                <label className="mb-1 block text-xs font-bold text-[#002E5D]">
-                  Length cm {deliverySizeUnknown ? "unknown" : "required"}
-                </label>
-                <input
-                  name="length_cm"
-                  value={lengthCm}
-                  onChange={(event) => setLengthCm(event.target.value)}
-                  placeholder="e.g. 120"
-                  type="number"
-                  min="0"
-                  required={!deliverySizeUnknown}
-                  disabled={deliverySizeUnknown}
-                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-gray-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-xs font-bold text-[#002E5D]">
-                  Width cm {deliverySizeUnknown ? "unknown" : "required"}
-                </label>
-                <input
-                  name="width_cm"
-                  value={widthCm}
-                  onChange={(event) => setWidthCm(event.target.value)}
-                  placeholder="e.g. 100"
-                  type="number"
-                  min="0"
-                  required={!deliverySizeUnknown}
-                  disabled={deliverySizeUnknown}
-                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-gray-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-xs font-bold text-[#002E5D]">
-                  Height cm {deliverySizeUnknown ? "unknown" : "required"}
-                </label>
-                <input
-                  name="height_cm"
-                  value={heightCm}
-                  onChange={(event) => setHeightCm(event.target.value)}
-                  placeholder="e.g. 160"
-                  type="number"
-                  min="0"
-                  required={!deliverySizeUnknown}
-                  disabled={deliverySizeUnknown}
-                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-gray-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
-                />
-              </div>
-
-              {deliveryMethod === "caterbids_delivery" && (
-                <>
-                  <div>
-                    <label className="mb-1 block text-xs font-bold text-[#002E5D]">
-                      Number of pallets
-                    </label>
+              <div className="grid gap-3 sm:grid-cols-4">
+                {[
+                  { label: "Weight kg", name: "weight_kg", value: weightKg, setValue: setWeightKg },
+                  { label: "Length cm", name: "length_cm", value: lengthCm, setValue: setLengthCm },
+                  { label: "Width cm", name: "width_cm", value: widthCm, setValue: setWidthCm },
+                  { label: "Height cm", name: "height_cm", value: heightCm, setValue: setHeightCm },
+                ].map((field) => (
+                  <label key={field.name} className="block">
+                    <span className="mb-1 block text-sm font-black">{field.label}</span>
                     <input
-                      name="pallet_count"
-                      value={palletCount}
-                      onChange={(event) => setPalletCount(event.target.value)}
-                      placeholder="1"
-                      type="number"
-                      min="1"
-                      required
-                      className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-gray-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-bold text-[#002E5D]">
-                      Insurance value
-                    </label>
-                    <input
-                      name="insurance_value"
-                      value={insuranceValue}
-                      onChange={(event) => setInsuranceValue(event.target.value)}
-                      placeholder="e.g. 550"
+                      name={field.name}
+                      value={field.value}
+                      onChange={(event) => field.setValue(event.target.value)}
                       type="number"
                       min="0"
-                      className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-gray-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                      placeholder="Seller to confirm"
+                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
                     />
-                  </div>
-                </>
-              )}
-            </div>
-
-            {deliveryMethod === "caterbids_delivery" && (
-              <div className="mt-4 space-y-3">
-                <div>
-                  <label className="mb-1 block text-xs font-black uppercase tracking-wide text-[#002E5D]">
-                    Access restrictions
                   </label>
-                  <textarea
-                    name="access_restrictions"
-                    value={accessRestrictions}
-                    onChange={(event) => setAccessRestrictions(event.target.value)}
-                    placeholder="Loading bay notes, stairs, height limits, opening times"
-                    className="min-h-20 w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-500 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
-                  />
-                  <p className="mt-1 text-xs font-semibold text-slate-500">
-                    Tell the courier anything that affects pickup access.
-                  </p>
-                </div>
+                ))}
+              </div>
 
-                <div>
-                  <label className="mb-1 block text-xs font-black uppercase tracking-wide text-[#002E5D]">
-                    Delivery notes
+              <div className="grid gap-2 sm:grid-cols-2">
+                {[
+                  { name: "tail_lift_required", checked: tailLiftRequired, setChecked: setTailLiftRequired, label: "Tail-lift required" },
+                  { name: "forklift_available", checked: forkliftAvailable, setChecked: setForkliftAvailable, label: "Forklift available" },
+                  { name: "ground_floor_collection", checked: groundFloorCollection, setChecked: setGroundFloorCollection, label: "Ground-floor collection" },
+                  { name: "commercial_premises", checked: commercialPremises, setChecked: setCommercialPremises, label: "Commercial premises" },
+                  { name: "pallet_ready", checked: palletReady, setChecked: setPalletReady, label: "Pallet ready" },
+                ].map((field) => (
+                  <label key={field.name} className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold">
+                    <input
+                      name={field.name}
+                      type="checkbox"
+                      checked={field.checked}
+                      onChange={(event) => field.setChecked(event.target.checked)}
+                      className="h-4 w-4 accent-[#FF6B00]"
+                    />
+                    {field.label}
                   </label>
-                  <textarea
-                    name="delivery_notes"
-                    value={deliveryNotes}
-                    onChange={(event) => setDeliveryNotes(event.target.value)}
-                    placeholder="Pallet condition, loose parts, collection window or handling notes"
-                    className="min-h-20 w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-500 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
-                  />
-                  <p className="mt-1 text-xs font-semibold text-slate-500">
-                    Add anything CaterBids or the courier should know before booking.
-                  </p>
-                </div>
-
-                <div className="rounded-3xl border border-[#FF6B00]/25 bg-[#002E5D]/5 p-4">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <h3 className="text-lg font-black text-[#002E5D]">Interparcel pricing check</h3>
-                      <p className="mt-1 text-xs font-semibold leading-relaxed text-slate-600">
-                        Preview pallet pricing.
-                      </p>
-                    </div>
-                    <span className="rounded-full bg-[#FF6B00]/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[#FF6B00]">
-                      Test ready
-                    </span>
-                  </div>
-
-                  <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-end">
-                    <div className="flex-1">
-                      <label className="mb-1 block text-xs font-black uppercase tracking-wide text-[#002E5D]">
-                        Sample buyer postcode
-                      </label>
-                      <input
-                        value={interparcelPreviewPostcode}
-                        onChange={(event) => setInterparcelPreviewPostcode(event.target.value.toUpperCase())}
-                        placeholder="e.g. M1 1AE"
-                        className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-500 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={checkInterparcelPreview}
-                      disabled={interparcelPreviewLoading}
-                      className="rounded-xl bg-[#FF6B00] px-4 py-3 text-sm font-black text-white disabled:cursor-wait disabled:opacity-60"
-                    >
-                      {interparcelPreviewLoading ? "Checking..." : "Check price"}
-                    </button>
-                  </div>
-
-                  {interparcelPreviewError && (
-                    <p className="mt-3 rounded-2xl border border-orange-200 bg-orange-50 px-3 py-2 text-xs font-bold text-[#8A3A00]">
-                      {interparcelPreviewError}
-                    </p>
-                  )}
-
-                  {interparcelPreviewQuotes.length > 0 && (
-                    <div className="mt-4 space-y-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-xs font-black uppercase tracking-[0.12em] text-[#FF6B00]">
-                          {interparcelPreviewProvider}
-                        </p>
-                        <p className="text-xs font-bold text-slate-500">{DELIVERY_PREVIEW_MODE_LABEL}</p>
-                      </div>
-                      {interparcelPreviewQuotes.map((quote) => {
-                        const isSelected = selectedInterparcelPreviewQuote?.id === quote.id
-
-                        return (
-                        <button
-                          key={quote.id}
-                          type="button"
-                          onClick={() => setSelectedInterparcelPreviewQuote(quote)}
-                          className={`w-full rounded-2xl border p-3 text-left text-sm transition-all ${
-                            isSelected
-                              ? "border-[#FF6B00] bg-[#002E5D] text-white shadow-lg shadow-[#FF6B00]/15"
-                              : "border-slate-200 bg-white text-[#002E5D] hover:border-[#FF6B00]/60"
-                          }`}
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <p className={isSelected ? "font-black text-white" : "font-black text-[#002E5D]"}>
-                                {quote.name}
-                              </p>
-                              <p className={`mt-1 text-xs font-semibold ${isSelected ? "text-white/70" : "text-slate-500"}`}>
-                                {quote.eta}
-                              </p>
-                              {quote.description && (
-                                <p className={`mt-1 text-xs ${isSelected ? "text-white/65" : "text-slate-500"}`}>
-                                  {quote.description}
-                                </p>
-                              )}
-                              {isSelected && (
-                                <span className="mt-2 inline-flex rounded-full bg-[#FF6B00] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-white">
-                                  Selected
-                                </span>
-                              )}
-                            </div>
-                            <p className="shrink-0 text-xl font-black text-[#FF6B00]">£{quote.price}</p>
-                          </div>
-                        </button>
-                      )})}
-
-                      {selectedInterparcelPreviewQuote && (
-                        <div className="rounded-2xl border border-[#FF6B00]/30 bg-orange-50 p-3">
-                          <p className="text-sm font-black text-[#002E5D]">
-                            Selected preview: {selectedInterparcelPreviewQuote.name} - £{selectedInterparcelPreviewQuote.price}
-                          </p>
-                          <p className="mt-1 text-xs font-semibold text-slate-600">
-                            ETA: {selectedInterparcelPreviewQuote.eta}.
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  <p className="mt-3 text-xs font-semibold text-slate-500">Buyers choose delivery at checkout.</p>
-                </div>
-
-                <label className="flex items-start gap-3 rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-bold text-green-800">
-                  <input
-                    name="delivery_details_confirmed"
-                    type="checkbox"
-                    checked={deliveryDetailsConfirmed}
-                    onChange={(event) => setDeliveryDetailsConfirmed(event.target.checked)}
-                    className="mt-0.5 h-4 w-4 accent-[#FF6B00]"
-                  />
-                  I confirm these delivery details are accurate.
-                </label>
+                ))}
               </div>
-            )}
-          </div>
-        </div>
 
-        {(manualSourceValidated || manualSourceMatchNotes || sourceRejectedBySeller) && (
-          <div className="mb-4 rounded-3xl border border-[#FF6B00]/25 bg-[#002E5D]/5 p-4 text-[#002E5D]">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="text-xs font-black uppercase tracking-[0.16em] text-[#FF6B00]">
-                  CaterBot product match
-                </p>
-                <h3 className="mt-1 text-lg font-black">Check manual match</h3>
-              </div>
-              <span
-                className={`rounded-full px-3 py-1 text-xs font-black ${
-                  manualSourceValidated
-                    ? "bg-green-100 text-green-800"
-                    : "bg-orange-100 text-orange-800"
-                }`}
-              >
-                {manualSourceValidated ? "Source checked" : "Needs seller check"}
-              </span>
+              <label className="block">
+                <span className="mb-1 block text-sm font-black">Delivery notes</span>
+                <textarea
+                  name="delivery_notes"
+                  value={deliveryNotes}
+                  onChange={(event) => setDeliveryNotes(event.target.value)}
+                  placeholder="Optional"
+                  className="min-h-20 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                />
+              </label>
             </div>
+          )}
 
-            <p className="mt-2 text-sm leading-relaxed text-slate-600">
-              {manualSourceValidated
-                ? specConfidence === "high"
-                  ? "Strong match found."
-                  : "Likely match found."
-                : "No reliable manual match found."}
-            </p>
-
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <div className="rounded-2xl bg-white p-3">
-                <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Brand found</p>
-                <p className="mt-1 font-black">{quickListResult?.brand || "Needs seller check"}</p>
-              </div>
-              <div className="rounded-2xl bg-white p-3">
-                <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Model found</p>
-                <p className="mt-1 font-black">{quickListResult?.model || "Needs seller check"}</p>
-              </div>
-              <div className="rounded-2xl bg-white p-3">
-                <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Source</p>
-                <p className="mt-1 font-black">{manualSourceName || "No verified source"}</p>
-              </div>
-              <div className="rounded-2xl bg-white p-3">
-                <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Source type</p>
-                <p className="mt-1 font-black">{manualSourceType || "Not verified"}</p>
-              </div>
-              <div className="rounded-2xl bg-white p-3">
-                <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">CaterBot spec confidence</p>
-                <p className="mt-1 font-black capitalize">{specConfidence || "Low"}</p>
-              </div>
-              <div className="rounded-2xl bg-white p-3">
-                <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Last checked</p>
-                <p className="mt-1 font-black">
-                  {manualSourceLastCheckedAt
-                    ? new Date(manualSourceLastCheckedAt).toLocaleString("en-GB")
-                    : "Not checked"}
-                </p>
-              </div>
-            </div>
-
-            {manualSourceUsefulDetails.length > 0 && (
-              <div className="mt-3 rounded-2xl bg-white p-3">
-                <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
-                  Useful details found
-                </p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {manualSourceUsefulDetails.map((detail) => (
-                    <span key={detail} className="rounded-full bg-[#FF6B00]/10 px-3 py-1 text-xs font-black text-[#FF6B00]">
-                      {detail}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {manualSourceMatchNotes && (
-              <p className="mt-3 rounded-2xl bg-orange-50 p-3 text-sm font-bold text-orange-800">
-                {manualSourceMatchNotes}
-              </p>
-            )}
-
-            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-              {manualSourceValidated && manualSourceUrl && (
-                <a
-                  href={manualSourceUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex flex-1 items-center justify-center rounded-2xl bg-[#FF6B00] px-4 py-3 text-sm font-black text-white"
-                >
-                  Open manual/spec source
-                </a>
-              )}
-              {manualSourceValidated && (
-                <button
-                  type="button"
-                  onClick={rejectCaterBotSource}
-                  className="inline-flex flex-1 items-center justify-center rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-black text-red-700"
-                >
-                  Reject source
-                </button>
-              )}
-            </div>
-
-            <label className={`mt-3 flex items-start gap-3 rounded-2xl border px-4 py-3 text-sm font-bold ${
-              manualSourceValidated
-                ? "border-green-200 bg-green-50 text-green-800"
-                : "border-slate-200 bg-slate-50 text-slate-500"
-            }`}>
-              <input
-                name="specs_verified_by_seller"
-                type="checkbox"
-                checked={specsVerifiedBySeller}
-                disabled={!manualSourceValidated}
-                onChange={(event) => setSpecsVerifiedBySeller(event.target.checked)}
-                className="mt-0.5 h-4 w-4 accent-[#FF6B00] disabled:opacity-40"
+          {deliveryMethod === "buyer_courier" && (
+            <label className="mt-4 block">
+              <span className="mb-1 block text-sm font-black">Delivery notes</span>
+              <textarea
+                name="delivery_notes"
+                value={deliveryNotes}
+                onChange={(event) => setDeliveryNotes(event.target.value)}
+                placeholder="Tell buyers how you can deliver."
+                className="min-h-20 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
               />
-              I confirm the specs and product source match my item.
             </label>
-
-            <input type="hidden" name="manual_source_name" value={manualSourceName} />
-            <input type="hidden" name="manual_source_type" value={manualSourceType} />
-            <input type="hidden" name="manual_source_url" value={manualSourceUrl} />
-            <input type="hidden" name="spec_source_url" value={specSourceUrl} />
-            <input type="hidden" name="manual_source_validated" value={manualSourceValidated ? "true" : "false"} />
-            <input type="hidden" name="manual_source_last_checked_at" value={manualSourceLastCheckedAt} />
-            <input type="hidden" name="manual_source_match_notes" value={manualSourceMatchNotes} />
-            <input type="hidden" name="ai_spec_confidence" value={specConfidence} />
-            <input type="hidden" name="source_rejected_by_seller" value={sourceRejectedBySeller ? "true" : "false"} />
-          </div>
-        )}
-
-        <section className="mb-4">
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-[#FF6B00]">
-            Step 5 · Review & publish
-          </p>
-          <p className="mt-1 text-sm text-white/60">Check the listing, then publish.</p>
+          )}
         </section>
 
-        <textarea
-          name="description"
-          placeholder="Short description for buyers"
-          className="premium-input mb-4 min-h-28 w-full rounded-2xl p-3"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-        />
+        <details className="rounded-3xl bg-white p-5 text-[#002E5D] shadow-sm">
+          <summary className="cursor-pointer list-none text-lg font-black">CaterBot details</summary>
+          <div className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
+            {[
+              ["Brand found", productMatch.brand || "Not found"],
+              ["Model found", productMatch.model || "Not found"],
+              ["Serial number", shippingSpecSerial || "Not found"],
+              ["Power details", [shippingSpecPowerType, shippingSpecVoltage, shippingSpecPhase ? `${shippingSpecPhase} phase` : ""].filter(Boolean).join(", ") || "Not found"],
+              ["CaterBot confidence", specConfidence || (quickListResult ? formatConfidence(quickListResult.confidence_score) : "Not checked")],
+              ["Source status", sourceStatusText],
+              ["Manual/spec source result", manualSourceHasVerifiedUrl ? manualSourceName || "Source found" : "None found"],
+              ["Last checked", manualSourceLastCheckedAt ? new Date(manualSourceLastCheckedAt).toLocaleString("en-GB") : "Not checked"],
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-2xl bg-slate-50 px-3 py-2">
+                <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">{label}</p>
+                <p className="mt-1 font-bold">{value}</p>
+              </div>
+            ))}
+          </div>
+          {quickListResult && (
+            <div className="mt-3 rounded-2xl bg-slate-50 p-3">
+              <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Raw extracted notes</p>
+              <p className="mt-1 whitespace-pre-line text-sm font-semibold leading-relaxed text-[#002E5D]">
+                {buildDescriptionFromSuggestion(quickListResult)}
+              </p>
+            </div>
+          )}
+        </details>
 
+        <section className="rounded-3xl bg-white p-5 text-[#002E5D] shadow-sm">
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-[#FF6B00]">Review listing</p>
+          <h2 className="mt-1 text-xl font-black">Review and publish</h2>
+
+          <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+            {imagePreview && (
+              <NextImage
+                src={imagePreview}
+                alt="Main listing preview"
+                width={640}
+                height={360}
+                unoptimized
+                className="h-44 w-full object-cover"
+              />
+            )}
+            <div className="space-y-2 p-4 text-sm font-bold">
+              <div className="flex justify-between gap-3">
+                <span className="text-slate-500">Item</span>
+                <span className="text-right">{title || "Not added"}</span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-slate-500">Price</span>
+                <span>{price ? formatPrice(price) : "Not added"}</span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-slate-500">Location</span>
+                <span>{reviewLocation}</span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-slate-500">Delivery</span>
+                <span className="text-right">{reviewDeliveryOption}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 space-y-3">
+            {deliveryMethod !== "collection_only" && (
+              <label className="flex items-start gap-3 rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-bold text-green-800">
+                <input
+                  name="delivery_details_confirmed"
+                  type="checkbox"
+                  checked={deliveryDetailsConfirmed}
+                  onChange={(event) => setDeliveryDetailsConfirmed(event.target.checked)}
+                  className="mt-0.5 h-4 w-4 accent-[#FF6B00]"
+                />
+                I confirm the delivery details are accurate.
+              </label>
+            )}
+
+            {manualSourceHasVerifiedUrl && (
+              <label className="flex items-start gap-3 rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-bold text-green-800">
+                <input
+                  name="specs_verified_by_seller"
+                  type="checkbox"
+                  checked={specsVerifiedBySeller}
+                  onChange={(event) => setSpecsVerifiedBySeller(event.target.checked)}
+                  className="mt-0.5 h-4 w-4 accent-[#FF6B00]"
+                />
+                I confirm the specs and product source match my item.
+              </label>
+            )}
+
+            <label className="flex items-start gap-3 rounded-2xl border border-[#002E5D]/15 bg-slate-50 px-4 py-3 text-sm font-bold">
+              <input
+                name="listing_info_confirmed"
+                type="checkbox"
+                checked={listingInfoConfirmed}
+                onChange={(event) => setListingInfoConfirmed(event.target.checked)}
+                className="mt-0.5 h-4 w-4 accent-[#FF6B00]"
+              />
+              I confirm this listing information is accurate.
+            </label>
+          </div>
+
+          {publishError && (
+            <p className="mt-4 rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-bold text-orange-800">
+              {publishError}
+            </p>
+          )}
+
+          <button
+            type="submit"
+            disabled={isPublishing}
+            className="mt-4 w-full rounded-2xl bg-[#FF6B00] px-4 py-4 text-lg font-black text-white shadow-lg shadow-[#FF6B00]/20 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isPublishing ? "Publishing..." : "Publish listing"}
+          </button>
+        </section>
+
+        <input type="hidden" name="location" value={location || city} />
+        <input type="hidden" name="power_type" value={shippingSpecPowerType === "Not sure" ? "Unknown" : shippingSpecPowerType} />
+        <input type="hidden" name="dimensions" value={itemDimensionsValue} />
+        <input type="hidden" name="warranty_type" value="No warranty" />
+        <input type="hidden" name="tested_status" value="Untested" />
+        <input type="hidden" name="delivery_option" value={reviewDeliveryOption} />
+        <input type="hidden" name="manuals_available" value={manualSourceHasVerifiedUrl ? "on" : ""} />
+        <input type="hidden" name="delivery_available" value={deliveryMethod === "caterbids_delivery" ? "on" : ""} />
+        <input type="hidden" name="collection_city" value={collectionCity || city || location} />
+        <input type="hidden" name="delivery_size_unknown" value="" />
+        <input type="hidden" name="pallet_count" value={palletCount || "1"} />
+        <input type="hidden" name="insurance_value" value={insuranceValue || price.replace(/[^0-9.]/g, "")} />
+        <input type="hidden" name="access_restrictions" value={accessRestrictions} />
+        <input type="hidden" name="estimated_weight" value={weightKg ? `${weightKg} kg` : ""} />
+        <input type="hidden" name="delivery_type" value={deliveryRecommendation.recommendation} />
+        <input
+          type="hidden"
+          name="shipping_class"
+          value={deliveryRecommendation.palletRecommended ? "Large item" : deliveryRecommendation.specialistRecommended ? "Specialist item" : weightKg ? "Medium item" : ""}
+        />
+        <input
+          type="hidden"
+          name="shipping_confidence"
+          value={deliveryRecommendation.label === "Source-based delivery estimate" ? "High" : weightKg || (lengthCm && widthCm && heightCm) ? "Medium" : "Low"}
+        />
+        <input type="hidden" name="shipping_details_confirmed_by_seller" value={deliveryDetailsConfirmed ? "true" : "false"} />
+        <input type="hidden" name="pallet_delivery_recommended" value={deliveryRecommendation.palletRecommended ? "true" : "false"} />
+        <input type="hidden" name="specialist_delivery_recommended" value={deliveryRecommendation.specialistRecommended ? "true" : "false"} />
+        <input type="hidden" name="spec_plate_image_url" value={specPlatePreview} />
+        <input type="hidden" name="spec_serial_number" value={shippingSpecSerial} />
+        <input type="hidden" name="spec_gc_number" value={shippingSpecGcNumber} />
+        <input type="hidden" name="spec_category" value={shippingSpecCategory || subcategory || category} />
+        {!showElectricFields && (
+          <>
+            <input type="hidden" name="spec_voltage" value="" />
+            <input type="hidden" name="spec_phase" value="" />
+          </>
+        )}
+        <input type="hidden" name="spec_current_a" value={shippingSpecCurrent} />
+        {!showGasFields && <input type="hidden" name="spec_gas_type" value="" />}
+        <input type="hidden" name="spec_gas_connection" value={shippingSpecGasConnection} />
+        <input type="hidden" name="spec_height_cm" value={heightCm || shippingSpecHeight} />
+        <input type="hidden" name="spec_width_cm" value={widthCm || shippingSpecWidth} />
+        <input type="hidden" name="spec_depth_cm" value={lengthCm || shippingSpecDepth} />
+        <input type="hidden" name="spec_weight_kg" value={weightKg || shippingSpecWeight} />
+        <input type="hidden" name="spec_condition_notes" value={shippingSpecNotes} />
+        <input type="hidden" name="spec_forklift_required" value={shippingSpecForkliftRequired ? "on" : ""} />
+        <input type="hidden" name="manual_source_name" value={manualSourceHasVerifiedUrl ? manualSourceName : ""} />
+        <input type="hidden" name="manual_source_type" value={manualSourceHasVerifiedUrl ? manualSourceType : ""} />
+        <input type="hidden" name="manual_source_url" value={manualSourceHasVerifiedUrl ? manualSourceUrl : ""} />
+        <input type="hidden" name="spec_source_url" value={manualSourceHasVerifiedUrl ? specSourceUrl : ""} />
+        <input type="hidden" name="manual_source_validated" value={manualSourceHasVerifiedUrl ? "true" : "false"} />
+        <input type="hidden" name="manual_source_last_checked_at" value={manualSourceLastCheckedAt} />
+        <input type="hidden" name="manual_source_match_notes" value={manualSourceHasVerifiedUrl ? manualSourceMatchNotes : productMatchFailureText} />
+        <input type="hidden" name="ai_spec_confidence" value={specConfidence} />
+        <input type="hidden" name="source_rejected_by_seller" value={sourceRejectedBySeller ? "true" : "false"} />
+        {!manualSourceHasVerifiedUrl && <input type="hidden" name="specs_verified_by_seller" value="off" />}
         <input type="hidden" name="image" value={imagePreview} />
         <input type="hidden" name="images" value={JSON.stringify(imagePreviews)} />
-
-        {publishError && (
-          <p className="mb-3 rounded-2xl border border-orange-400/30 bg-orange-500/10 px-4 py-3 text-sm font-bold text-orange-200">
-            {publishError}
-          </p>
-        )}
-
-        <button
-          type="submit"
-          disabled={isPublishing}
-          className="premium-button w-full rounded-2xl py-3 text-lg font-bold disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {isPublishing ? "Publishing..." : "Publish listing"}
-        </button>
       </form>
       </div>
       )}
