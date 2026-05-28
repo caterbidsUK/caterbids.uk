@@ -89,7 +89,7 @@
       if (result && result.duplicate) {
         setMessage("You're already signed up for launch updates.", "success");
       } else {
-        setMessage("You are on the CaterBidsUK early access list.", "success");
+        setMessage("You’re on the launch list. We’ll notify you when CaterBidsUK goes live.", "success");
       }
       form.reset();
     } catch (error) {
@@ -98,7 +98,7 @@
     } finally {
       if (submit) {
         submit.disabled = false;
-        submit.textContent = "Join early access";
+        submit.textContent = "Notify Me at Launch";
       }
     }
   });
