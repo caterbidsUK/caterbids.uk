@@ -1,9 +1,10 @@
 import { redirect } from "next/navigation"
+import { isProtectedSuperAdminEmail, PRIMARY_PROTECTED_SUPER_ADMIN_EMAIL } from "@/lib/admin-access"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 
 export const ADMIN_ROLES = ["owner", "admin", "super_admin"] as const
-export const PROTECTED_SUPER_ADMIN_EMAIL = "caterbidsuk@gmail.com"
+export const PROTECTED_SUPER_ADMIN_EMAIL = PRIMARY_PROTECTED_SUPER_ADMIN_EMAIL
 
 export type AdminRole = (typeof ADMIN_ROLES)[number]
 
@@ -43,7 +44,7 @@ export async function getAdminContext(): Promise<AdminContext | null> {
 
   let typedProfile = profile as AdminProfile | null
   const email = (user.email || typedProfile?.email || "").toLowerCase()
-  const protectedSuperAdmin = email === PROTECTED_SUPER_ADMIN_EMAIL
+  const protectedSuperAdmin = isProtectedSuperAdminEmail(email)
 
   if (!typedProfile && protectedSuperAdmin) {
     const repairedProfile: AdminProfile = {
