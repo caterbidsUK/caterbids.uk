@@ -27,6 +27,12 @@ export function isAdminRole(role?: string | null) {
   return ADMIN_ROLES.includes(String(role || "") as AdminRole)
 }
 
+function adminAccessLog(details: Record<string, unknown>) {
+  if (process.env.NODE_ENV !== "production") {
+    console.info("CaterBids admin access check:", details)
+  }
+}
+
 export async function getAdminContext(): Promise<AdminContext | null> {
   const supabase = await createClient()
   const {
@@ -43,8 +49,42 @@ export async function getAdminContext(): Promise<AdminContext | null> {
     .maybeSingle()
 
   let typedProfile = profile as AdminProfile | null
-  const email = (user.email || typedProfile?.email || "").toLowerCase()
+  const email = (user.email || typedProfile?.email || "").trim().toLowerCase()
   const protectedSuperAdmin = isProtectedSuperAdminEmail(email)
+
+  if (!typedProfile && email) {
+    const { data: emailProfile } = await admin
+      .from("profiles")
+      .select("id,email,name,full_name,business,role")
+      .eq("email", email)
+      .maybeSingle()
+
+    typedProfile = emailProfile as AdminProfile | null
+
+    if (typedProfile && typedProfile.id !== user.id && (protectedSuperAdmin || isAdminRole(typedProfile.role))) {
+      await admin
+        .from("profiles")
+        .upsert(
+          {
+            id: user.id,
+            email,
+            name: typedProfile.name || "CaterBidsUK Admin",
+            full_name: typedProfile.full_name || typedProfile.name || "CaterBidsUK Admin",
+            business: typedProfile.business,
+            role: protectedSuperAdmin ? "super_admin" : typedProfile.role,
+            updated_at: new Date().toISOString(),
+          } as any,
+          { onConflict: "id" }
+        )
+
+      typedProfile = {
+        ...typedProfile,
+        id: user.id,
+        email,
+        role: protectedSuperAdmin ? "super_admin" : typedProfile.role,
+      }
+    }
+  }
 
   if (!typedProfile && protectedSuperAdmin) {
     const repairedProfile: AdminProfile = {
@@ -74,6 +114,13 @@ export async function getAdminContext(): Promise<AdminContext | null> {
   }
 
   if (!typedProfile) {
+    adminAccessLog({
+      email,
+      role: null,
+      protectedSuperAdmin,
+      passed: false,
+      reason: "profile_not_found",
+    })
     return null
   }
 
@@ -87,8 +134,22 @@ export async function getAdminContext(): Promise<AdminContext | null> {
   }
 
   if (!isAdminRole(typedProfile.role) && !protectedSuperAdmin) {
+    adminAccessLog({
+      email,
+      role: typedProfile.role,
+      protectedSuperAdmin,
+      passed: false,
+      reason: "role_not_admin",
+    })
     return null
   }
+
+  adminAccessLog({
+    email,
+    role: protectedSuperAdmin ? "super_admin" : typedProfile.role,
+    protectedSuperAdmin,
+    passed: true,
+  })
 
   return {
     userId: user.id,

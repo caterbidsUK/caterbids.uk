@@ -1,5 +1,6 @@
 import AdminDashboard, {
   type AdminAuditLog,
+  type AdminBlogPost,
   type AdminListing,
   type AdminOrder,
   type AdminPaymentSettings,
@@ -18,7 +19,7 @@ export const dynamic = "force-dynamic"
 
 type SearchParams = Record<string, string | string[] | undefined>
 
-const ADMIN_TABS = ["overview", "listings", "users", "orders", "verification", "settings", "audit"] as const
+const ADMIN_TABS = ["overview", "listings", "users", "orders", "blog", "verification", "settings", "audit"] as const
 
 async function safeCount(query: PromiseLike<any>, label: string) {
   try {
@@ -142,6 +143,11 @@ export default async function AdminPage({
     paymentSettingsRaw,
     sellerPlansRaw,
     auditLogsRaw,
+    messagesTotal,
+    specReportsTotal,
+    trustReportsTotal,
+    blogPostsTotal,
+    blogPostsRaw,
   ] = await Promise.all([
     safeCount(admin.from("listings").select("*", { count: "exact", head: true }), "listings"),
     safeCount(admin.from("listings").select("*", { count: "exact", head: true }).eq("status", "live"), "live listings"),
@@ -217,6 +223,18 @@ export default async function AdminPage({
         .limit(50),
       "audit logs"
     ),
+    safeCount(admin.from("messages").select("*", { count: "exact", head: true }), "messages"),
+    safeCount(admin.from("equipment_spec_reports" as any).select("*", { count: "exact", head: true }), "equipment spec reports"),
+    safeCount(admin.from("trust_moderation_flags" as any).select("*", { count: "exact", head: true }), "trust reports"),
+    safeCount(admin.from("blog_posts" as any).select("*", { count: "exact", head: true }), "blog posts"),
+    safeData<AdminBlogPost>(
+      admin
+        .from("blog_posts" as any)
+        .select("id,title,slug,category,status,created_at,updated_at,published_at")
+        .order("created_at", { ascending: false })
+        .limit(80),
+      "blog posts"
+    ),
   ])
 
   const usersById = new Map(usersRaw.map((user) => [user.id, user]))
@@ -285,15 +303,21 @@ export default async function AdminPage({
   })
 
   const featuredListings = listingsRaw.filter(isFeaturedListing).length
+  const reportsTotal = specReportsTotal + trustReportsTotal
+  const marketplaceLive = process.env.NEXT_PUBLIC_MARKETPLACE_LIVE === "true"
   const paymentSettings = normalisePaymentSettings(paymentSettingsRaw[0] || DEFAULT_PAYMENT_SETTINGS)
   const sellerPlans = sellerPlansRaw.length ? sellerPlansRaw.map((plan) => normaliseSellerPlan(plan)) : SELLER_PLANS
   const stats: AdminStat[] = [
     { label: "Listings", value: listingsTotal, hint: "All marketplace listings", href: "/admin?tab=listings" },
     { label: "Live", value: liveListings, hint: "Visible to buyers", href: "/admin?tab=listings&status=live" },
+    { label: "Pending", value: listingsRaw.filter((listing) => ["pending", "draft"].includes(String(listing.status || "").toLowerCase())).length, hint: "Draft or pending review", href: "/admin?tab=listings&status=pending" },
     { label: "Featured", value: featuredListings, hint: "Homepage priority", href: "/admin?tab=listings&featured=true" },
     { label: "Users", value: usersTotal, hint: "Profiles created", href: "/admin?tab=users" },
     { label: "Verified", value: verifiedUsers, hint: "Trusted users", href: "/admin?tab=users&verified=true" },
     { label: "Orders", value: ordersTotal, hint: "Checkout records", href: "/admin?tab=orders" },
+    { label: "Messages", value: messagesTotal, hint: "Internal messages", href: "/messages" },
+    { label: "Reports", value: reportsTotal, hint: "Spec and trust reports", href: "/admin/trust" },
+    { label: "Blog Posts", value: blogPostsTotal, hint: "Published and draft posts", href: "/admin?tab=blog" },
   ]
 
   const adminName =
@@ -314,11 +338,15 @@ export default async function AdminPage({
       listings={listings}
       users={users}
       orders={orders}
+      blogPosts={blogPostsRaw}
       verifications={verificationsRaw}
       settings={settingDefaults(settingsRaw)}
       paymentSettings={paymentSettings}
       sellerPlans={sellerPlans}
       auditLogs={auditLogsRaw}
+      messagesTotal={messagesTotal}
+      reportsTotal={reportsTotal}
+      marketplaceLive={marketplaceLive}
       setupWarnings={setupWarnings}
       listingFeatureControlsReady={listingFeatureControlsReady}
       listingUrgentControlsReady={listingUrgentControlsReady}

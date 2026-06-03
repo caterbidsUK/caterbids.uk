@@ -9,12 +9,16 @@ import {
   Bell,
   CheckCircle2,
   ClipboardList,
+  FileText,
+  Flag,
+  Globe2,
   Eye,
   EyeOff,
   LayoutDashboard,
   ListChecks,
   MailCheck,
   Menu,
+  MessageSquare,
   PauseCircle,
   PhoneCall,
   PieChart,
@@ -43,7 +47,7 @@ import {
 } from "./actions"
 import { type PaymentSettings, type SellerPlan, formatPlanPrice, paymentStatusLabel } from "@/lib/pricing"
 
-export type AdminTab = "overview" | "listings" | "users" | "orders" | "verification" | "settings" | "audit"
+export type AdminTab = "overview" | "listings" | "users" | "orders" | "blog" | "verification" | "settings" | "audit"
 
 export type AdminStat = {
   label: string
@@ -149,6 +153,17 @@ export type AdminAuditLog = {
   created_at?: string | null
 }
 
+export type AdminBlogPost = {
+  id: string
+  title?: string | null
+  slug?: string | null
+  category?: string | null
+  status?: string | null
+  created_at?: string | null
+  updated_at?: string | null
+  published_at?: string | null
+}
+
 type AdminDashboardProps = {
   adminEmail: string
   adminId: string
@@ -159,11 +174,15 @@ type AdminDashboardProps = {
   listings: AdminListing[]
   users: AdminUser[]
   orders: AdminOrder[]
+  blogPosts: AdminBlogPost[]
   verifications: AdminVerification[]
   settings: AdminSiteSetting[]
   paymentSettings: AdminPaymentSettings
   sellerPlans: AdminSellerPlan[]
   auditLogs: AdminAuditLog[]
+  messagesTotal: number
+  reportsTotal: number
+  marketplaceLive: boolean
   setupWarnings: string[]
   listingFeatureControlsReady: boolean
   listingUrgentControlsReady: boolean
@@ -186,6 +205,7 @@ const TABS: { key: AdminTab; label: string; href: string; icon: ReactNode }[] = 
   { key: "listings", label: "Listings", href: "/admin?tab=listings", icon: <ListChecks className="h-4 w-4" /> },
   { key: "users", label: "Users", href: "/admin?tab=users", icon: <Users className="h-4 w-4" /> },
   { key: "orders", label: "Orders", href: "/admin?tab=orders", icon: <ShoppingCart className="h-4 w-4" /> },
+  { key: "blog", label: "Blog", href: "/admin?tab=blog", icon: <FileText className="h-4 w-4" /> },
   { key: "verification", label: "Verification", href: "/admin?tab=verification", icon: <BadgeCheck className="h-4 w-4" /> },
   { key: "settings", label: "Site Settings", href: "/admin?tab=settings", icon: <Settings className="h-4 w-4" /> },
   { key: "audit", label: "Audit Log", href: "/admin?tab=audit", icon: <ShieldCheck className="h-4 w-4" /> },
@@ -363,11 +383,15 @@ export default function AdminDashboard({
   listings,
   users,
   orders,
+  blogPosts,
   verifications,
   settings,
   paymentSettings,
   sellerPlans,
   auditLogs,
+  messagesTotal,
+  reportsTotal,
+  marketplaceLive,
   setupWarnings,
   listingFeatureControlsReady,
   listingUrgentControlsReady,
@@ -497,6 +521,14 @@ export default function AdminDashboard({
               <AdminMetricCard label="Active Listings" value={liveListings.toLocaleString("en-GB")} icon={<BadgeCheck className="h-5 w-5" />} tone="cyan" helper="Visible to buyers" href="/admin?tab=listings&status=live" />
             </section>
 
+            <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+              <AdminControlCard label="Pending Listings" value={pendingListings.toLocaleString("en-GB")} helper="Draft or pending review" icon={<ClipboardList className="h-5 w-5" />} href="/admin?tab=listings&status=pending" />
+              <AdminControlCard label="Messages" value={messagesTotal.toLocaleString("en-GB")} helper="Internal message rows" icon={<MessageSquare className="h-5 w-5" />} href="/messages" />
+              <AdminControlCard label="Reported Items" value={reportsTotal.toLocaleString("en-GB")} helper="Spec/trust reports loaded" icon={<Flag className="h-5 w-5" />} href="/admin/trust" />
+              <AdminControlCard label="Blog Posts" value={blogPosts.length.toLocaleString("en-GB")} helper="Published and draft posts" icon={<FileText className="h-5 w-5" />} href="/admin?tab=blog" />
+              <AdminControlCard label="Marketplace" value={marketplaceLive ? "Live" : "Hidden"} helper={marketplaceLive ? "Public browsing enabled" : "Private setup mode"} icon={<Globe2 className="h-5 w-5" />} href="/marketplace" />
+            </section>
+
         {setupWarnings.length > 0 && (
           <section className="rounded-3xl border border-amber-300/30 bg-amber-400/10 p-4 text-sm font-bold text-amber-50">
             <p className="text-xs font-black uppercase tracking-[0.2em] text-[#FFB15A]">Admin setup needed</p>
@@ -562,6 +594,7 @@ export default function AdminDashboard({
         )}
         {selectedTab === "users" && <UsersPanel users={users} adminEmail={adminEmail} adminId={adminId} />}
         {selectedTab === "orders" && <OrdersPanel orders={orders} />}
+        {selectedTab === "blog" && <BlogPostsPanel posts={blogPosts} />}
         {selectedTab === "verification" && (
           <section className="grid gap-5 xl:grid-cols-[1fr_1fr]">
             <UsersPanel users={users} adminEmail={adminEmail} adminId={adminId} compact />
@@ -632,6 +665,41 @@ function AdminMetricCard({
       <p className="mt-1 text-xs font-bold text-white/45">{helper}</p>
     </Link>
   )
+}
+
+function AdminControlCard({
+  label,
+  value,
+  helper,
+  icon,
+  href,
+}: {
+  label: string
+  value: string
+  helper: string
+  icon: ReactNode
+  href: string
+}) {
+  return (
+    <Link
+      href={href}
+      className="rounded-3xl border border-white/10 bg-[#082D50]/70 p-4 shadow-xl shadow-black/10 transition hover:-translate-y-0.5 hover:border-[#FF6B00]/45"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <span className="grid h-11 w-11 place-items-center rounded-2xl bg-[#FF6B00]/18 text-orange-100">
+          {icon}
+        </span>
+        <ChevronAccent />
+      </div>
+      <p className="mt-4 text-xs font-black uppercase tracking-[0.14em] text-white/45">{label}</p>
+      <p className="mt-1 text-2xl font-black tracking-[-0.03em] text-white">{value}</p>
+      <p className="mt-1 text-xs font-bold text-white/45">{helper}</p>
+    </Link>
+  )
+}
+
+function ChevronAccent() {
+  return <span className="text-lg font-black text-[#FF6B00]">›</span>
 }
 
 function ListingTrendChart({ data }: { data: Array<{ label: string; newCount: number; activeCount: number }> }) {
@@ -1069,6 +1137,61 @@ function OrdersPanel({ orders }: { orders: AdminOrder[] }) {
                 <Info label="Seller" value={order.seller_email || order.seller_id || "Unknown"} />
                 <Info label="Listing ID" value={order.listing_id || "Missing"} />
                 <Info label="Stripe payment" value={order.stripe_payment_intent_id || order.stripe_session_id || "Not added"} />
+              </div>
+            </article>
+          ))
+        )}
+      </div>
+    </Panel>
+  )
+}
+
+function BlogPostsPanel({ posts }: { posts: AdminBlogPost[] }) {
+  const sortedPosts = [...posts].sort((left, right) => {
+    const leftDate = new Date(left.published_at || left.created_at || 0).getTime()
+    const rightDate = new Date(right.published_at || right.created_at || 0).getTime()
+    return rightDate - leftDate
+  })
+
+  return (
+    <Panel title="Blog management" icon={<FileText className="h-5 w-5" />}>
+      <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-white/60">
+            Latest posts from the CaterBids blog publishing system and Make.com API.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/blog" className="rounded-2xl border border-white/10 bg-white/8 px-4 py-2 text-sm font-black text-white">
+            View blog
+          </Link>
+          <Link href="/api/admin/blog/create" className="rounded-2xl border border-white/10 bg-white/8 px-4 py-2 text-sm font-black text-white">
+            API status
+          </Link>
+        </div>
+      </div>
+      <div className="space-y-3">
+        {sortedPosts.length === 0 ? (
+          <EmptyState text="No blog posts found yet. Make.com can publish posts through the secured blog API." />
+        ) : (
+          sortedPosts.map((post) => (
+            <article key={post.id} className="rounded-3xl border border-white/10 bg-[#002E5D]/45 p-4">
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div className="min-w-0">
+                  <p className="truncate font-black">{post.title || "Untitled blog post"}</p>
+                  <p className="mt-1 text-sm text-white/55">
+                    {post.category || "Uncategorised"} • Published {formatDate(post.published_at || post.created_at)}
+                  </p>
+                  <p className="mt-1 text-xs text-white/45">Slug: {post.slug || "missing"}</p>
+                </div>
+                <div className="flex shrink-0 flex-wrap gap-2">
+                  <Badge label={post.status || "draft"} orange={String(post.status || "").toLowerCase() === "published"} />
+                  {post.slug && (
+                    <Link href={`/blog/${post.slug}`} className="rounded-full border border-white/10 bg-white/8 px-3 py-1 text-xs font-black text-white">
+                      Open post
+                    </Link>
+                  )}
+                </div>
               </div>
             </article>
           ))
