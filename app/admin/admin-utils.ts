@@ -41,9 +41,36 @@ export async function getAdminContext(): Promise<AdminContext | null> {
     .eq("id", user.id)
     .maybeSingle()
 
-  const typedProfile = profile as AdminProfile | null
+  let typedProfile = profile as AdminProfile | null
   const email = (user.email || typedProfile?.email || "").toLowerCase()
   const protectedSuperAdmin = email === PROTECTED_SUPER_ADMIN_EMAIL
+
+  if (!typedProfile && protectedSuperAdmin) {
+    const repairedProfile: AdminProfile = {
+      id: user.id,
+      email: user.email || PROTECTED_SUPER_ADMIN_EMAIL,
+      name: "CaterBidsUK Admin",
+      full_name: "CaterBidsUK Admin",
+      business: null,
+      role: "super_admin",
+    }
+
+    await admin
+      .from("profiles")
+      .upsert(
+        {
+          id: user.id,
+          email: repairedProfile.email,
+          name: repairedProfile.name,
+          full_name: repairedProfile.full_name,
+          role: "super_admin",
+          updated_at: new Date().toISOString(),
+        } as any,
+        { onConflict: "id" }
+      )
+
+    typedProfile = repairedProfile
+  }
 
   if (!typedProfile) {
     return null
