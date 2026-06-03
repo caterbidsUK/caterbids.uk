@@ -4,7 +4,7 @@ import { ChevronRight, Menu } from "lucide-react"
 import type { ReactNode } from "react"
 
 const marketplaceHref = "/marketplace"
-const sellHref = "/sell"
+const sellerEarlyAccessHref = "/#launch-list"
 
 export function BlogHeader() {
   return (
@@ -33,8 +33,8 @@ export function BlogHeader() {
           <BlogNavLink href="/">Home</BlogNavLink>
           <BlogNavLink href={marketplaceHref}>Marketplace</BlogNavLink>
           <BlogNavLink href="/blog">Blog</BlogNavLink>
-          <BlogNavLink href={sellHref}>Sell</BlogNavLink>
-          <BlogNavLink href="/account">Account</BlogNavLink>
+          <BlogNavLink href={sellerEarlyAccessHref}>Seller Early Access</BlogNavLink>
+          <BlogNavLink href="/contact">Contact</BlogNavLink>
         </nav>
 
         <details className="relative lg:hidden">
@@ -46,8 +46,8 @@ export function BlogHeader() {
             <MobileBlogNavLink href="/">Home</MobileBlogNavLink>
             <MobileBlogNavLink href={marketplaceHref}>Marketplace</MobileBlogNavLink>
             <MobileBlogNavLink href="/blog">Blog</MobileBlogNavLink>
-            <MobileBlogNavLink href={sellHref}>Sell</MobileBlogNavLink>
-            <MobileBlogNavLink href="/account">Account</MobileBlogNavLink>
+            <MobileBlogNavLink href={sellerEarlyAccessHref}>Seller Early Access</MobileBlogNavLink>
+            <MobileBlogNavLink href="/contact">Contact</MobileBlogNavLink>
           </div>
         </details>
       </div>
@@ -87,9 +87,9 @@ export function BlogFooter() {
           title="Marketplace"
           links={[
             ["Browse Marketplace", marketplaceHref],
-            ["Catering Equipment", "/search?q=all&category=Catering%20Equipment"],
-            ["Vans & Trailers", "/search?q=all&category=Catering%20Vans%20%26%20Trailers"],
-            ["Sell Your Equipment", sellHref],
+            ["Catering Equipment", marketplaceHref],
+            ["Vans & Trailers", marketplaceHref],
+            ["Sell Your Equipment", sellerEarlyAccessHref],
           ]}
         />
         <FooterColumn
@@ -97,17 +97,14 @@ export function BlogFooter() {
           links={[
             ["Blog", "/blog"],
             ["About Us", "/about"],
-            ["How It Works", "/how-it-works"],
             ["Contact", "/contact"],
           ]}
         />
         <FooterColumn
           title="Support"
           links={[
-            ["Safety & Security", "/safety"],
-            ["Privacy Policy", "/privacy-policy"],
+            ["Privacy Policy", "/privacy"],
             ["Terms & Conditions", "/terms"],
-            ["Refunds", "/refunds"],
           ]}
         />
       </div>
@@ -141,7 +138,7 @@ function FooterColumn({ title, links }: { title: string; links: [string, string]
       <h2 className="text-sm font-black">{title}</h2>
       <ul className="mt-4 space-y-3 text-sm font-semibold text-white/62">
         {links.map(([label, href]) => (
-          <li key={href}>
+          <li key={`${label}-${href}`}>
             <Link href={href} className="transition hover:text-[#FF6B00]">
               {label}
             </Link>

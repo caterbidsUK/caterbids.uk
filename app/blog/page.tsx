@@ -79,14 +79,14 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
                 href="/marketplace"
                 className="inline-flex min-h-14 items-center justify-center gap-3 rounded-2xl bg-[#FF6B00] px-6 text-base font-black text-white shadow-[0_20px_50px_rgba(255,107,0,0.28)] transition hover:brightness-110 focus:outline-none focus:ring-4 focus:ring-[#FF6B00]/30"
               >
-                Browse Marketplace
+                Marketplace Opening Soon
                 <ArrowRight className="h-5 w-5" aria-hidden="true" />
               </Link>
               <Link
-                href="/sell"
+                href="/#launch-list"
                 className="inline-flex min-h-14 items-center justify-center gap-3 rounded-2xl border border-white/20 bg-white/8 px-6 text-base font-black text-white transition hover:border-[#FF6B00]/70 hover:bg-white/12 focus:outline-none focus:ring-4 focus:ring-white/15"
               >
-                Sell Your Equipment
+                Seller Early Access
                 <ArrowRight className="h-5 w-5" aria-hidden="true" />
               </Link>
             </div>
@@ -149,10 +149,10 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
               </p>
               <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
                 <Link href="/marketplace" className="rounded-2xl bg-[#FF6B00] px-5 py-3 text-sm font-black text-white">
-                  Browse Marketplace
+                  Marketplace Opening Soon
                 </Link>
-                <Link href="/sell" className="rounded-2xl border border-white/18 px-5 py-3 text-sm font-black text-white">
-                  Sell Your Equipment
+                <Link href="/#launch-list" className="rounded-2xl border border-white/18 px-5 py-3 text-sm font-black text-white">
+                  Seller Early Access
                 </Link>
               </div>
             </section>

@@ -157,14 +157,14 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
                 href="/marketplace"
                 className="inline-flex min-h-14 items-center justify-center gap-3 rounded-2xl bg-[#FF6B00] px-6 text-sm font-black text-white transition hover:brightness-110 focus:outline-none focus:ring-4 focus:ring-[#FF6B00]/30"
               >
-                Browse the marketplace
+                Marketplace Opening Soon
                 <ArrowRight className="h-4 w-4" aria-hidden="true" />
               </Link>
               <Link
-                href="/sell"
+                href="/#launch-list"
                 className="inline-flex min-h-14 items-center justify-center gap-3 rounded-2xl border border-white/18 bg-white/8 px-6 text-sm font-black text-white transition hover:border-[#FF6B00]/60 hover:bg-white/12 focus:outline-none focus:ring-4 focus:ring-white/15"
               >
-                Sell your equipment
+                Seller Early Access
                 <ArrowRight className="h-4 w-4" aria-hidden="true" />
               </Link>
             </div>
