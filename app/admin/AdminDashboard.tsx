@@ -1,0 +1,1456 @@
+"use client"
+
+import Link from "next/link"
+import type { ReactNode } from "react"
+import {
+  Activity,
+  BadgeCheck,
+  BarChart3,
+  Bell,
+  CheckCircle2,
+  ClipboardList,
+  Eye,
+  EyeOff,
+  LayoutDashboard,
+  ListChecks,
+  MailCheck,
+  Menu,
+  PauseCircle,
+  PhoneCall,
+  PieChart,
+  PoundSterling,
+  Power,
+  Save,
+  Search,
+  Settings,
+  ShieldCheck,
+  ShoppingCart,
+  Star,
+  Trash2,
+  UserCheck,
+  UserCog,
+  Users,
+} from "lucide-react"
+import {
+  setUserVerificationFlag,
+  setUserVerified,
+  toggleListingFeatured,
+  toggleListingUrgent,
+  updateListingStatus,
+  updatePaymentSettings,
+  updateSiteSetting,
+  updateUserRole,
+} from "./actions"
+import { type PaymentSettings, type SellerPlan, formatPlanPrice, paymentStatusLabel } from "@/lib/pricing"
+
+export type AdminTab = "overview" | "listings" | "users" | "orders" | "verification" | "settings" | "audit"
+
+export type AdminStat = {
+  label: string
+  value: number
+  hint: string
+  href: string
+}
+
+export type AdminListing = {
+  id: string
+  seller_id?: string | null
+  user_id?: string | null
+  title?: string | null
+  price?: string | number | null
+  location?: string | null
+  city?: string | null
+  status?: string | null
+  category?: string | null
+  subcategory?: string | null
+  image_url?: string | null
+  images?: string[] | null
+  featured?: boolean | null
+  is_featured?: boolean | null
+  featured_type?: string | null
+  urgent?: boolean | null
+  is_urgent?: boolean | null
+  created_at?: string | null
+  seller_email?: string | null
+}
+
+export type AdminUser = {
+  id: string
+  email?: string | null
+  name?: string | null
+  full_name?: string | null
+  business?: string | null
+  role?: string | null
+  verified?: boolean | null
+  email_verified?: boolean | null
+  is_email_verified?: boolean | null
+  phone_verified?: boolean | null
+  is_phone_verified?: boolean | null
+  verified_user_badge?: boolean | null
+  created_at?: string | null
+  active_listings_count?: number
+}
+
+export type AdminOrder = {
+  id: string
+  listing_id?: string | null
+  listing_title?: string | null
+  buyer_id?: string | null
+  buyer_email?: string | null
+  seller_id?: string | null
+  seller_email?: string | null
+  item_title?: string | null
+  item_price?: number | string | null
+  delivery_price?: number | string | null
+  total_price?: number | string | null
+  payment_status?: string | null
+  order_status?: string | null
+  delivery_status?: string | null
+  stripe_session_id?: string | null
+  stripe_payment_intent_id?: string | null
+  created_at?: string | null
+}
+
+export type AdminVerification = {
+  id?: string | null
+  user_id?: string | null
+  email_verified?: boolean | null
+  phone?: string | null
+  phone_verified?: boolean | null
+  phone_verified_at?: string | null
+  id_verification_status?: string | null
+  business_verification_status?: string | null
+  updated_at?: string | null
+  created_at?: string | null
+}
+
+export type AdminSiteSetting = {
+  key: string
+  value: { text?: string; value?: string | number | boolean | null; type?: string } | string | number | boolean | null
+  description?: string | null
+  updated_at?: string | null
+}
+
+export type AdminPaymentSettings = PaymentSettings
+export type AdminSellerPlan = SellerPlan
+
+export type AdminAuditLog = {
+  id: string
+  admin_user_id?: string | null
+  admin_id?: string | null
+  admin_email?: string | null
+  action?: string | null
+  entity_type?: string | null
+  entity_id?: string | null
+  target_table?: string | null
+  target_id?: string | null
+  metadata?: Record<string, unknown> | null
+  details?: Record<string, unknown> | null
+  created_at?: string | null
+}
+
+type AdminDashboardProps = {
+  adminEmail: string
+  adminId: string
+  adminName: string
+  adminRole: string
+  selectedTab: AdminTab
+  stats: AdminStat[]
+  listings: AdminListing[]
+  users: AdminUser[]
+  orders: AdminOrder[]
+  verifications: AdminVerification[]
+  settings: AdminSiteSetting[]
+  paymentSettings: AdminPaymentSettings
+  sellerPlans: AdminSellerPlan[]
+  auditLogs: AdminAuditLog[]
+  setupWarnings: string[]
+  listingFeatureControlsReady: boolean
+  listingUrgentControlsReady: boolean
+  filters: {
+    status: string
+    featured: boolean
+    verified: boolean
+    user: string
+  }
+}
+
+const USER_ROLES = ["buyer", "seller", "admin", "owner", "super_admin"]
+const PROTECTED_SUPER_ADMIN_EMAIL = "caterbidsuk@gmail.com"
+const ADMIN_ACTION_BUTTON =
+  "inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/8 px-3 py-2 text-sm font-black text-white transition hover:border-[#FF6B00]/45 hover:bg-[#FF6B00]/12"
+const ADMIN_ACTION_LINK = ADMIN_ACTION_BUTTON
+
+const TABS: { key: AdminTab; label: string; href: string; icon: ReactNode }[] = [
+  { key: "overview", label: "Overview", href: "/admin", icon: <LayoutDashboard className="h-4 w-4" /> },
+  { key: "listings", label: "Listings", href: "/admin?tab=listings", icon: <ListChecks className="h-4 w-4" /> },
+  { key: "users", label: "Users", href: "/admin?tab=users", icon: <Users className="h-4 w-4" /> },
+  { key: "orders", label: "Orders", href: "/admin?tab=orders", icon: <ShoppingCart className="h-4 w-4" /> },
+  { key: "verification", label: "Verification", href: "/admin?tab=verification", icon: <BadgeCheck className="h-4 w-4" /> },
+  { key: "settings", label: "Site Settings", href: "/admin?tab=settings", icon: <Settings className="h-4 w-4" /> },
+  { key: "audit", label: "Audit Log", href: "/admin?tab=audit", icon: <ShieldCheck className="h-4 w-4" /> },
+]
+
+const SETTING_CONFIG: Record<
+  string,
+  {
+    title: string
+    inputLabel: string
+    placeholder: string
+    notePlaceholder: string
+    valueType: "text" | "number" | "boolean"
+    connected?: boolean
+  }
+> = {
+  homepage_notice: {
+    title: "Homepage Notice",
+    inputLabel: "Homepage banner text",
+    placeholder: "First 100 listings are FREE on CaterBidsUK",
+    notePlaceholder: "Internal note only, not shown publicly",
+    valueType: "text",
+    connected: false,
+  },
+  support_email: {
+    title: "Support Email",
+    inputLabel: "Public support email",
+    placeholder: "caterbidsuk@gmail.com",
+    notePlaceholder: "Main email customers use for help",
+    valueType: "text",
+    connected: false,
+  },
+  launch_offer: {
+    title: "Launch Offer",
+    inputLabel: "Launch offer text",
+    placeholder: "First 100 listings free",
+    notePlaceholder: "Current seller signup offer",
+    valueType: "text",
+    connected: false,
+  },
+  maintenance_mode: {
+    title: "Maintenance Mode",
+    inputLabel: "Maintenance mode",
+    placeholder: "Off",
+    notePlaceholder: "Temporarily hide public selling/listing actions while testing",
+    valueType: "boolean",
+    connected: false,
+  },
+}
+
+function formatDate(value?: string | null) {
+  if (!value) return "Not available"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return "Not available"
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    timeZone: "Europe/London",
+  }).format(date)
+}
+
+function formatMoney(value?: string | number | null) {
+  const numberValue = Number(String(value ?? "").replace(/[^0-9.]/g, ""))
+  if (!Number.isFinite(numberValue) || numberValue <= 0) return "No price"
+  return `£${numberValue.toLocaleString("en-GB")}`
+}
+
+function settingText(value: AdminSiteSetting["value"]) {
+  if (value === null || typeof value === "undefined") return ""
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value)
+  return String(value.text ?? value.value ?? "")
+}
+
+function listingLocation(listing: AdminListing) {
+  return listing.city || listing.location || "UK"
+}
+
+function listingImage(listing: AdminListing) {
+  if (listing.image_url) return listing.image_url
+  const images = Array.isArray(listing.images) ? listing.images : []
+  return images.find((image) => typeof image === "string" && image.trim()) || ""
+}
+
+function userName(user: AdminUser) {
+  return user.full_name || user.name || user.business || user.email || "User"
+}
+
+function isUserVerified(user: AdminUser) {
+  return Boolean(user.verified || user.email_verified || user.is_email_verified || user.verified_user_badge)
+}
+
+function isProtectedSuperAdmin(user: AdminUser, adminEmail: string, adminId: string) {
+  return adminEmail.toLowerCase() === PROTECTED_SUPER_ADMIN_EMAIL && user.id === adminId
+}
+
+function numberFromPrice(value?: string | number | null) {
+  const numberValue = Number(String(value ?? "").replace(/[^0-9.]/g, ""))
+  return Number.isFinite(numberValue) ? numberValue : 0
+}
+
+function statValue(stats: AdminStat[], label: string) {
+  return stats.find((stat) => stat.label.toLowerCase() === label.toLowerCase())?.value || 0
+}
+
+function statusCount(listings: AdminListing[], status: string) {
+  return listings.filter((listing) => String(listing.status || "").toLowerCase() === status).length
+}
+
+function paidOrders(orders: AdminOrder[]) {
+  return orders.filter((order) =>
+    ["paid", "succeeded", "complete", "completed"].includes(String(order.payment_status || order.order_status || "").toLowerCase())
+  )
+}
+
+function orderRevenue(orders: AdminOrder[]) {
+  return paidOrders(orders).reduce((total, order) => total + numberFromPrice(order.total_price), 0)
+}
+
+function formatMetricMoney(value: number) {
+  if (!value) return "£0"
+  return `£${value.toLocaleString("en-GB", { maximumFractionDigits: 0 })}`
+}
+
+function lastSevenDays() {
+  const today = new Date()
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(today)
+    date.setDate(today.getDate() - (6 - index))
+    return date
+  })
+}
+
+function sameDay(left: Date, right: Date) {
+  return left.getFullYear() === right.getFullYear() && left.getMonth() === right.getMonth() && left.getDate() === right.getDate()
+}
+
+function listingTrend(listings: AdminListing[]) {
+  const days = lastSevenDays()
+  return days.map((day) => {
+    const newCount = listings.filter((listing) => listing.created_at && sameDay(new Date(listing.created_at), day)).length
+    const activeCount = listings.filter((listing) => {
+      const created = listing.created_at ? new Date(listing.created_at) : null
+      const status = String(listing.status || "").toLowerCase()
+      return created && created <= day && ["live", "active", "payment_pending"].includes(status)
+    }).length
+
+    return {
+      label: new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short" }).format(day),
+      newCount,
+      activeCount,
+    }
+  })
+}
+
+function categoryBreakdown(listings: AdminListing[]) {
+  const counts = new Map<string, number>()
+  for (const listing of listings) {
+    const category = listing.category || "Uncategorised"
+    counts.set(category, (counts.get(category) || 0) + 1)
+  }
+  return Array.from(counts.entries())
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 6)
+}
+
+export default function AdminDashboard({
+  adminEmail,
+  adminId,
+  adminName,
+  adminRole,
+  selectedTab,
+  stats,
+  listings,
+  users,
+  orders,
+  verifications,
+  settings,
+  paymentSettings,
+  sellerPlans,
+  auditLogs,
+  setupWarnings,
+  listingFeatureControlsReady,
+  listingUrgentControlsReady,
+  filters,
+}: AdminDashboardProps) {
+  const totalListings = statValue(stats, "Listings")
+  const liveListings = statValue(stats, "Live")
+  const totalUsers = statValue(stats, "Users")
+  const totalOrders = statValue(stats, "Orders")
+  const paidRevenue = orderRevenue(orders)
+  const trend = listingTrend(listings)
+  const categories = categoryBreakdown(listings)
+  const pendingListings = statusCount(listings, "pending") + statusCount(listings, "draft")
+  const completedOrders = orders.filter((order) => String(order.order_status || "").toLowerCase() === "paid").length
+  const pendingOrders = orders.filter((order) => /pending/i.test(String(order.order_status || order.payment_status || ""))).length
+
+  return (
+    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,#083D70_0,#001A35_38%,#000D1F_100%)] text-white">
+      <div className="grid min-h-screen lg:grid-cols-[280px_1fr]">
+        <aside className="hidden border-r border-white/10 bg-[#001A35]/90 p-5 lg:flex lg:flex-col lg:justify-between">
+          <div>
+            <Link href="/admin" className="flex items-center gap-3">
+              <img src="/brand/caterbids-logo.png" alt="CaterBidsUK" className="h-14 w-14 rounded-2xl object-contain" />
+              <div>
+                <p className="text-xl font-black leading-none">Cater<span className="text-[#FF6B00]">Bids</span>UK</p>
+                <p className="mt-1 text-[10px] font-black tracking-[0.32em] text-[#FF6B00]">BUY • SELL • SAVE</p>
+              </div>
+            </Link>
+            <p className="mt-8 text-xs font-black uppercase tracking-[0.2em] text-white/45">Admin</p>
+            <nav className="mt-3 space-y-1">
+              {TABS.map((tab) => (
+                <Link
+                  key={tab.key}
+                  href={tab.href}
+                  className={`flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-black transition ${
+                    selectedTab === tab.key
+                      ? "bg-[#FF6B00] text-white shadow-lg shadow-[#FF6B00]/20"
+                      : "text-white/72 hover:bg-white/8 hover:text-white"
+                  }`}
+                >
+                  {tab.icon}
+                  {tab.label === "Overview" ? "Dashboard" : tab.label}
+                </Link>
+              ))}
+              <Link href="/admin/trust" className="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-black text-white/72 hover:bg-white/8 hover:text-white">
+                <ShieldCheck className="h-4 w-4" />
+                Trust Admin
+              </Link>
+            </nav>
+          </div>
+
+          <div className="space-y-4">
+            <div className="rounded-3xl border border-white/10 bg-white/[0.06] p-4">
+              <p className="font-black">Need help?</p>
+              <p className="mt-1 text-sm leading-relaxed text-white/55">Visit support if admin help centre content is needed.</p>
+              <Link href="/contact" className="mt-3 inline-flex rounded-2xl border border-white/10 px-4 py-2 text-sm font-black text-white">
+                Contact Support
+              </Link>
+            </div>
+            <div className="rounded-3xl border border-white/10 bg-white/[0.06] p-4">
+              <p className="truncate font-black">{adminName}</p>
+              <p className="mt-1 truncate text-sm text-white/55">{adminEmail}</p>
+              <p className="mt-2 inline-flex rounded-full bg-[#FF6B00]/15 px-3 py-1 text-xs font-black capitalize text-orange-100">
+                {adminRole === "super_admin" ? "Super Administrator" : adminRole}
+              </p>
+            </div>
+          </div>
+        </aside>
+
+        <div className="min-w-0 pb-24 lg:pb-0">
+          <header className="sticky top-0 z-30 border-b border-white/10 bg-[#001A35]/92 px-4 py-3 backdrop-blur lg:px-8">
+            <div className="flex items-center gap-3">
+              <button className="grid h-11 w-11 place-items-center rounded-2xl border border-white/12 bg-white/8 lg:hidden" aria-label="Open admin menu">
+                <Menu className="h-5 w-5" />
+              </button>
+              <Link href="/admin" className="flex items-center gap-2 lg:hidden">
+                <img src="/brand/caterbids-logo.png" alt="CaterBidsUK" className="h-10 w-10 rounded-xl object-contain" />
+                <div>
+                  <p className="text-base font-black leading-none">Cater<span className="text-[#FF6B00]">Bids</span>UK</p>
+                  <p className="mt-1 text-[9px] font-black tracking-[0.24em] text-[#FF6B00]">BUY • SELL • SAVE</p>
+                </div>
+              </Link>
+              <form action="/admin" className="ml-auto hidden max-w-xl flex-1 lg:block">
+                <label className="relative block">
+                  <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-white/45" />
+                  <input
+                    name="q"
+                    placeholder="Search listings, users, orders..."
+                    className="w-full rounded-2xl border border-white/12 bg-white/[0.06] px-12 py-3 text-sm font-bold text-white outline-none placeholder:text-white/45 focus:border-[#FF6B00]/60"
+                  />
+                </label>
+              </form>
+              <div className="ml-auto flex items-center gap-2 lg:ml-4">
+                <span className="hidden rounded-2xl border border-white/12 bg-white/[0.06] px-4 py-3 text-sm font-black text-white/80 lg:inline-flex">
+                  Last 7 days
+                </span>
+                <span className="relative grid h-11 w-11 place-items-center rounded-2xl border border-white/12 bg-white/[0.06]">
+                  <Bell className="h-5 w-5" />
+                </span>
+              </div>
+            </div>
+          </header>
+
+          <div className="mx-auto max-w-7xl space-y-5 px-4 py-6 lg:px-8">
+            <section className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+              <div>
+                <h1 className="text-3xl font-black tracking-[-0.04em] md:text-4xl">
+                  {selectedTab === "overview" ? "Dashboard" : TABS.find((tab) => tab.key === selectedTab)?.label || "Dashboard"}
+                </h1>
+                <p className="mt-1 text-sm font-semibold text-white/60">Overview of your marketplace.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Link href="/admin?tab=listings" className="rounded-2xl border border-white/12 bg-white/[0.06] px-4 py-3 text-sm font-black text-white/80">
+                  Listings
+                </Link>
+                <Link href="/admin?tab=verification" className="rounded-2xl bg-[#FF6B00] px-4 py-3 text-sm font-black text-white shadow-lg shadow-[#FF6B00]/20">
+                  Verifications
+                </Link>
+              </div>
+            </section>
+
+            <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+              <AdminMetricCard label="Total Listings" value={totalListings.toLocaleString("en-GB")} icon={<ListChecks className="h-5 w-5" />} tone="blue" helper="Current total" href="/admin?tab=listings" />
+              <AdminMetricCard label="Total Users" value={totalUsers.toLocaleString("en-GB")} icon={<Users className="h-5 w-5" />} tone="green" helper="Profiles created" href="/admin?tab=users" />
+              <AdminMetricCard label="Total Orders" value={totalOrders.toLocaleString("en-GB")} icon={<ShoppingCart className="h-5 w-5" />} tone="orange" helper="Checkout records" href="/admin?tab=orders" />
+              <AdminMetricCard label="Paid Revenue" value={formatMetricMoney(paidRevenue)} icon={<PoundSterling className="h-5 w-5" />} tone="purple" helper="Paid loaded orders" href="/admin?tab=orders" />
+              <AdminMetricCard label="Active Listings" value={liveListings.toLocaleString("en-GB")} icon={<BadgeCheck className="h-5 w-5" />} tone="cyan" helper="Visible to buyers" href="/admin?tab=listings&status=live" />
+            </section>
+
+        {setupWarnings.length > 0 && (
+          <section className="rounded-3xl border border-amber-300/30 bg-amber-400/10 p-4 text-sm font-bold text-amber-50">
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-[#FFB15A]">Admin setup needed</p>
+            <div className="mt-2 space-y-2">
+              {setupWarnings.map((warning) => (
+                <p key={warning}>{warning}</p>
+              ))}
+            </div>
+            <p className="mt-3 text-xs text-white/65">
+              Run the featured-listing SQL migration in Supabase to enable Feature and Urgent buttons.
+            </p>
+          </section>
+        )}
+
+        {filters.status || filters.featured || filters.verified || filters.user ? (
+          <div className="rounded-2xl border border-[#FF6B00]/25 bg-[#FF6B00]/10 px-4 py-3 text-sm font-bold text-orange-100">
+            Filter active: {filters.status && `status ${filters.status} `}
+            {filters.featured && "featured "}
+            {filters.verified && "verified users "}
+            {filters.user && `user ${filters.user}`}
+            <Link href="/admin" className="ml-3 underline">Clear</Link>
+          </div>
+        ) : null}
+
+        {selectedTab === "overview" && (
+          <>
+            <section className="grid gap-5 xl:grid-cols-[1.2fr_0.95fr]">
+              <ListingTrendChart data={trend} />
+              <CategoryBreakdownPanel categories={categories} total={listings.length} />
+            </section>
+            <section className="grid gap-5 xl:grid-cols-[1.5fr_0.8fr]">
+              <RecentListingsTable listings={listings.slice(0, 6)} />
+              <RecentUsersList users={users.slice(0, 6)} />
+            </section>
+            <section className="grid gap-5 xl:grid-cols-3">
+              <AdminSummaryPanel title="Orders Overview" icon={<ShoppingCart className="h-5 w-5" />} rows={[
+                ["Total Orders", totalOrders.toLocaleString("en-GB")],
+                ["Completed", completedOrders.toLocaleString("en-GB")],
+                ["Pending", pendingOrders.toLocaleString("en-GB")],
+              ]} />
+              <AdminSummaryPanel title="Revenue Overview" icon={<PoundSterling className="h-5 w-5" />} rows={[
+                ["Paid revenue", formatMetricMoney(paidRevenue)],
+                ["Source", "Paid orders table"],
+                ["Unpaid orders", String(Math.max(orders.length - paidOrders(orders).length, 0))],
+              ]} />
+              <AdminSummaryPanel title="System Overview" icon={<BarChart3 className="h-5 w-5" />} rows={[
+                ["Admin access", "Protected"],
+                ["Database", "Connected for loaded panels"],
+                ["Pending listings", pendingListings.toLocaleString("en-GB")],
+                ["Monitoring", "Not configured"],
+              ]} />
+            </section>
+          </>
+        )}
+
+        {selectedTab === "listings" && (
+          <ListingsPanel
+            listings={listings}
+            title="Listings"
+            listingFeatureControlsReady={listingFeatureControlsReady}
+            listingUrgentControlsReady={listingUrgentControlsReady}
+          />
+        )}
+        {selectedTab === "users" && <UsersPanel users={users} adminEmail={adminEmail} adminId={adminId} />}
+        {selectedTab === "orders" && <OrdersPanel orders={orders} />}
+        {selectedTab === "verification" && (
+          <section className="grid gap-5 xl:grid-cols-[1fr_1fr]">
+            <UsersPanel users={users} adminEmail={adminEmail} adminId={adminId} compact />
+            <VerificationPanel verifications={verifications} users={users} />
+          </section>
+        )}
+        {selectedTab === "settings" && (
+          <section className="grid gap-5">
+            <PaymentSettingsPanel settings={paymentSettings} sellerPlans={sellerPlans} adminRole={adminRole} adminEmail={adminEmail} />
+            <SettingsPanel settings={settings} />
+          </section>
+        )}
+        {selectedTab === "audit" && <AuditPanel auditLogs={auditLogs} />}
+
+        {selectedTab === "overview" && (
+          <section className="grid gap-5 xl:grid-cols-2">
+            <PaymentStatusPanel settings={paymentSettings} sellerPlans={sellerPlans} />
+            <AuditPanel auditLogs={auditLogs.slice(0, 8)} compact />
+          </section>
+        )}
+
+            <footer className="flex flex-wrap gap-3 pb-6 text-sm font-black text-white/70">
+              <Link href="/admin/trust" className="rounded-2xl border border-white/10 bg-white/8 px-4 py-2">Trust admin</Link>
+              <Link href="/account" className="rounded-2xl border border-white/10 bg-white/8 px-4 py-2">Account</Link>
+              <Link href="/" className="rounded-2xl border border-white/10 bg-white/8 px-4 py-2">Home</Link>
+            </footer>
+          </div>
+          <MobileAdminNav selectedTab={selectedTab} />
+        </div>
+      </div>
+    </main>
+  )
+}
+
+function AdminMetricCard({
+  label,
+  value,
+  icon,
+  tone,
+  helper,
+  href,
+}: {
+  label: string
+  value: string
+  icon: ReactNode
+  tone: "blue" | "green" | "orange" | "purple" | "cyan"
+  helper: string
+  href: string
+}) {
+  const tones = {
+    blue: "from-blue-500/20 to-blue-500/5 text-blue-100",
+    green: "from-emerald-500/20 to-emerald-500/5 text-emerald-100",
+    orange: "from-[#FF6B00]/25 to-[#FF6B00]/5 text-orange-100",
+    purple: "from-violet-500/20 to-violet-500/5 text-violet-100",
+    cyan: "from-cyan-500/20 to-cyan-500/5 text-cyan-100",
+  }
+
+  return (
+    <Link href={href} className="rounded-3xl border border-white/10 bg-[#062747]/85 p-4 shadow-xl shadow-black/15 transition hover:-translate-y-0.5 hover:border-[#FF6B00]/45">
+      <div className="flex items-start justify-between gap-3">
+        <span className={`grid h-12 w-12 place-items-center rounded-2xl bg-gradient-to-br ${tones[tone]}`}>
+          {icon}
+        </span>
+        <span className="text-xs font-black text-emerald-200">Current</span>
+      </div>
+      <p className="mt-4 text-xs font-black uppercase tracking-[0.14em] text-white/50">{label}</p>
+      <p className="mt-1 text-2xl font-black tracking-[-0.03em] text-white">{value}</p>
+      <p className="mt-1 text-xs font-bold text-white/45">{helper}</p>
+    </Link>
+  )
+}
+
+function ListingTrendChart({ data }: { data: Array<{ label: string; newCount: number; activeCount: number }> }) {
+  const maxValue = Math.max(1, ...data.map((item) => Math.max(item.newCount, item.activeCount)))
+
+  return (
+    <Panel title="Listings Overview" icon={<BarChart3 className="h-5 w-5" />}>
+      {data.every((item) => item.newCount === 0 && item.activeCount === 0) ? (
+        <EmptyState text="Listing trend data is not available yet." />
+      ) : (
+        <div className="space-y-4">
+          <div className="flex h-64 items-end gap-3 rounded-3xl border border-white/10 bg-[#001A35]/55 p-4">
+            {data.map((item) => (
+              <div key={item.label} className="flex min-w-0 flex-1 flex-col items-center gap-2">
+                <div className="flex h-44 w-full items-end justify-center gap-1">
+                  <span
+                    className="w-3 rounded-t-full bg-[#FF6B00]"
+                    style={{ height: `${Math.max(4, (item.newCount / maxValue) * 100)}%` }}
+                    title={`${item.newCount} new listings`}
+                  />
+                  <span
+                    className="w-3 rounded-t-full bg-blue-400"
+                    style={{ height: `${Math.max(4, (item.activeCount / maxValue) * 100)}%` }}
+                    title={`${item.activeCount} active listings`}
+                  />
+                </div>
+                <span className="truncate text-[10px] font-bold text-white/45">{item.label}</span>
+              </div>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-3 text-xs font-black text-white/65">
+            <span className="inline-flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-[#FF6B00]" /> New listings</span>
+            <span className="inline-flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-blue-400" /> Active listings</span>
+          </div>
+        </div>
+      )}
+    </Panel>
+  )
+}
+
+function CategoryBreakdownPanel({ categories, total }: { categories: Array<{ label: string; value: number }>; total: number }) {
+  return (
+    <Panel title="Listings by Category" icon={<PieChart className="h-5 w-5" />}>
+      {categories.length === 0 ? (
+        <EmptyState text="No listing category data yet." />
+      ) : (
+        <div className="space-y-4">
+          <div className="mx-auto grid h-40 w-40 place-items-center rounded-full border-[24px] border-[#FF6B00]/80 bg-[#001A35] shadow-inner shadow-black/30">
+            <div className="text-center">
+              <p className="text-3xl font-black">{total}</p>
+              <p className="text-xs font-bold text-white/50">loaded</p>
+            </div>
+          </div>
+          <div className="space-y-2">
+            {categories.map((category, index) => (
+              <div key={category.label} className="grid grid-cols-[1fr_auto] items-center gap-3 text-sm">
+                <div className="min-w-0">
+                  <p className="truncate font-bold text-white/82">{category.label}</p>
+                  <div className="mt-1 h-2 overflow-hidden rounded-full bg-white/10">
+                    <div
+                      className={index === 0 ? "h-full rounded-full bg-[#FF6B00]" : "h-full rounded-full bg-blue-400"}
+                      style={{ width: `${Math.max(6, (category.value / Math.max(total, 1)) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+                <span className="font-black text-white">{category.value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </Panel>
+  )
+}
+
+function RecentListingsTable({ listings }: { listings: AdminListing[] }) {
+  return (
+    <Panel title="Recent Listings" icon={<ClipboardList className="h-5 w-5" />}>
+      {listings.length === 0 ? (
+        <EmptyState text="No recent listings found." />
+      ) : (
+        <div className="overflow-hidden rounded-3xl border border-white/10">
+          {listings.map((listing) => (
+            <Link key={listing.id} href={`/listing?id=${encodeURIComponent(listing.id)}`} className="grid gap-3 border-b border-white/10 bg-[#062747]/60 p-3 last:border-b-0 sm:grid-cols-[64px_1fr_auto] sm:items-center">
+              <div className="h-16 w-16 overflow-hidden rounded-2xl bg-white/8">
+                {listingImage(listing) ? <img src={listingImage(listing)} alt={listing.title || "Listing"} className="h-full w-full object-cover" /> : null}
+              </div>
+              <div className="min-w-0">
+                <p className="truncate font-black">{listing.title || "Untitled listing"}</p>
+                <p className="mt-1 text-xs font-semibold text-white/50">{listing.category || "No category"} • {listing.seller_email || "Seller"}</p>
+              </div>
+              <div className="flex items-center gap-2 sm:justify-end">
+                <span className="font-black text-[#FF9A4A]">{formatMoney(listing.price)}</span>
+                <Badge label={listing.status || "status"} orange={String(listing.status || "").toLowerCase() === "live"} />
+              </div>
+            </Link>
+          ))}
+          <Link href="/admin?tab=listings" className="block bg-white/[0.04] px-4 py-3 text-center text-sm font-black text-white">
+            View all listings
+          </Link>
+        </div>
+      )}
+    </Panel>
+  )
+}
+
+function RecentUsersList({ users }: { users: AdminUser[] }) {
+  return (
+    <Panel title="Recent Users" icon={<Users className="h-5 w-5" />}>
+      {users.length === 0 ? (
+        <EmptyState text="No recent users found." />
+      ) : (
+        <div className="space-y-2">
+          {users.map((user) => (
+            <Link key={user.id} href={`/admin?tab=users#user-${user.id}`} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-[#062747]/60 p-3">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#FF6B00]/20 text-sm font-black text-orange-100">
+                {userName(user).slice(0, 2).toUpperCase()}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-black text-white">{userName(user)}</span>
+                <span className="block truncate text-xs font-semibold text-white/45">{user.email || "No email"}</span>
+              </span>
+              <span className="text-xs font-bold text-white/45">{formatDate(user.created_at)}</span>
+            </Link>
+          ))}
+        </div>
+      )}
+    </Panel>
+  )
+}
+
+function AdminSummaryPanel({ title, icon, rows }: { title: string; icon: ReactNode; rows: Array<[string, string]> }) {
+  return (
+    <Panel title={title} icon={icon}>
+      <div className="space-y-2">
+        {rows.map(([label, value]) => (
+          <div key={label} className="flex items-center justify-between rounded-2xl border border-white/10 bg-[#062747]/60 px-4 py-3">
+            <span className="text-sm font-semibold text-white/55">{label}</span>
+            <span className="font-black text-white">{value}</span>
+          </div>
+        ))}
+      </div>
+    </Panel>
+  )
+}
+
+function MobileAdminNav({ selectedTab }: { selectedTab: AdminTab }) {
+  const items = TABS.slice(0, 4)
+
+  return (
+    <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-white/10 bg-[#001A35]/95 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur lg:hidden">
+      <div className="mx-auto grid max-w-md grid-cols-4 gap-1">
+        {items.map((tab) => (
+          <Link key={tab.key} href={tab.href} className={`flex flex-col items-center gap-1 rounded-2xl px-2 py-2 text-[10px] font-black ${selectedTab === tab.key ? "text-[#FF6B00]" : "text-white/58"}`}>
+            {tab.icon}
+            <span>{tab.label === "Overview" ? "Dashboard" : tab.label}</span>
+          </Link>
+        ))}
+      </div>
+    </nav>
+  )
+}
+
+function ListingsPanel({
+  listings,
+  title,
+  listingFeatureControlsReady,
+  listingUrgentControlsReady,
+}: {
+  listings: AdminListing[]
+  title: string
+  listingFeatureControlsReady: boolean
+  listingUrgentControlsReady: boolean
+}) {
+  return (
+    <Panel title={title} icon={<ClipboardList className="h-5 w-5" />}>
+      <div className="space-y-3">
+        {listings.length === 0 ? (
+          <EmptyState text="No listings found." />
+        ) : (
+          listings.map((listing) => (
+            <ListingCard
+              key={listing.id}
+              listing={listing}
+              listingFeatureControlsReady={listingFeatureControlsReady}
+              listingUrgentControlsReady={listingUrgentControlsReady}
+            />
+          ))
+        )}
+      </div>
+    </Panel>
+  )
+}
+
+function ListingCard({
+  listing,
+  listingFeatureControlsReady,
+  listingUrgentControlsReady,
+}: {
+  listing: AdminListing
+  listingFeatureControlsReady: boolean
+  listingUrgentControlsReady: boolean
+}) {
+  const image = listingImage(listing)
+  const featured = Boolean(listing.featured || listing.is_featured)
+  const urgent = Boolean(listing.urgent || listing.is_urgent || listing.featured_type === "urgent")
+  const publicHidden = ["hidden", "paused", "removed", "draft", "expired"].includes(String(listing.status || "").toLowerCase())
+
+  return (
+    <article className="rounded-3xl border border-white/10 bg-[#002E5D]/45 p-4">
+      <div className="grid gap-4 md:grid-cols-[92px_1fr]">
+        <div className="h-24 overflow-hidden rounded-2xl border border-white/10 bg-white/8">
+          {image ? <img src={image} alt={listing.title || "Listing"} className="h-full w-full object-cover" /> : <div className="grid h-full place-items-center text-xs font-black text-white/45">No image</div>}
+        </div>
+        <div className="min-w-0">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <p className="truncate text-base font-black">{listing.title || "Untitled listing"}</p>
+              <p className="mt-1 text-sm text-white/55">
+                {formatMoney(listing.price)} • {listingLocation(listing)} • {formatDate(listing.created_at)}
+              </p>
+              <p className="mt-1 text-xs text-white/45">
+                {listing.category || "No category"} {listing.subcategory ? `• ${listing.subcategory}` : ""} {listing.seller_email ? `• ${listing.seller_email}` : ""}
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <Badge label={listing.status || "no status"} />
+                {featured && <Badge label="Featured" orange />}
+                {urgent && <Badge label="Urgent" orange />}
+                {publicHidden && <Badge label="Hidden from public" />}
+              </div>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 lg:min-w-[260px]">
+              <Link href={`/listing?id=${encodeURIComponent(listing.id)}`} className="rounded-2xl border border-white/10 bg-white/8 px-3 py-2 text-center text-xs font-black">
+                View listing
+              </Link>
+              <button disabled className="cursor-not-allowed rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-black text-white/45">
+                Edit route missing
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+            <StatusButton listingId={listing.id} status="live" label="Mark live" icon={<CheckCircle2 className="h-4 w-4" />} />
+            <StatusButton listingId={listing.id} status="sold" label="Mark sold" icon={<ShoppingCart className="h-4 w-4" />} />
+            <StatusButton listingId={listing.id} status="paused" label="Pause" icon={<PauseCircle className="h-4 w-4" />} />
+            <StatusButton listingId={listing.id} status="removed" label="Remove" icon={<Trash2 className="h-4 w-4" />} danger />
+            <StatusButton listingId={listing.id} status={publicHidden ? "live" : "hidden"} label={publicHidden ? "Show public" : "Hide from public"} icon={publicHidden ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />} />
+            {listingFeatureControlsReady ? (
+              <form action={toggleListingFeatured}>
+                <input type="hidden" name="listing_id" value={listing.id} />
+                <input type="hidden" name="featured" value={featured ? "false" : "true"} />
+                <button className={ADMIN_ACTION_BUTTON}>
+                  <Star className="h-4 w-4" />
+                  {featured ? "Unfeature" : "Feature"}
+                </button>
+              </form>
+            ) : (
+              <button disabled className="inline-flex min-h-11 w-full cursor-not-allowed items-center justify-center gap-2 rounded-2xl border border-amber-300/20 bg-amber-400/10 px-3 py-2 text-sm font-black text-amber-100/75">
+                <Star className="h-4 w-4" />
+                Run featured SQL
+              </button>
+            )}
+            {listingUrgentControlsReady ? (
+              <form action={toggleListingUrgent}>
+                <input type="hidden" name="listing_id" value={listing.id} />
+                <input type="hidden" name="urgent" value={urgent ? "false" : "true"} />
+                <button className={ADMIN_ACTION_BUTTON}>
+                  <Activity className="h-4 w-4" />
+                  {urgent ? "Not urgent" : "Urgent"}
+                </button>
+              </form>
+            ) : (
+              <button disabled className="inline-flex min-h-11 w-full cursor-not-allowed items-center justify-center gap-2 rounded-2xl border border-amber-300/20 bg-amber-400/10 px-3 py-2 text-sm font-black text-amber-100/75">
+                <Activity className="h-4 w-4" />
+                Run urgent SQL
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </article>
+  )
+}
+
+function StatusButton({ listingId, status, label, icon, danger = false }: { listingId: string; status: string; label: string; icon: ReactNode; danger?: boolean }) {
+  return (
+    <form action={updateListingStatus}>
+      <input type="hidden" name="listing_id" value={listingId} />
+      <input type="hidden" name="status" value={status} />
+      <button className={`${ADMIN_ACTION_BUTTON} ${danger ? "border-red-300/30 bg-red-500/10 text-red-100" : ""}`}>
+        {icon}
+        {label}
+      </button>
+    </form>
+  )
+}
+
+function UsersPanel({ users, adminEmail, adminId, compact = false }: { users: AdminUser[]; adminEmail: string; adminId: string; compact?: boolean }) {
+  return (
+    <Panel title={compact ? "Users" : "Users & verification"} icon={<UserCheck className="h-5 w-5" />}>
+      <div className="space-y-3">
+        {users.length === 0 ? (
+          <EmptyState text="No users found." />
+        ) : (
+          users.map((user) => (
+            <UserCard key={user.id} user={user} adminEmail={adminEmail} adminId={adminId} compact={compact} />
+          ))
+        )}
+      </div>
+    </Panel>
+  )
+}
+
+function UserCard({ user, adminEmail, adminId, compact = false }: { user: AdminUser; adminEmail: string; adminId: string; compact?: boolean }) {
+  const verified = isUserVerified(user)
+  const protectedSuperAdmin = isProtectedSuperAdmin(user, adminEmail, adminId)
+
+  return (
+    <article id={`user-${user.id}`} className="rounded-3xl border border-white/10 bg-[#002E5D]/45 p-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div className="min-w-0">
+          <p className="truncate font-black">{userName(user)}</p>
+          <p className="mt-1 truncate text-sm text-white/55">{user.email || user.id}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Badge label={user.role || "buyer"} />
+            {verified ? <Badge label="Verified" orange /> : <Badge label="Not verified" />}
+            {user.email_verified || user.is_email_verified ? <Badge label="Email verified" orange /> : <Badge label="Email pending" />}
+            {user.phone_verified || user.is_phone_verified ? <Badge label="Phone verified" orange /> : <Badge label="Phone pending" />}
+            {protectedSuperAdmin && <Badge label="Protected super admin" orange />}
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2 text-xs font-bold text-white/58 md:min-w-[260px]">
+          <Info label="Business" value={user.business || "Not added"} />
+          <Info label="Created" value={formatDate(user.created_at)} />
+          <Info label="Active listings" value={String(user.active_listings_count || 0)} />
+          <Info label="User ID" value={user.id.slice(0, 8)} />
+        </div>
+      </div>
+
+      {!compact && (
+        <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+          <form action={updateUserRole} className="grid grid-cols-[1fr_auto] gap-2 md:col-span-2 xl:col-span-1">
+            <input type="hidden" name="user_id" value={user.id} />
+            <select
+              name="role"
+              defaultValue={user.role || "buyer"}
+              disabled={protectedSuperAdmin}
+              className="rounded-2xl border border-white/10 bg-[#001633] px-3 py-2 text-sm font-bold text-white disabled:opacity-45"
+            >
+              {USER_ROLES.map((role) => (
+                <option key={role} value={role}>{role}</option>
+              ))}
+            </select>
+            <button disabled={protectedSuperAdmin} className="rounded-2xl bg-[#FF6B00] px-4 py-2 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-45">
+              Role
+            </button>
+          </form>
+          <ToggleUserButton userId={user.id} verified={verified} label={verified ? "Mark unverified" : "Mark verified"} />
+          <ToggleVerificationButton userId={user.id} field="email_verified" verified={Boolean(user.email_verified || user.is_email_verified)} label={user.email_verified || user.is_email_verified ? "Email unverified" : "Email verified"} icon={<MailCheck className="h-4 w-4" />} />
+          <ToggleVerificationButton userId={user.id} field="phone_verified" verified={Boolean(user.phone_verified || user.is_phone_verified)} label={user.phone_verified || user.is_phone_verified ? "Phone unverified" : "Phone verified"} icon={<PhoneCall className="h-4 w-4" />} />
+          <Link href={`/admin?tab=listings&user=${encodeURIComponent(user.id)}`} className={ADMIN_ACTION_LINK}>
+            <ListChecks className="h-4 w-4" />
+            View user listings
+          </Link>
+          <details className="md:col-span-2 xl:col-span-3">
+            <summary className={`${ADMIN_ACTION_LINK} cursor-pointer list-none`}>
+              <UserCog className="h-4 w-4" />
+              View user profile/admin details
+            </summary>
+            <div className="mt-3 grid gap-2 md:grid-cols-2">
+              <Info label="Profile ID" value={user.id} />
+              <Info label="Email verified" value={user.email_verified || user.is_email_verified ? "Yes" : "No"} />
+              <Info label="Phone verified" value={user.phone_verified || user.is_phone_verified ? "Yes" : "No"} />
+              <Info label="Overall verified" value={isUserVerified(user) ? "Yes" : "No"} />
+            </div>
+          </details>
+        </div>
+      )}
+    </article>
+  )
+}
+
+function ToggleUserButton({ userId, verified, label }: { userId: string; verified: boolean; label: string }) {
+  return (
+    <form action={setUserVerified}>
+      <input type="hidden" name="user_id" value={userId} />
+      <input type="hidden" name="verified" value={verified ? "false" : "true"} />
+      <button className={ADMIN_ACTION_BUTTON}>
+        <BadgeCheck className="h-4 w-4" />
+        {label}
+      </button>
+    </form>
+  )
+}
+
+function ToggleVerificationButton({ userId, field, verified, label, icon }: { userId: string; field: string; verified: boolean; label: string; icon: ReactNode }) {
+  return (
+    <form action={setUserVerificationFlag}>
+      <input type="hidden" name="user_id" value={userId} />
+      <input type="hidden" name="field" value={field} />
+      <input type="hidden" name="verified" value={verified ? "false" : "true"} />
+      <button className={ADMIN_ACTION_BUTTON}>
+        {icon}
+        {label}
+      </button>
+    </form>
+  )
+}
+
+function OrdersPanel({ orders }: { orders: AdminOrder[] }) {
+  return (
+    <Panel title="Orders" icon={<ShoppingCart className="h-5 w-5" />}>
+      <div className="space-y-3">
+        {orders.length === 0 ? (
+          <EmptyState text="No orders found." />
+        ) : (
+          orders.map((order) => (
+            <article key={order.id} className="rounded-3xl border border-white/10 bg-[#002E5D]/45 p-4">
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <p className="font-black">{order.listing_title || order.item_title || "Order"}</p>
+                  <p className="mt-1 text-sm text-white/55">
+                    Total {formatMoney(order.total_price)} • Item {formatMoney(order.item_price)} • Delivery {formatMoney(order.delivery_price)}
+                  </p>
+                  <p className="mt-1 text-xs text-white/45">Created {formatDate(order.created_at)}</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Badge label={order.payment_status || "payment unknown"} orange />
+                  <Badge label={order.order_status || "order unknown"} />
+                  <Badge label={order.delivery_status || "delivery unknown"} />
+                </div>
+              </div>
+              <div className="mt-4 grid gap-2 md:grid-cols-2">
+                <Info label="Buyer" value={order.buyer_email || order.buyer_id || "Unknown"} />
+                <Info label="Seller" value={order.seller_email || order.seller_id || "Unknown"} />
+                <Info label="Listing ID" value={order.listing_id || "Missing"} />
+                <Info label="Stripe payment" value={order.stripe_payment_intent_id || order.stripe_session_id || "Not added"} />
+              </div>
+            </article>
+          ))
+        )}
+      </div>
+    </Panel>
+  )
+}
+
+function VerificationPanel({ verifications, users }: { verifications: AdminVerification[]; users: AdminUser[] }) {
+  const usersById = new Map(users.map((user) => [user.id, user]))
+
+  return (
+    <Panel title="Verification records" icon={<BadgeCheck className="h-5 w-5" />}>
+      <div className="space-y-3">
+        {verifications.length === 0 ? (
+          <EmptyState text="No verification records found." />
+        ) : (
+          verifications.map((verification, index) => {
+            const user = verification.user_id ? usersById.get(verification.user_id) : null
+            return (
+              <article key={verification.id || verification.user_id || `verification-${index}`} className="rounded-3xl border border-white/10 bg-[#002E5D]/45 p-4">
+                <p className="font-black">{user ? userName(user) : verification.user_id || "Verification"}</p>
+                <p className="mt-1 text-sm text-white/55">{user?.email || verification.phone || "No contact saved"}</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Badge label={verification.email_verified ? "Email verified" : "Email pending"} orange={Boolean(verification.email_verified)} />
+                  <Badge label={verification.phone_verified ? "Phone verified" : "Phone pending"} orange={Boolean(verification.phone_verified)} />
+                  <Badge label={`ID: ${verification.id_verification_status || "not started"}`} />
+                  <Badge label={`Business: ${verification.business_verification_status || "not started"}`} />
+                </div>
+              </article>
+            )
+          })
+        )}
+      </div>
+    </Panel>
+  )
+}
+
+function PaymentStatusPanel({ settings, sellerPlans }: { settings: AdminPaymentSettings; sellerPlans: AdminSellerPlan[] }) {
+  const packs = sellerPlans.filter((plan) => plan.type === "single_pack")
+  const subscriptions = sellerPlans.filter((plan) => plan.type === "subscription")
+
+  return (
+    <Panel title="Seller Payments" icon={<PoundSterling className="h-5 w-5" />}>
+      <div className="rounded-3xl border border-[#FF6B00]/25 bg-[#FF6B00]/10 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xl font-black">{paymentStatusLabel(settings)}</p>
+            <p className="mt-1 text-sm font-bold text-white/60">
+              {settings.free_listing_mode
+                ? `Free listing mode active. First ${settings.free_listing_limit} listings are free.`
+                : "Free listing mode is off."}
+            </p>
+          </div>
+          <Badge label={settings.currency} orange />
+        </div>
+      </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div className="rounded-3xl border border-white/10 bg-[#002E5D]/45 p-4">
+          <p className="text-xs font-black uppercase tracking-[0.2em] text-white/45">Listing packs</p>
+          <p className="mt-2 text-2xl font-black">{settings.listing_packs_enabled ? "Enabled" : "Off"}</p>
+          <p className="mt-2 text-sm font-bold text-white/55">
+            {packs.map((plan) => `${plan.name} ${formatPlanPrice(plan)}`).join(" • ") || "No plans seeded yet"}
+          </p>
+        </div>
+        <div className="rounded-3xl border border-white/10 bg-[#002E5D]/45 p-4">
+          <p className="text-xs font-black uppercase tracking-[0.2em] text-white/45">Monthly plans</p>
+          <p className="mt-2 text-2xl font-black">{settings.subscriptions_enabled ? "Enabled" : "Off"}</p>
+          <p className="mt-2 text-sm font-bold text-white/55">
+            {subscriptions.map((plan) => `${plan.name} ${formatPlanPrice(plan)}`).join(" • ") || "No subscriptions seeded yet"}
+          </p>
+        </div>
+      </div>
+      <Link href="/admin?tab=settings" className="mt-4 inline-flex w-full items-center justify-center rounded-2xl border border-white/10 bg-white/8 px-4 py-3 text-sm font-black text-white">
+        Manage payment settings
+      </Link>
+    </Panel>
+  )
+}
+
+function PaymentSwitch({
+  name,
+  label,
+  checked,
+  description,
+}: {
+  name: keyof AdminPaymentSettings
+  label: string
+  checked: boolean
+  description: string
+}) {
+  return (
+    <label className="flex items-start justify-between gap-4 rounded-3xl border border-white/10 bg-[#002E5D]/45 p-4">
+      <span>
+        <span className="block font-black">{label}</span>
+        <span className="mt-1 block text-sm font-semibold leading-relaxed text-white/55">{description}</span>
+      </span>
+      <span className="relative mt-1 inline-flex h-8 w-14 shrink-0 items-center rounded-full bg-white/12 p-1">
+        <input name={name} type="checkbox" defaultChecked={checked} className="peer sr-only" />
+        <span className="h-6 w-6 rounded-full bg-white transition peer-checked:translate-x-6 peer-checked:bg-[#FF6B00]" />
+      </span>
+    </label>
+  )
+}
+
+function PaymentSettingsPanel({
+  settings,
+  sellerPlans,
+  adminRole,
+  adminEmail,
+}: {
+  settings: AdminPaymentSettings
+  sellerPlans: AdminSellerPlan[]
+  adminRole: string
+  adminEmail: string
+}) {
+  const isSuperAdmin = adminRole === "super_admin" || adminEmail.toLowerCase() === PROTECTED_SUPER_ADMIN_EMAIL
+  const packs = sellerPlans.filter((plan) => plan.type === "single_pack")
+  const subscriptions = sellerPlans.filter((plan) => plan.type === "subscription")
+
+  return (
+    <Panel title="Payment Settings" icon={<Power className="h-5 w-5" />}>
+      <div className="mb-4 rounded-3xl border border-[#FF6B00]/25 bg-[#FF6B00]/10 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-2xl font-black">{paymentStatusLabel(settings)}</p>
+            <p className="mt-1 text-sm font-bold text-orange-100">
+              {settings.payments_enabled
+                ? "Sellers may need a free allowance, listing pack or monthly plan before publishing."
+                : "Payments are currently disabled — free listing mode is active."}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Badge label={settings.currency} orange />
+            {settings.free_listing_mode && <Badge label={`First ${settings.free_listing_limit} free`} orange />}
+          </div>
+        </div>
+      </div>
+
+      <form action={updatePaymentSettings} className="space-y-4">
+        <fieldset disabled={!isSuperAdmin} className="space-y-4 disabled:opacity-60">
+          <div className="grid gap-3 lg:grid-cols-2">
+            <PaymentSwitch
+              name="payments_enabled"
+              label="Enable payments"
+              checked={settings.payments_enabled}
+              description="When off, sellers can publish listings without Stripe checkout."
+            />
+            <PaymentSwitch
+              name="free_listing_mode"
+              label="Enable free listing mode"
+              checked={settings.free_listing_mode}
+              description="Use the free launch allowance before paid packs are required."
+            />
+            <PaymentSwitch
+              name="listing_packs_enabled"
+              label="Enable listing packs"
+              checked={settings.listing_packs_enabled}
+              description="Show one-off listing packs when payment is required."
+            />
+            <PaymentSwitch
+              name="subscriptions_enabled"
+              label="Enable monthly plans"
+              checked={settings.subscriptions_enabled}
+              description="Show recurring seller plans when payment is required."
+            />
+            <PaymentSwitch
+              name="featured_boosts_enabled"
+              label="Enable featured listing boost payments"
+              checked={settings.featured_boosts_enabled}
+              description="Allow paid featured boosts once the Stripe boost flow is ready."
+            />
+            <PaymentSwitch
+              name="test_mode"
+              label="Enable test mode"
+              checked={settings.test_mode}
+              description="Keep payment status visibly in testing before going fully live."
+            />
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="rounded-3xl border border-white/10 bg-[#002E5D]/45 p-4">
+              <span className="block text-sm font-black">Free listing limit</span>
+              <input
+                name="free_listing_limit"
+                type="number"
+                min="0"
+                defaultValue={settings.free_listing_limit}
+                className="mt-2 w-full rounded-2xl border border-white/10 bg-[#001633] px-3 py-3 text-sm font-bold text-white"
+              />
+            </label>
+            <label className="rounded-3xl border border-white/10 bg-[#002E5D]/45 p-4">
+              <span className="block text-sm font-black">Currency</span>
+              <select
+                name="currency"
+                defaultValue={settings.currency || "GBP"}
+                className="mt-2 w-full rounded-2xl border border-white/10 bg-[#001633] px-3 py-3 text-sm font-bold text-white"
+              >
+                <option value="GBP">GBP</option>
+              </select>
+            </label>
+          </div>
+        </fieldset>
+
+        {!isSuperAdmin && (
+          <p className="rounded-2xl border border-amber-300/25 bg-amber-400/10 px-4 py-3 text-sm font-bold text-amber-50">
+            Only the super admin can edit payment settings. Current settings are visible for review.
+          </p>
+        )}
+
+        <button
+          disabled={!isSuperAdmin}
+          className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#FF6B00] px-4 py-3 text-sm font-black text-white shadow-lg shadow-[#FF6B00]/20 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <Save className="h-4 w-4" />
+          Save payment settings
+        </button>
+      </form>
+
+      <div className="mt-5 grid gap-3 lg:grid-cols-2">
+        <div className="rounded-3xl border border-white/10 bg-[#002E5D]/45 p-4">
+          <p className="font-black">One-off listing packs</p>
+          <div className="mt-3 space-y-2">
+            {packs.map((plan) => (
+              <div key={plan.name} className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2 text-sm font-bold">
+                <span>{plan.name}</span>
+                <span className="text-[#FFB15A]">{formatPlanPrice(plan)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="rounded-3xl border border-white/10 bg-[#002E5D]/45 p-4">
+          <p className="font-black">Monthly plans</p>
+          <div className="mt-3 space-y-2">
+            {subscriptions.map((plan) => (
+              <div key={plan.name} className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2 text-sm font-bold">
+                <span>{plan.name}</span>
+                <span className="text-[#FFB15A]">{formatPlanPrice(plan)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </Panel>
+  )
+}
+
+function SettingsPanel({ settings, compact = false }: { settings: AdminSiteSetting[]; compact?: boolean }) {
+  return (
+    <Panel title="Site Settings" icon={<Settings className="h-5 w-5" />}>
+      <p className="mb-4 rounded-2xl border border-[#FF6B00]/20 bg-[#FF6B00]/10 px-4 py-3 text-sm font-bold text-orange-100">
+        These settings control public website messages, launch offers and support details. Seller payments are managed in the payment settings panel above.
+      </p>
+      <div className="grid gap-3 lg:grid-cols-2">
+        {settings.map((setting) => {
+          const config = SETTING_CONFIG[setting.key] || {
+            title: setting.key.replaceAll("_", " "),
+            inputLabel: "Setting value",
+            placeholder: "",
+            notePlaceholder: "Internal note only",
+            valueType: "text" as const,
+            connected: false,
+          }
+          const value = settingText(setting.value)
+
+          return (
+            <form key={setting.key} action={updateSiteSetting} className="rounded-3xl border border-white/10 bg-[#002E5D]/45 p-4">
+              <input type="hidden" name="key" value={setting.key} />
+              <input type="hidden" name="value_type" value={config.valueType} />
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="font-black">{config.title}</p>
+                  <p className="mt-1 text-xs font-bold text-white/45">{config.inputLabel}</p>
+                </div>
+                {!config.connected && <Badge label="Saved only — not connected to homepage yet" />}
+              </div>
+
+              {config.valueType === "boolean" ? (
+                <>
+                  <select
+                    name="value"
+                    defaultValue={value === "true" || value === "on" ? "true" : "false"}
+                    className="w-full rounded-2xl border border-white/10 bg-[#001633] px-3 py-3 text-sm font-bold text-white"
+                  >
+                    <option value="false">Off</option>
+                    <option value="true">On</option>
+                  </select>
+                  <p className="mt-2 text-xs font-bold text-white/50">Temporarily hide public selling/listing actions while testing.</p>
+                </>
+              ) : (
+                <input
+                  name="value"
+                  type={config.valueType === "number" ? "number" : "text"}
+                  step={config.valueType === "number" ? "0.01" : undefined}
+                  defaultValue={value}
+                  className="w-full rounded-2xl border border-white/10 bg-[#001633] px-3 py-3 text-sm font-bold text-white"
+                  placeholder={config.placeholder}
+                />
+              )}
+
+              {!compact && (
+                <input
+                  name="description"
+                  defaultValue={setting.description || ""}
+                  className="mt-2 w-full rounded-2xl border border-white/10 bg-[#001633] px-3 py-3 text-sm font-bold text-white"
+                  placeholder={config.notePlaceholder}
+                />
+              )}
+              <button className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#FF6B00] px-4 py-3 text-sm font-black text-white">
+                <Save className="h-4 w-4" />
+                Save
+              </button>
+            </form>
+          )
+        })}
+      </div>
+    </Panel>
+  )
+}
+
+function AuditPanel({ auditLogs, compact = false }: { auditLogs: AdminAuditLog[]; compact?: boolean }) {
+  return (
+    <Panel title="Audit Log" icon={<ShieldCheck className="h-5 w-5" />}>
+      {auditLogs.length === 0 ? (
+        <EmptyState text="No audit actions yet." />
+      ) : (
+        <div className="space-y-3">
+          {auditLogs.slice(0, compact ? 8 : 50).map((log) => (
+            <div key={log.id} className="rounded-2xl border border-white/10 bg-[#002E5D]/45 p-4">
+              <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <p className="font-black">{log.action || "Admin action"}</p>
+                  <p className="mt-1 text-sm text-white/55">
+                    {log.target_table || log.entity_type || "entity"} {log.target_id || log.entity_id ? `• ${log.target_id || log.entity_id}` : ""} • {formatDate(log.created_at)}
+                  </p>
+                </div>
+                <Badge label={log.admin_email || log.admin_user_id || "Admin"} orange />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Panel>
+  )
+}
+
+function Panel({ title, icon, children }: { title: string; icon: ReactNode; children: ReactNode }) {
+  return (
+    <section className="rounded-[2rem] border border-white/10 bg-white/[0.07] p-4 shadow-2xl shadow-black/15">
+      <div className="mb-4 flex items-center gap-2 text-[#FF6B00]">
+        {icon}
+        <h3 className="text-lg font-black text-white">{title}</h3>
+      </div>
+      {children}
+    </section>
+  )
+}
+
+function Badge({ label, orange = false }: { label: string; orange?: boolean }) {
+  return (
+    <span className={`rounded-full px-3 py-1 text-[11px] font-black ${
+      orange ? "bg-[#FF6B00]/15 text-orange-100" : "bg-white/10 text-white/70"
+    }`}>
+      {label}
+    </span>
+  )
+}
+
+function Info({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
+      <p className="text-[10px] font-black uppercase tracking-wide text-white/40">{label}</p>
+      <p className="mt-1 truncate text-sm font-black text-white">{value}</p>
+    </div>
+  )
+}
+
+function EmptyState({ text }: { text: string }) {
+  return (
+    <div className="rounded-3xl border border-white/10 bg-white/5 p-5 text-sm font-bold text-white/55">
+      {text}
+    </div>
+  )
+}
