@@ -40,6 +40,12 @@ const SAFE_ARTICLE_TAGS = new Set([
   "pre",
   "span",
   "strong",
+  "table",
+  "tbody",
+  "td",
+  "th",
+  "thead",
+  "tr",
   "ul",
 ])
 

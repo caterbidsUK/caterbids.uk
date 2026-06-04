@@ -1,12 +1,36 @@
 import type { Metadata } from "next"
+import Image from "next/image"
 import Link from "next/link"
 import { notFound } from "next/navigation"
-import { ArrowLeft, ArrowRight, CalendarDays, ExternalLink, Tag } from "lucide-react"
+import {
+  ArrowLeft,
+  ArrowRight,
+  BookOpen,
+  Bot,
+  CalendarDays,
+  CheckCircle2,
+  ClipboardCheck,
+  ExternalLink,
+  Heart,
+  Mail,
+  MapPin,
+  MessageCircle,
+  Search,
+  ShieldCheck,
+  Sparkles,
+  Star,
+  Tag,
+  Truck,
+  UserCheck,
+  Wrench,
+  Zap,
+} from "lucide-react"
 import { BlogFooter, BlogHeader } from "@/components/BlogChrome"
 import {
   blogPostUrl,
   formatBlogDate,
   markdownToArticleHtml,
+  plainTextFromArticle,
   sanitizeArticleHtml,
   type BlogPost,
 } from "@/lib/blog"
@@ -16,6 +40,14 @@ export const dynamic = "force-dynamic"
 
 type BlogPostPageProps = {
   params: Promise<{ slug: string }>
+}
+
+function isDevelopment() {
+  return process.env.NODE_ENV === "development"
+}
+
+function isPublicPost(post: BlogPost) {
+  return isDevelopment() || post.category?.toLowerCase() !== "test"
 }
 
 async function loadPost(slug: string) {
@@ -33,7 +65,8 @@ async function loadPost(slug: string) {
       return null
     }
 
-    return data as BlogPost | null
+    const post = data as BlogPost | null
+    return post && isPublicPost(post) ? post : null
   } catch (error) {
     console.warn("Blog post data unavailable:", error)
     return null
@@ -50,6 +83,11 @@ function isSafeSourceUrl(value: string | null) {
   }
 }
 
+function readingTime(post: BlogPost) {
+  const words = plainTextFromArticle(post).split(/\s+/).filter(Boolean).length
+  return `${Math.max(2, Math.ceil(words / 210))} min read`
+}
+
 export async function generateMetadata({ params }: BlogPostPageProps): Promise<Metadata> {
   const { slug } = await params
   const post = await loadPost(slug)
@@ -62,7 +100,7 @@ export async function generateMetadata({ params }: BlogPostPageProps): Promise<M
   }
 
   const title = post.meta_title || post.title
-  const description = post.meta_description
+  const description = post.meta_description || plainTextFromArticle(post).slice(0, 155)
   const url = blogPostUrl(post.slug)
 
   return {
@@ -79,6 +117,7 @@ export async function generateMetadata({ params }: BlogPostPageProps): Promise<M
       type: "article",
       publishedTime: post.published_at || post.created_at,
       section: post.category,
+      images: ["/images/caterbids-hero-showroom.png"],
     },
   }
 }
@@ -91,88 +130,482 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
 
   const articleHtml = sanitizeArticleHtml(post.article_html || markdownToArticleHtml(post.article_markdown || ""))
   const sourceIsSafe = isSafeSourceUrl(post.source_url)
+  const excerpt = post.meta_description || plainTextFromArticle(post).slice(0, 180)
+  const postUrl = blogPostUrl(post.slug)
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    headline: post.title,
+    description: excerpt,
+    datePublished: post.published_at || post.created_at,
+    dateModified: post.updated_at || post.published_at || post.created_at,
+    author: {
+      "@type": "Organization",
+      name: "CaterBidsUK Team",
+    },
+    publisher: {
+      "@type": "Organization",
+      name: "CaterBidsUK",
+      logo: {
+        "@type": "ImageObject",
+        url: "https://www.caterbids.uk/brand/caterbids-logo.png",
+      },
+    },
+    image: "https://www.caterbids.uk/images/caterbids-hero-showroom.png",
+    mainEntityOfPage: postUrl,
+  }
 
   return (
-    <main className="min-h-screen bg-[#001A35] text-white">
+    <main className="min-h-screen bg-[#001B36] text-white">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <BlogHeader />
 
-      <article className="px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-4xl">
-          <Link
-            href="/blog"
-            className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/8 px-4 py-2 text-sm font-black text-white/76 transition hover:border-[#FF6B00]/55 hover:text-white focus:outline-none focus:ring-4 focus:ring-[#FF6B00]/25"
-          >
-            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-            Back to blog
-          </Link>
+      <article>
+        <ArticleHero post={post} excerpt={excerpt} postUrl={postUrl} />
 
-          <header className="mt-8 rounded-[2rem] border border-white/12 bg-[radial-gradient(circle_at_top_right,rgba(255,107,0,0.18),transparent_38%),linear-gradient(135deg,#062747,#082D50)] p-6 shadow-2xl sm:p-9">
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="inline-flex items-center gap-2 rounded-full border border-[#FF6B00]/40 bg-[#FF6B00]/12 px-3 py-2 text-xs font-black uppercase tracking-[0.14em] text-[#FFB37A]">
-                <Tag className="h-3.5 w-3.5" aria-hidden="true" />
-                {post.category}
-              </span>
-              <time
-                dateTime={post.published_at || post.created_at}
-                className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/8 px-3 py-2 text-xs font-bold text-white/60"
-              >
-                <CalendarDays className="h-3.5 w-3.5" aria-hidden="true" />
-                {formatBlogDate(post.published_at || post.created_at)}
-              </time>
+        <section className="px-4 py-10 sm:px-6 lg:px-8">
+          <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[minmax(0,1fr)_23rem]">
+            <div className="min-w-0">
+              <ProTipCallout />
+
+              <section
+                className="mt-6 rounded-[2rem] border border-[#D6E5F7] bg-[#F8FBFF] p-6 text-[#001A35] shadow-[0_24px_80px_rgba(0,0,0,0.2)] sm:p-9 [&_a]:font-black [&_a]:text-[#FF6B00] [&_blockquote]:my-7 [&_blockquote]:rounded-2xl [&_blockquote]:border-l-4 [&_blockquote]:border-[#FF6B00] [&_blockquote]:bg-[#FFF3EA] [&_blockquote]:px-5 [&_blockquote]:py-4 [&_blockquote]:font-semibold [&_code]:rounded-lg [&_code]:bg-slate-100 [&_code]:px-1.5 [&_h2]:relative [&_h2]:mt-10 [&_h2]:border-l-4 [&_h2]:border-[#FF6B00] [&_h2]:pl-4 [&_h2]:text-3xl [&_h2]:font-black [&_h2]:tracking-[-0.035em] [&_h3]:mt-8 [&_h3]:text-2xl [&_h3]:font-black [&_img]:my-6 [&_img]:rounded-2xl [&_img]:border [&_img]:border-slate-200 [&_li]:my-2 [&_ol]:my-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:my-5 [&_p]:text-base [&_p]:font-semibold [&_p]:leading-8 [&_pre]:overflow-x-auto [&_pre]:rounded-2xl [&_pre]:bg-slate-950 [&_pre]:p-4 [&_pre]:text-white [&_strong]:font-black [&_table]:my-7 [&_table]:w-full [&_table]:overflow-hidden [&_table]:rounded-2xl [&_table]:border [&_table]:border-slate-200 [&_td]:border-t [&_td]:border-slate-200 [&_td]:p-3 [&_th]:bg-[#EAF3FF] [&_th]:p-3 [&_th]:text-left [&_ul]:my-6 [&_ul]:list-disc [&_ul]:pl-6 [&_ul_li::marker]:text-[#FF6B00]"
+                dangerouslySetInnerHTML={{ __html: articleHtml || "<p>This article is being prepared.</p>" }}
+              />
+
+              <EnhancedArticleBlocks />
+
+              {sourceIsSafe && (
+                <section className="mt-6 rounded-[2rem] border border-white/12 bg-[#062747] p-5">
+                  <h2 className="text-sm font-black uppercase tracking-[0.2em] text-[#FF6B00]">Source</h2>
+                  <a
+                    href={post.source_url || "#"}
+                    target="_blank"
+                    rel="noopener noreferrer nofollow"
+                    className="mt-3 inline-flex items-center gap-2 text-base font-black text-white transition hover:text-[#FFB37A]"
+                  >
+                    {post.source_title || post.source_url}
+                    <ExternalLink className="h-4 w-4" aria-hidden="true" />
+                  </a>
+                </section>
+              )}
+
+              <BottomCta />
             </div>
-            <h1 className="mt-5 text-4xl font-black leading-[1.02] tracking-[-0.045em] text-white sm:text-6xl">
-              {post.title}
-            </h1>
-            <p className="mt-5 text-lg font-semibold leading-relaxed text-white/68">{post.meta_description}</p>
-          </header>
 
-          <section
-            className="mt-6 rounded-[2rem] border border-white/12 bg-white p-6 text-[#001A35] shadow-2xl sm:p-9 [&_a]:font-black [&_a]:text-[#FF6B00] [&_blockquote]:border-l-4 [&_blockquote]:border-[#FF6B00] [&_blockquote]:bg-[#FFF4EC] [&_blockquote]:px-5 [&_blockquote]:py-3 [&_blockquote]:font-semibold [&_code]:rounded-lg [&_code]:bg-slate-100 [&_code]:px-1.5 [&_h2]:mt-9 [&_h2]:text-3xl [&_h2]:font-black [&_h3]:mt-7 [&_h3]:text-2xl [&_h3]:font-black [&_img]:my-6 [&_img]:rounded-2xl [&_img]:border [&_img]:border-slate-200 [&_li]:my-2 [&_ol]:my-5 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:my-5 [&_p]:text-base [&_p]:font-semibold [&_p]:leading-8 [&_pre]:overflow-x-auto [&_pre]:rounded-2xl [&_pre]:bg-slate-950 [&_pre]:p-4 [&_pre]:text-white [&_strong]:font-black [&_ul]:my-5 [&_ul]:list-disc [&_ul]:pl-6"
-            dangerouslySetInnerHTML={{ __html: articleHtml || "<p>This article is being prepared.</p>" }}
-          />
-
-          {sourceIsSafe && (
-            <section className="mt-6 rounded-[2rem] border border-white/12 bg-[#062747] p-5">
-              <h2 className="text-sm font-black uppercase tracking-[0.2em] text-[#FF6B00]">Source</h2>
-              <a
-                href={post.source_url || "#"}
-                target="_blank"
-                rel="noopener noreferrer nofollow"
-                className="mt-3 inline-flex items-center gap-2 text-base font-black text-white transition hover:text-[#FFB37A]"
-              >
-                {post.source_title || post.source_url}
-                <ExternalLink className="h-4 w-4" aria-hidden="true" />
-              </a>
-            </section>
-          )}
-
-          <section className="mt-6 rounded-[2rem] border border-white/12 bg-[linear-gradient(135deg,#062747,#001A35)] p-6 shadow-2xl sm:p-8">
-            <h2 className="text-3xl font-black tracking-[-0.035em]">Buy, Sell & Save on Catering Equipment</h2>
-            <p className="mt-3 text-base font-semibold leading-relaxed text-white/68">
-              CaterBids.uk helps UK restaurants, cafes, takeaways, dealers and hospitality operators buy and sell
-              commercial catering equipment with confidence.
-            </p>
-            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-              <Link
-                href="/marketplace"
-                className="inline-flex min-h-14 items-center justify-center gap-3 rounded-2xl bg-[#FF6B00] px-6 text-sm font-black text-white transition hover:brightness-110 focus:outline-none focus:ring-4 focus:ring-[#FF6B00]/30"
-              >
-                Marketplace Opening Soon
-                <ArrowRight className="h-4 w-4" aria-hidden="true" />
-              </Link>
-              <Link
-                href="/#launch-list"
-                className="inline-flex min-h-14 items-center justify-center gap-3 rounded-2xl border border-white/18 bg-white/8 px-6 text-sm font-black text-white transition hover:border-[#FF6B00]/60 hover:bg-white/12 focus:outline-none focus:ring-4 focus:ring-white/15"
-              >
-                Seller Early Access
-                <ArrowRight className="h-4 w-4" aria-hidden="true" />
-              </Link>
-            </div>
-          </section>
-        </div>
+            <BlogSidebar />
+          </div>
+        </section>
       </article>
 
+      <TrustStrip />
       <BlogFooter />
     </main>
   )
+}
+
+function ArticleHero({ post, excerpt, postUrl }: { post: BlogPost; excerpt: string; postUrl: string }) {
+  const shareLinks = [
+    ["Facebook", `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(postUrl)}`],
+    ["X", `https://twitter.com/intent/tweet?url=${encodeURIComponent(postUrl)}&text=${encodeURIComponent(post.title)}`],
+    ["LinkedIn", `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(postUrl)}`],
+    ["Email", `mailto:?subject=${encodeURIComponent(post.title)}&body=${encodeURIComponent(postUrl)}`],
+  ] as const
+
+  return (
+    <header className="relative overflow-hidden border-b border-white/10 bg-[linear-gradient(135deg,#001B36,#002E5D_58%,#001326)] px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
+      <div className="absolute inset-y-0 right-0 hidden w-[46%] opacity-40 lg:block">
+        <Image
+          src="/images/caterbids-hero-showroom.png"
+          alt="Commercial kitchen equipment"
+          fill
+          className="object-cover"
+          priority
+        />
+        <div className="absolute inset-0 bg-[linear-gradient(90deg,#001B36,rgba(0,27,54,0.32),rgba(0,27,54,0.78))]" />
+      </div>
+
+      <div className="relative mx-auto max-w-7xl">
+        <Link
+          href="/blog"
+          className="inline-flex items-center gap-2 rounded-full border border-white/14 bg-white/8 px-4 py-2 text-sm font-black text-white/78 transition hover:border-[#FF6B00]/55 hover:text-white focus:outline-none focus:ring-4 focus:ring-[#FF6B00]/25"
+        >
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+          Back to blog
+        </Link>
+
+        <nav className="mt-7 flex flex-wrap items-center gap-2 text-xs font-bold text-white/58" aria-label="Breadcrumb">
+          <Link href="/" className="hover:text-[#FFB37A]">Home</Link>
+          <Chevron />
+          <Link href="/blog" className="hover:text-[#FFB37A]">Blog</Link>
+          <Chevron />
+          <Link href={`/blog?category=${encodeURIComponent(post.category)}`} className="hover:text-[#FFB37A]">
+            {post.category}
+          </Link>
+        </nav>
+
+        <div className="mt-5 max-w-4xl">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="inline-flex items-center gap-2 rounded-full border border-[#FF6B00]/40 bg-[#FF6B00]/12 px-3 py-2 text-xs font-black uppercase tracking-[0.14em] text-[#FFB37A]">
+              <Tag className="h-3.5 w-3.5" aria-hidden="true" />
+              {post.category}
+            </span>
+            <time
+              dateTime={post.published_at || post.created_at}
+              className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/8 px-3 py-2 text-xs font-bold text-white/68"
+            >
+              <CalendarDays className="h-3.5 w-3.5" aria-hidden="true" />
+              {formatBlogDate(post.published_at || post.created_at)}
+            </time>
+            <span className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/8 px-3 py-2 text-xs font-bold text-white/68">
+              <BookIcon />
+              {readingTime(post)}
+            </span>
+          </div>
+
+          <h1 className="mt-6 text-4xl font-black leading-[1.02] tracking-[-0.045em] text-white sm:text-6xl">
+            {post.title}
+          </h1>
+          <p className="mt-5 text-lg font-semibold leading-relaxed text-[#D5E0F0]">{excerpt}</p>
+
+          <div className="mt-7 flex flex-col gap-4 rounded-[1.75rem] border border-white/12 bg-white/8 p-4 backdrop-blur-md sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#FF6B00] text-white">
+                <UserCheck className="h-6 w-6" aria-hidden="true" />
+              </div>
+              <div>
+                <p className="text-sm font-black text-white">Written by CaterBidsUK Team</p>
+                <p className="text-xs font-semibold text-[#A7B5C9]">Catering Equipment Marketplace Specialists</p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {shareLinks.map(([label, href]) => (
+                <a
+                  key={label}
+                  href={href}
+                  target={label === "Email" ? undefined : "_blank"}
+                  rel={label === "Email" ? undefined : "noopener noreferrer"}
+                  className="rounded-xl border border-white/12 bg-white/8 px-3 py-2 text-xs font-black text-white/76 transition hover:border-[#FF6B00]/60 hover:text-[#FFB37A]"
+                >
+                  {label}
+                </a>
+              ))}
+              <button
+                type="button"
+                className="rounded-xl border border-white/12 bg-white/8 px-3 py-2 text-xs font-black text-white/76 transition hover:border-[#FF6B00]/60 hover:text-[#FFB37A]"
+              >
+                Copy link
+              </button>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 rounded-xl border border-white/12 bg-white/8 px-3 py-2 text-xs font-black text-white/76 transition hover:border-[#FF6B00]/60 hover:text-[#FFB37A]"
+              >
+                <Heart className="h-3.5 w-3.5" aria-hidden="true" />
+                Save Article
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+  )
+}
+
+function BlogSidebar() {
+  return (
+    <aside className="space-y-5 lg:sticky lg:top-24 lg:self-start" aria-label="Blog sidebar">
+      <section className="rounded-[1.75rem] border border-white/12 bg-[#062747] p-5 shadow-2xl">
+        <label htmlFor="sidebar-blog-search" className="sr-only">Search the blog</label>
+        <div className="flex min-h-12 items-center gap-3 rounded-2xl border border-white/12 bg-white px-4 text-[#001A35]">
+          <Search className="h-5 w-5 text-[#FF6B00]" aria-hidden="true" />
+          <input
+            id="sidebar-blog-search"
+            type="search"
+            placeholder="Search the blog..."
+            className="min-w-0 flex-1 bg-transparent text-sm font-bold outline-none placeholder:text-slate-400"
+          />
+        </div>
+      </section>
+
+      <section className="rounded-[1.75rem] border border-[#FF6B00]/28 bg-[radial-gradient(circle_at_top_right,rgba(255,107,0,0.24),transparent_38%),linear-gradient(135deg,#062747,#001A35)] p-5 shadow-2xl">
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#FF6B00] text-white">
+          <Bot className="h-6 w-6" aria-hidden="true" />
+        </div>
+        <h2 className="mt-4 text-2xl font-black">CaterBot AI Tools</h2>
+        <p className="mt-2 text-sm font-semibold leading-relaxed text-[#A7B5C9]">
+          Use AI to create better listings and sell faster.
+        </p>
+        <div className="mt-5 grid gap-3">
+          {[
+            { title: "Scan Spec Plate", text: "Extract model, power, dims & more", Icon: Wrench },
+            { title: "Equipment Valuation", text: "Get an instant market value", Icon: Zap },
+            { title: "Create Listing", text: "Let AI build your listing", Icon: ClipboardCheck },
+            { title: "Delivery Guide", text: "Find the best delivery option", Icon: Truck },
+          ].map(({ title, text, Icon }) => (
+            <Link
+              key={title}
+              href="/#launch-list"
+              className="flex gap-3 rounded-2xl border border-white/12 bg-white/8 p-3 transition hover:border-[#FF6B00]/55 hover:bg-white/12"
+            >
+              <Icon className="mt-0.5 h-5 w-5 shrink-0 text-[#FF6B00]" aria-hidden="true" />
+              <span>
+                <span className="block text-sm font-black text-white">{title}</span>
+                <span className="mt-1 block text-xs font-semibold leading-relaxed text-[#A7B5C9]">{text}</span>
+              </span>
+            </Link>
+          ))}
+        </div>
+        <Link
+          href="/#launch-list"
+          className="mt-5 inline-flex min-h-12 w-full items-center justify-center rounded-2xl bg-[#FF6B00] px-4 text-sm font-black text-white transition hover:brightness-110"
+        >
+          Try CaterBot AI
+        </Link>
+      </section>
+
+      <RelatedListingsCard />
+      <SidebarNewsletter />
+      <SidebarLinks title="Categories" items={["All Categories", "Seller Advice", "Buyer Advice", "Business Advice", "Industry Insights", "Equipment Guides", "Marketplace News"]} />
+      <SidebarTags />
+    </aside>
+  )
+}
+
+function RelatedListingsCard() {
+  const listings = [
+    ["Rational SCC WE 101 Combi Oven", "£4,250", "London"],
+    ["Foster Double Door Fridge", "£1,150", "Birmingham"],
+    ["Winterhalter UC-L Dishwasher", "£2,300", "Leeds"],
+  ]
+
+  return (
+    <section className="rounded-[1.75rem] border border-white/12 bg-[#062747] p-5 shadow-2xl">
+      <h2 className="text-lg font-black">Related Listings</h2>
+      <div className="mt-4 grid gap-3">
+        {listings.map(([title, price, location], index) => (
+          <Link
+            key={title}
+            href="/marketplace"
+            className="flex gap-3 rounded-2xl border border-white/10 bg-white/8 p-3 transition hover:border-[#FF6B00]/55"
+          >
+            <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-white">
+              <Image
+                src={index === 1 ? "/supplier-placeholders/fridge.jpg" : index === 2 ? "/supplier-placeholders/glasswasher.jpg" : "/supplier-placeholders/oven.jpg"}
+                alt=""
+                fill
+                className="object-cover"
+              />
+            </div>
+            <span className="min-w-0 flex-1">
+              <span className="line-clamp-2 text-sm font-black text-white">{title}</span>
+              <span className="mt-1 flex items-center justify-between gap-2 text-xs font-bold text-[#A7B5C9]">
+                <span className="text-[#FF6B00]">{price}</span>
+                <span className="inline-flex items-center gap-1">
+                  <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
+                  {location}
+                </span>
+              </span>
+            </span>
+            <Heart className="h-4 w-4 shrink-0 text-white/45" aria-hidden="true" />
+          </Link>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function SidebarNewsletter() {
+  return (
+    <section className="rounded-[1.75rem] border border-white/12 bg-[#F3F8FF] p-5 text-[#001A35] shadow-2xl">
+      <h2 className="text-xl font-black">Stay Updated</h2>
+      <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-600">
+        Get the latest tips, guides and market insights straight to your inbox.
+      </p>
+      <form className="mt-4 grid gap-3" action="/contact">
+        <label htmlFor="sidebar-newsletter-email" className="sr-only">Email address</label>
+        <input
+          id="sidebar-newsletter-email"
+          name="email"
+          type="email"
+          placeholder="Email address"
+          className="min-h-12 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-bold outline-none focus:border-[#FF6B00] focus:ring-4 focus:ring-[#FF6B00]/15"
+        />
+        <button type="submit" className="min-h-12 rounded-2xl bg-[#FF6B00] px-4 text-sm font-black text-white">
+          Subscribe
+        </button>
+      </form>
+    </section>
+  )
+}
+
+function SidebarLinks({ title, items }: { title: string; items: string[] }) {
+  return (
+    <section className="rounded-[1.75rem] border border-white/12 bg-[#062747] p-5 shadow-2xl">
+      <h2 className="text-lg font-black">{title}</h2>
+      <div className="mt-4 grid gap-2">
+        {items.map((item) => (
+          <Link key={item} href={item === "All Categories" ? "/blog" : `/blog?category=${encodeURIComponent(item)}`} className="flex items-center justify-between rounded-2xl px-3 py-2 text-sm font-bold text-[#A7B5C9] transition hover:bg-white/8 hover:text-white">
+            {item}
+            <ArrowRight className="h-4 w-4 text-[#FF6B00]" aria-hidden="true" />
+          </Link>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function SidebarTags() {
+  const tags = ["selling tips", "buying guide", "catering equipment", "restaurant", "takeaway", "combi oven", "refrigeration", "dishwashers", "valuation", "delivery", "equipment care"]
+  return (
+    <section className="rounded-[1.75rem] border border-white/12 bg-[#062747] p-5 shadow-2xl">
+      <h2 className="text-lg font-black">Popular Tags</h2>
+      <div className="mt-4 flex flex-wrap gap-2">
+        {tags.map((tag) => (
+          <Link key={tag} href="/blog" className="rounded-full border border-white/12 bg-white/8 px-3 py-2 text-xs font-black text-white/66 transition hover:border-[#FF6B00]/55 hover:text-[#FFB37A]">
+            {tag}
+          </Link>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function ProTipCallout() {
+  return (
+    <section className="rounded-[1.75rem] border border-[#FF6B00]/28 bg-[#FFF3EA] p-5 text-[#001A35] shadow-2xl">
+      <span className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-[#C45000]">
+        <Sparkles className="h-4 w-4" aria-hidden="true" />
+        Pro Tip
+      </span>
+      <p className="mt-2 text-base font-bold leading-relaxed">
+        Include clear photos of the equipment, the manufacturer data plate and any service records. Detailed listings
+        help serious buyers make faster decisions.
+      </p>
+    </section>
+  )
+}
+
+function EnhancedArticleBlocks() {
+  const features = [
+    ["Verified Buyers", UserCheck],
+    ["Targeted Audience", Search],
+    ["UK-Wide Exposure", MapPin],
+    ["Fast Enquiries", MessageCircle],
+  ] as const
+
+  return (
+    <div className="mt-6 space-y-6">
+      <section className="rounded-[2rem] border border-[#D6E5F7] bg-white p-6 text-[#001A35] shadow-2xl sm:p-8">
+        <h2 className="text-3xl font-black tracking-[-0.035em]">Understand Your Equipment&apos;s Value</h2>
+        <div className="mt-5 grid gap-5 md:grid-cols-[1fr_16rem] md:items-center">
+          <p className="text-base font-semibold leading-8 text-slate-700">
+            Check brand, model, age, condition, power requirements and recent comparable sales before choosing a price.
+            Strong detail helps buyers compare your item with confidence.
+          </p>
+          <div className="rounded-3xl border border-slate-200 bg-[#EAF3FF] p-5">
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-[#FF6B00]">Valuation snapshot</p>
+            <div className="mt-4 h-28 rounded-2xl bg-[linear-gradient(180deg,#fff,#dbeafe)] p-4">
+              <div className="h-full rounded-xl border-l-4 border-b-4 border-[#002E5D]">
+                <div className="ml-3 mt-10 h-1.5 w-10 rounded-full bg-[#FF6B00]" />
+                <div className="ml-14 mt-[-18px] h-1.5 w-12 rounded-full bg-[#FF6B00]" />
+                <div className="ml-28 mt-[-26px] h-1.5 w-16 rounded-full bg-[#FF6B00]" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-[2rem] border border-white/12 bg-[#062747] p-6 shadow-2xl sm:p-8">
+        <h2 className="text-3xl font-black tracking-[-0.035em] text-white">Prepare Your Equipment</h2>
+        <ul className="mt-5 grid gap-3 text-sm font-bold text-[#D5E0F0] sm:grid-cols-2">
+          {["Clean stainless surfaces", "Disconnect safely", "Photograph the data plate", "Box loose parts", "Measure and weigh", "Prepare for pallet collection"].map((item) => (
+            <li key={item} className="flex gap-3">
+              <CheckCircle2 className="h-5 w-5 shrink-0 text-[#FF6B00]" aria-hidden="true" />
+              {item}
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="rounded-[2rem] border border-[#D6E5F7] bg-[#F3F8FF] p-6 text-[#001A35] shadow-2xl sm:p-8">
+        <h2 className="text-3xl font-black tracking-[-0.035em]">Write a Great Listing</h2>
+        <p className="mt-4 text-base font-semibold leading-8 text-slate-700">
+          Lead with the equipment type, brand, model, condition and location. Add power, dimensions and delivery notes
+          so serious buyers know whether the item fits their site.
+        </p>
+        <div className="mt-5 rounded-2xl border border-blue-100 bg-white p-4">
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-[#FF6B00]">Buyer Tip</p>
+          <p className="mt-2 text-sm font-bold leading-relaxed text-slate-700">
+            Clear descriptions reduce back-and-forth messages and help buyers decide faster.
+          </p>
+        </div>
+      </section>
+
+      <section className="rounded-[2rem] border border-white/12 bg-[#062747] p-6 shadow-2xl sm:p-8">
+        <h2 className="text-3xl font-black tracking-[-0.035em] text-white">Get It Seen by Serious Buyers</h2>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {features.map(([label, Icon]) => (
+            <div key={label} className="rounded-2xl border border-white/12 bg-white/8 p-4">
+              <Icon className="h-6 w-6 text-[#FF6B00]" aria-hidden="true" />
+              <p className="mt-3 text-sm font-black text-white">{label}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function BottomCta() {
+  return (
+    <section className="mt-6 rounded-[2rem] border border-[#FF6B00]/30 bg-[radial-gradient(circle_at_top_right,rgba(255,107,0,0.25),transparent_34%),linear-gradient(135deg,#062747,#001A35)] p-6 shadow-2xl sm:p-8">
+      <h2 className="text-3xl font-black tracking-[-0.035em]">Ready to Sell Your Equipment?</h2>
+      <p className="mt-3 text-base font-semibold leading-relaxed text-[#A7B5C9]">
+        List now, reach serious buyers and turn your unused equipment into cash - fast.
+      </p>
+      <div className="mt-6 grid gap-3 sm:grid-cols-3">
+        <Link href="/#launch-list" className="inline-flex min-h-14 items-center justify-center rounded-2xl bg-[#FF6B00] px-5 text-sm font-black text-white transition hover:brightness-110">
+          Start Your Free Listing
+        </Link>
+        <Link href="/marketplace" className="inline-flex min-h-14 items-center justify-center rounded-2xl border border-white/18 bg-white/8 px-5 text-sm font-black text-white transition hover:border-[#FF6B00]/55">
+          Marketplace Opening Soon
+        </Link>
+        <Link href="/#launch-list" className="inline-flex min-h-14 items-center justify-center rounded-2xl border border-white/18 bg-white/8 px-5 text-sm font-black text-white transition hover:border-[#FF6B00]/55">
+          Try CaterBot AI
+        </Link>
+      </div>
+    </section>
+  )
+}
+
+function TrustStrip() {
+  const items = [
+    ["Verified Sellers", "All sellers are verified for your protection.", ShieldCheck],
+    ["Secure Messaging", "Chat safely within our platform.", MessageCircle],
+    ["Buyer Protection", "Built-in tools to keep transactions safe.", Star],
+    ["UK Focused", "Built for the UK catering industry.", MapPin],
+    ["Expert Support", "Our team is here to help you succeed.", CheckCircle2],
+  ] as const
+
+  return (
+    <section className="border-y border-white/10 bg-[#001A35] px-4 py-8 sm:px-6 lg:px-8">
+      <div className="mx-auto grid max-w-7xl gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        {items.map(([title, text, Icon]) => (
+          <div key={title} className="rounded-2xl border border-white/12 bg-white/8 p-4">
+            <Icon className="h-6 w-6 text-[#FF6B00]" aria-hidden="true" />
+            <h2 className="mt-3 text-sm font-black text-white">{title}</h2>
+            <p className="mt-1 text-xs font-semibold leading-relaxed text-[#A7B5C9]">{text}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function Chevron() {
+  return <span className="text-white/30">/</span>
+}
+
+function BookIcon() {
+  return <BookOpen className="h-3.5 w-3.5" aria-hidden="true" />
 }
