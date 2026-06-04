@@ -23,6 +23,12 @@ export type AdminContext = {
   profile: AdminProfile
 }
 
+type SupabaseAdminClient = ReturnType<typeof createAdminClient>
+
+function adminProfiles(admin: SupabaseAdminClient) {
+  return admin.from("profiles") as any
+}
+
 export function isAdminRole(role?: string | null) {
   return ADMIN_ROLES.includes(String(role || "") as AdminRole)
 }
@@ -42,8 +48,7 @@ export async function getAdminContext(): Promise<AdminContext | null> {
   if (!user) return null
 
   const admin = createAdminClient()
-  const { data: profile } = await admin
-    .from("profiles")
+  const { data: profile } = await adminProfiles(admin)
     .select("id,email,name,full_name,business,role")
     .eq("id", user.id)
     .maybeSingle()
@@ -53,8 +58,7 @@ export async function getAdminContext(): Promise<AdminContext | null> {
   const protectedSuperAdmin = isProtectedSuperAdminEmail(email)
 
   if (!typedProfile && email) {
-    const { data: emailProfile } = await admin
-      .from("profiles")
+    const { data: emailProfile } = await adminProfiles(admin)
       .select("id,email,name,full_name,business,role")
       .eq("email", email)
       .maybeSingle()
@@ -62,8 +66,7 @@ export async function getAdminContext(): Promise<AdminContext | null> {
     typedProfile = emailProfile as AdminProfile | null
 
     if (typedProfile && typedProfile.id !== user.id && (protectedSuperAdmin || isAdminRole(typedProfile.role))) {
-      await admin
-        .from("profiles")
+      await adminProfiles(admin)
         .upsert(
           {
             id: user.id,
@@ -96,8 +99,7 @@ export async function getAdminContext(): Promise<AdminContext | null> {
       role: "super_admin",
     }
 
-    await admin
-      .from("profiles")
+    await adminProfiles(admin)
       .upsert(
         {
           id: user.id,
@@ -125,8 +127,7 @@ export async function getAdminContext(): Promise<AdminContext | null> {
   }
 
   if (protectedSuperAdmin && typedProfile.role !== "super_admin") {
-    await admin
-      .from("profiles")
+    await adminProfiles(admin)
       .update({ role: "super_admin", updated_at: new Date().toISOString() } as any)
       .eq("id", user.id)
 
