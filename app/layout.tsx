@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -12,10 +12,25 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export const metadata: Metadata = {
-  title: "CaterBids.UK — Buy • Sell • Save",
+  metadataBase: new URL("https://caterbids.uk"),
+  title: "CaterBidsUK | The UK Marketplace for Catering Equipment",
   description:
-    "The UK's #1 marketplace for catering equipment, food vans, trailers and catering businesses. One search. Every platform. The best deals in catering.",
+    "Buy, sell and save on catering equipment, vans and hospitality assets with CaterBidsUK — BUY • SELL • SAVE.",
+  openGraph: {
+    title: "CaterBidsUK — The UK Marketplace for Catering Equipment",
+    description: "BUY • SELL • SAVE on catering equipment, vans and hospitality assets.",
+    siteName: "CaterBidsUK",
+    images: ["/images/caterbids-hero-showroom.png"],
+  },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default function RootLayout({
