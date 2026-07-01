@@ -7,6 +7,16 @@ import {
 import { POWER_TYPE_OPTIONS } from "@/lib/listing-trust"
 import { findValidatedCaterBotSource } from "@/lib/caterbot/sourceValidation"
 import { isCaterBotWebSearchConfigured } from "@/lib/caterbot/webSearch"
+import {
+  lookupEquipmentModel,
+  writeToEquipmentKnowledgeBase,
+  isTrustedSourceType,
+  isWithinSixMonths,
+  type EquipmentModelRow,
+} from "@/lib/caterbot/knowledgeBase"
+
+// Re-enable once dimension extraction is verified accurate.
+const KB_WRITES_ENABLED = false
 
 const CONDITIONS = ["New", "Used", "Refurbished", "Spares or Repair"] as const
 const QUICKLIST_AI_WARNING =
@@ -21,6 +31,7 @@ type QuickListImageInput = {
 type QuickListAiSuggestion = {
   suggested_title: string
   title?: string
+  short_description?: string
   description: string
   category: string
   subcategory?: string
@@ -62,6 +73,13 @@ type QuickListAiSuggestion = {
   confidence_score: number
   confidence?: string | number
   condition?: (typeof CONDITIONS)[number]
+  _diag?: {
+    ai_dimensions: string
+    source_valid: boolean
+    source_url: string
+    source_found_dimensions: string
+    final_dimensions: string
+  }
 }
 
 type LegacyAiListingSuggestion = {
@@ -152,6 +170,126 @@ function normaliseWeightText(weight: unknown, estimatedWeight: unknown) {
   if (/^\d+(?:\.\d+)?\s*kg$/i.test(estimatedWeightText)) return estimatedWeightText
 
   return ""
+}
+
+function formatMeasurementNumber(value: number) {
+  const rounded = Math.round(value * 10) / 10
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1).replace(/\.0$/, "")
+}
+
+function normaliseCmField(value: unknown, options: { allowBareNumber?: boolean } = {}) {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    // < 10 → almost certainly metres (no catering equipment is <10 cm); > 300 → mm
+    return formatMeasurementNumber(value < 10 ? value * 100 : value > 300 ? value / 10 : value)
+  }
+
+  const text = safeText(value)
+  if (!text || /needs seller (?:check|confirmation)|not confirmed|unknown|estimate/i.test(text)) return ""
+
+  const measurement = text.match(/(\d+(?:[.,]\d+)?)\s*(mm|cm|m|metres?|meters?)\b/i)
+  if (measurement?.[1]) {
+    const numberValue = Number(measurement[1].replace(",", "."))
+    if (!Number.isFinite(numberValue) || numberValue <= 0) return ""
+    const unit = (measurement[2] || "cm").toLowerCase()
+    if (unit === "mm") return formatMeasurementNumber(numberValue / 10)
+    if (unit === "m" || unit.startsWith("met")) return formatMeasurementNumber(numberValue * 100)
+    return formatMeasurementNumber(numberValue)
+  }
+
+  if (options.allowBareNumber && /^\d+(?:[.,]\d+)?$/.test(text)) {
+    return formatMeasurementNumber(Number(text.replace(",", ".")))
+  }
+
+  return ""
+}
+
+function extractWeightKg(value: unknown, options: { allowBareNumber?: boolean } = {}) {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return options.allowBareNumber ? formatMeasurementNumber(value) : ""
+  }
+
+  const text = safeText(value)
+  if (!text || /needs seller (?:check|confirmation)|not confirmed|unknown|estimate/i.test(text)) return ""
+
+  const kgMatch = text.match(/(\d+(?:[.,]\d+)?)\s*kg\b/i)
+  if (kgMatch?.[1]) return formatMeasurementNumber(Number(kgMatch[1].replace(",", ".")))
+
+  const gramMatch = text.match(/(\d+(?:[.,]\d+)?)\s*g\b/i)
+  if (gramMatch?.[1]) {
+    const grams = Number(gramMatch[1].replace(",", "."))
+    if (Number.isFinite(grams) && grams > 0) return formatMeasurementNumber(grams / 1000)
+  }
+
+  if (options.allowBareNumber && /^\d+(?:[.,]\d+)?$/.test(text)) {
+    return formatMeasurementNumber(Number(text.replace(",", ".")))
+  }
+
+  return ""
+}
+
+function parseDeliveryDimensionsToCm(value: unknown) {
+  const text = safeText(value)
+  if (!text || /needs seller (?:check|confirmation)|not confirmed|unknown/i.test(text)) return null
+
+  const normalised = text.replace(/[×✕]/g, " x ").replace(/\bby\b/gi, " x ")
+  const labelledValues: Partial<Record<"length" | "width" | "depth" | "height", string>> = {}
+
+  for (const match of normalised.matchAll(/\b(length|len|l|width|w|depth|d|height|h)\s*[:=]?\s*(\d+(?:[.,]\d+)?)\s*(mm|cm|m|metres?|meters?)?\b/gi)) {
+    const label = match[1].toLowerCase()
+    const unit = match[3] || (/\bmm\b/i.test(normalised) ? "mm" : /\bcm\b/i.test(normalised) ? "cm" : "")
+    const cmValue = normaliseCmField(`${match[2]}${unit ? ` ${unit}` : ""}`, { allowBareNumber: true })
+    if (!cmValue) continue
+    if (label === "length" || label === "len" || label === "l") labelledValues.length = cmValue
+    if (label === "width" || label === "w") labelledValues.width = cmValue
+    if (label === "depth" || label === "d") labelledValues.depth = cmValue
+    if (label === "height" || label === "h") labelledValues.height = cmValue
+  }
+
+  for (const match of normalised.matchAll(/\b(\d+(?:[.,]\d+)?)\s*(mm|cm|m|metres?|meters?)?\s*(?:\(\s*)?(length|len|l|width|w|depth|d|height|h)\b(?:\s*\))?/gi)) {
+    const unit = match[2] || (/\bmm\b/i.test(normalised) ? "mm" : /\bcm\b/i.test(normalised) ? "cm" : "")
+    const label = match[3].toLowerCase()
+    const cmValue = normaliseCmField(`${match[1]}${unit ? ` ${unit}` : ""}`, { allowBareNumber: true })
+    if (!cmValue) continue
+    if (label === "length" || label === "len" || label === "l") labelledValues.length = cmValue
+    if (label === "width" || label === "w") labelledValues.width = cmValue
+    if (label === "depth" || label === "d") labelledValues.depth = cmValue
+    if (label === "height" || label === "h") labelledValues.height = cmValue
+  }
+
+  if ((labelledValues.length || labelledValues.depth) && labelledValues.width && labelledValues.height) {
+    return {
+      lengthCm: labelledValues.length || labelledValues.depth || "",
+      widthCm: labelledValues.width,
+      heightCm: labelledValues.height,
+    }
+  }
+
+  const match = normalised.match(
+    /(\d+(?:[.,]\d+)?)\s*(mm|cm|m|metres?|meters?)?\s*x\s*(\d+(?:[.,]\d+)?)\s*(mm|cm|m|metres?|meters?)?\s*x\s*(\d+(?:[.,]\d+)?)\s*(mm|cm|m|metres?|meters?)?/i
+  )
+  if (!match) return null
+
+  const rawNumbers = [Number(match[1].replace(",", ".")), Number(match[3].replace(",", ".")), Number(match[5].replace(",", "."))]
+  const inheritedUnit =
+    match[2] || match[4] || match[6] || (/\bmm\b/i.test(normalised) ? "mm" : /\bcm\b/i.test(normalised) ? "cm" : "")
+  const shouldTreatAsMm = inheritedUnit.toLowerCase() === "mm" || (!inheritedUnit && rawNumbers.some((numberValue) => numberValue > 300))
+  const values = [
+    normaliseCmField(`${match[1]} ${match[2] || inheritedUnit || (shouldTreatAsMm ? "mm" : "cm")}`),
+    normaliseCmField(`${match[3]} ${match[4] || inheritedUnit || (shouldTreatAsMm ? "mm" : "cm")}`),
+    normaliseCmField(`${match[5]} ${match[6] || inheritedUnit || (shouldTreatAsMm ? "mm" : "cm")}`),
+  ]
+
+  if (!values.every(Boolean)) return null
+
+  const lower = normalised.toLowerCase()
+  if (/\b(?:w|width)\b.*\b(?:d|depth)\b.*\b(?:h|height)\b/.test(lower)) {
+    return { lengthCm: values[1], widthCm: values[0], heightCm: values[2] }
+  }
+  if (/\b(?:h|height)\b.*\b(?:w|width)\b.*\b(?:d|depth|l|length)\b/.test(lower)) {
+    return { lengthCm: values[2], widthCm: values[1], heightCm: values[0] }
+  }
+
+  return { lengthCm: values[0], widthCm: values[1], heightCm: values[2] }
 }
 
 function confidenceLabel(score: number) {
@@ -266,19 +404,15 @@ function inferShippingClass(text: string, weight: string, dimensions: string) {
   const weightMatch = combined.match(/(\d+(?:\.\d+)?)\s?kg/)
   const weightKg = weightMatch ? Number(weightMatch[1]) : 0
 
-  if (/(van|trailer|food truck|large oven|cold room)/.test(combined) || weightKg >= 250) {
-    return "Specialist transport required"
-  }
-
   if (/(pallet|fridge|freezer|oven|fryer|dishwasher|glasswasher)/.test(combined) || weightKg >= 55) {
-    return "Pallet delivery recommended"
+    return "CaterBids Pallet Delivery"
   }
 
-  if (weightKg > 0 && weightKg < 30) {
-    return "Courier may be possible"
+  if (/(van|trailer|food truck|cold room)/.test(combined) || weightKg >= 250) {
+    return "CaterBids Pallet Delivery"
   }
 
-  return "Delivery quote required"
+  return "Collection Only"
 }
 
 function normaliseCategory(value: Partial<QuickListAiSuggestion>) {
@@ -314,6 +448,55 @@ function normaliseCategory(value: Partial<QuickListAiSuggestion>) {
   }
 }
 
+function buildFallbackShortDescription({
+  brand,
+  model,
+  title,
+  subcategory,
+  powerType,
+  gasType,
+  condition,
+}: {
+  brand: string
+  model: string
+  title: string
+  subcategory: string
+  powerType: string
+  gasType: string
+  condition: string
+}) {
+  const text = [title, subcategory, powerType, gasType].filter(Boolean).join(" ").toLowerCase()
+  const equipmentType =
+    /\bcombi\s*oven\b/.test(text) ? "combi oven" :
+    /\bfryer\b/.test(text) ? "fryer" :
+    /\bgriddle|grill\b/.test(text) ? "griddle" :
+    /\boven\b/.test(text) ? "oven" :
+    /\bfridge|refrigerat|chiller\b/.test(text) ? "refrigeration unit" :
+    /\bfreezer\b/.test(text) ? "freezer" :
+    /\bdishwasher|glasswasher|warewasher\b/.test(text) ? "warewashing machine" :
+    /\bcoffee|espresso\b/.test(text) ? "coffee machine" :
+    subcategory.toLowerCase() || "catering equipment item"
+  const fuelType =
+    /\blpg\b|\bpropane\b/.test(text) ? "LPG" :
+    /\bnatural gas\b|\bmains gas\b|\bg20\b/.test(text) ? "natural gas" :
+    /\bthree phase\b|\b3 phase\b|\b400v\b|\b415v\b/.test(text) ? "three phase electric" :
+    /\belectric\b|\b230v\b|\b240v\b|\b13a\b/.test(text) ? "electric" :
+    ""
+  const itemName = [brand, model, fuelType, equipmentType]
+    .filter(Boolean)
+    .filter((part, index, parts) => parts.findIndex((candidate) => candidate.toLowerCase() === part.toLowerCase()) === index)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim()
+  const conditionText = condition.toLowerCase() || "used"
+
+  if (!itemName) {
+    return "Used catering equipment item. Please review photos carefully and confirm condition, dimensions and collection requirements before purchase."
+  }
+
+  return `${conditionText.charAt(0).toUpperCase()}${conditionText.slice(1)} ${itemName} suitable for commercial catering use. Please check photos and confirm condition, dimensions and collection requirements before purchase.`
+}
+
 function normaliseQuickListSuggestion(value: Partial<QuickListAiSuggestion>) {
   const { category, subcategory } = normaliseCategory(value)
   const conditionValue = value.condition as QuickListAiSuggestion["condition"]
@@ -324,17 +507,36 @@ function normaliseQuickListSuggestion(value: Partial<QuickListAiSuggestion>) {
   const model = safeText(value.model)
   const gcNumber = safeText(value.gc_number)
   const suggestedTitle = safeText(value.suggested_title) || safeText(value.title) || fallbackSuggestion.suggested_title
-  const description = safeText(value.description) || fallbackSuggestion.description
+  const suppliedDescription = safeText(value.short_description) || safeText(value.description)
+  const description = suppliedDescription && !/upload at least one|add clear photos|commercial catering item/i.test(suppliedDescription)
+    ? suppliedDescription
+    : buildFallbackShortDescription({
+        brand,
+        model: model || gcNumber,
+        title: suggestedTitle,
+        subcategory: subcategory || "",
+        powerType,
+        gasType: safeText(value.gas_type),
+        condition,
+      })
   const manualUrl = safeText(value.manual_url)
   const sourceUrl = safeText(value.manual_source_url) || safeText(value.spec_source_url) || manualUrl
   const normalisedManualUrl = isDirectSourceUrl(manualUrl) ? manualUrl : ""
   const directSourceUrl = isDirectSourceUrl(sourceUrl) ? sourceUrl : ""
   const confidenceScore = clampConfidence(value.confidence_score ?? value.confidence)
   const normalisedWeight = normaliseWeightText(value.weight, value.estimated_weight_kg)
+  const dimensionsText = safeText(value.dimensions)
+  const parsedDimensions = parseDeliveryDimensionsToCm(dimensionsText)
+  const estimatedWeightKg =
+    extractWeightKg(value.estimated_weight_kg, { allowBareNumber: true }) || extractWeightKg(normalisedWeight)
+  const palletLengthCm = normaliseCmField(value.pallet_length_cm, { allowBareNumber: true }) || parsedDimensions?.lengthCm || ""
+  const palletWidthCm = normaliseCmField(value.pallet_width_cm, { allowBareNumber: true }) || parsedDimensions?.widthCm || ""
+  const palletHeightCm = normaliseCmField(value.pallet_height_cm, { allowBareNumber: true }) || parsedDimensions?.heightCm || ""
   const deliveryNotes = safeText(value.delivery_notes)
 
   return {
     suggested_title: suggestedTitle,
+    short_description: description,
     description,
     category,
     subcategory,
@@ -342,12 +544,12 @@ function normaliseQuickListSuggestion(value: Partial<QuickListAiSuggestion>) {
     model,
     serial_number: safeText(value.serial_number),
     gc_number: gcNumber,
-    dimensions: safeText(value.dimensions),
+    dimensions: dimensionsText,
     weight: normalisedWeight,
-    estimated_weight_kg: value.estimated_weight_kg,
-    pallet_length_cm: value.pallet_length_cm,
-    pallet_width_cm: value.pallet_width_cm,
-    pallet_height_cm: value.pallet_height_cm,
+    estimated_weight_kg: estimatedWeightKg || safeText(value.estimated_weight_kg),
+    pallet_length_cm: palletLengthCm,
+    pallet_width_cm: palletWidthCm,
+    pallet_height_cm: palletHeightCm,
     pallet_count: value.pallet_count,
     tail_lift_required: value.tail_lift_required,
     forklift_available: value.forklift_available,
@@ -373,10 +575,62 @@ function normaliseQuickListSuggestion(value: Partial<QuickListAiSuggestion>) {
       : [],
     ai_spec_confidence: confidenceLabel(confidenceScore),
     source_rejected_by_seller: false,
-    shipping_class: safeText(value.shipping_class) || inferShippingClass("", normalisedWeight, safeText(value.dimensions)),
+    shipping_class: safeText(value.shipping_class) || inferShippingClass("", estimatedWeightKg ? `${estimatedWeightKg}kg` : normalisedWeight, dimensionsText),
     delivery_warning: QUICKLIST_AI_WARNING,
     confidence_score: confidenceScore,
     condition,
+  } satisfies QuickListAiSuggestion
+}
+
+function mergeFromCache(
+  suggestion: QuickListAiSuggestion,
+  cached: EquipmentModelRow
+): QuickListAiSuggestion {
+  // Verified-source values beat the vision-AI's data-plate guess (FIX 1).
+  const mergedDimensions = cached.dimensions || suggestion.dimensions || ""
+  const mergedWeight = cached.weight_gross || cached.weight_net || suggestion.weight || ""
+  const parsedDimensions = parseDeliveryDimensionsToCm(mergedDimensions)
+  const estimatedWeightKg =
+    extractWeightKg(suggestion.estimated_weight_kg, { allowBareNumber: true }) ||
+    extractWeightKg(mergedWeight)
+  const seenCount = cached.times_seen ?? 1
+
+  return {
+    ...suggestion,
+    manual_url: cached.source_url || suggestion.manual_url || "",
+    manual_source_url: cached.source_url || "",
+    spec_source_url: cached.source_url || "",
+    manual_source_name: cached.source_name || "",
+    manual_source_type: cached.source_type || "",
+    manual_source_validated: Boolean(cached.source_url),
+    manual_source_last_checked_at: cached.last_verified_at,
+    manual_source_match_notes: `CaterBot matched this model from the knowledge base (seen ${seenCount} time${seenCount === 1 ? "" : "s"}, source: ${cached.source_type || cached.source_name || "verified source"}).`,
+    manual_source_useful_details: [],
+    ai_spec_confidence: cached.validation_score >= 115 ? "high" : "medium",
+    dimensions: mergedDimensions,
+    weight: mergedWeight,
+    estimated_weight_kg: estimatedWeightKg || safeText(suggestion.estimated_weight_kg),
+    pallet_length_cm:
+      parsedDimensions?.lengthCm ||
+      normaliseCmField(cached.suggested_pallet_l_cm) ||
+      normaliseCmField(suggestion.pallet_length_cm, { allowBareNumber: true }) ||
+      "",
+    pallet_width_cm:
+      parsedDimensions?.widthCm ||
+      normaliseCmField(cached.suggested_pallet_w_cm) ||
+      normaliseCmField(suggestion.pallet_width_cm, { allowBareNumber: true }) ||
+      "",
+    pallet_height_cm:
+      parsedDimensions?.heightCm ||
+      normaliseCmField(cached.suggested_pallet_h_cm) ||
+      normaliseCmField(suggestion.pallet_height_cm, { allowBareNumber: true }) ||
+      "",
+    voltage: cached.voltage || suggestion.voltage || "",
+    amps: cached.amps || suggestion.amps || "",
+    kw_rating: cached.kw_rating || suggestion.kw_rating || "",
+    electrical_phase: cached.electrical_phase || cached.phase || suggestion.electrical_phase || "",
+    gas_type: cached.gas_type || suggestion.gas_type || "",
+    source_rejected_by_seller: false,
   } satisfies QuickListAiSuggestion
 }
 
@@ -387,6 +641,21 @@ async function withValidatedSource(suggestion: QuickListAiSuggestion) {
     suggestion.manual_url,
   ].filter((url): url is string => Boolean(url && /^https?:\/\//i.test(url)))
   const plateIdentifier = suggestion.model || suggestion.gc_number
+
+  // READ HOOK: serve from knowledge base if cache is fresh, high-score, and trusted
+  if (suggestion.brand && suggestion.model) {
+    const cached = await lookupEquipmentModel(suggestion.brand, suggestion.model)
+    if (
+      cached &&
+      !cached.needs_review &&
+      cached.validation_score >= 85 &&
+      isWithinSixMonths(cached.last_verified_at) &&
+      (isTrustedSourceType(cached.source_type) || (cached.times_seen ?? 0) >= 3)
+    ) {
+      return mergeFromCache(suggestion, cached)
+    }
+  }
+
   const equipmentSearchText = [
     suggestion.subcategory,
     suggestion.category,
@@ -413,6 +682,7 @@ async function withValidatedSource(suggestion: QuickListAiSuggestion) {
   if (!source) {
     return {
       ...suggestion,
+      manual_url: "",
       manual_source_url: "",
       spec_source_url: "",
       manual_source_name: "",
@@ -430,6 +700,18 @@ async function withValidatedSource(suggestion: QuickListAiSuggestion) {
     } satisfies QuickListAiSuggestion
   }
 
+  // FIX 1: verified source beats the vision-AI's data-plate guess for physical specs
+  // the plate doesn't show (dimensions, weight). Plate remains authority for brand/model/serial.
+  const mergedDimensions = source.extractedSpecs.dimensions || suggestion.dimensions || ""
+  const mergedWeight = source.extractedSpecs.grossWeight || source.extractedSpecs.weight || suggestion.weight || ""
+  const parsedDimensions = parseDeliveryDimensionsToCm(mergedDimensions)
+  const estimatedWeightKg =
+    extractWeightKg(suggestion.estimated_weight_kg, { allowBareNumber: true }) || extractWeightKg(mergedWeight)
+
+  // WRITE HOOK: gated until dimension extraction is verified accurate.
+  // Re-enable once dimension extraction is verified accurate.
+  if (KB_WRITES_ENABLED) void writeToEquipmentKnowledgeBase(suggestion, source)
+
   return {
     ...suggestion,
     manual_url: source.url,
@@ -442,14 +724,25 @@ async function withValidatedSource(suggestion: QuickListAiSuggestion) {
     manual_source_match_notes: source.matchNotes,
     manual_source_useful_details: source.usefulDetails,
     ai_spec_confidence: source.confidence,
-    dimensions: suggestion.dimensions || source.extractedSpecs.dimensions || "",
-    weight: suggestion.weight || source.extractedSpecs.weight || "",
-    voltage: suggestion.voltage || source.extractedSpecs.voltage || "",
-    amps: suggestion.amps || source.extractedSpecs.amps || "",
-    kw_rating: suggestion.kw_rating || source.extractedSpecs.kwRating || "",
-    electrical_phase: suggestion.electrical_phase || source.extractedSpecs.phase || "",
-    gas_type: suggestion.gas_type || source.extractedSpecs.gasType || "",
+    dimensions: mergedDimensions,
+    weight: mergedWeight,
+    estimated_weight_kg: estimatedWeightKg || safeText(suggestion.estimated_weight_kg),
+    pallet_length_cm: parsedDimensions?.lengthCm || normaliseCmField(suggestion.pallet_length_cm, { allowBareNumber: true }) || "",
+    pallet_width_cm: parsedDimensions?.widthCm || normaliseCmField(suggestion.pallet_width_cm, { allowBareNumber: true }) || "",
+    pallet_height_cm: parsedDimensions?.heightCm || normaliseCmField(suggestion.pallet_height_cm, { allowBareNumber: true }) || "",
+    voltage: source.extractedSpecs.voltage || suggestion.voltage || "",
+    amps: source.extractedSpecs.amps || suggestion.amps || "",
+    kw_rating: source.extractedSpecs.kwRating || suggestion.kw_rating || "",
+    electrical_phase: source.extractedSpecs.phase || suggestion.electrical_phase || "",
+    gas_type: source.extractedSpecs.gasType || suggestion.gas_type || "",
     source_rejected_by_seller: false,
+    _diag: {
+      ai_dimensions: suggestion.dimensions ?? "",
+      source_valid: source.valid,
+      source_url: source.url,
+      source_found_dimensions: source.extractedSpecs.dimensions ?? "",
+      final_dimensions: mergedDimensions,
+    },
   } satisfies QuickListAiSuggestion
 }
 
@@ -657,6 +950,7 @@ async function analyseWithOpenAI({
 function withLegacyAliases(suggestion: QuickListAiSuggestion) {
   return {
     ...suggestion,
+    short_description: suggestion.short_description || suggestion.description,
     title: suggestion.suggested_title,
     price: "",
     confidence: confidenceLabel(suggestion.confidence_score),
@@ -754,13 +1048,18 @@ Tasks:
 - Use the exact model number first, or the exact GC number if no model is visible, for the ManualsLib manual lookup.
 - Extract dimensions and weight only when visible in photos, visible on the plate, or certain from a manufacturer manual/spec sheet.
 - Suggest delivery/shipping class for a UK catering equipment buyer.
-- Generate an editable listing title, category and description.
+- Generate an editable listing title, category and short description.
+- The short description must be seller-friendly, 1-3 short sentences max.
+- Mention visible equipment type, brand/model if found, condition clues and buyer-useful details only.
+- Do not invent specs, dimensions, weight, service history, warranty, tested status, working status, gas safety or electrical safety.
+- If unsure, use cautious wording and ask buyers to check photos and confirm details before purchase.
 - Estimate pallet delivery setup only where visible or strongly implied by the equipment and state "Needs seller confirmation" for uncertain delivery fields.
 
 Return strict JSON only with exactly these keys:
 {
   "title": string,
   "suggested_title": string,
+  "short_description": string,
   "description": string,
   "category": string,
   "subcategory": string,
@@ -808,6 +1107,7 @@ Rules:
 - Subcategory must be one of: ${CATEGORY_TITLES.join(", ")} when category is Catering Equipment.
 - power_type should be one of: ${POWER_TYPE_OPTIONS.join(", ")}.
 - Use "" for unknown values.
+- description and short_description should both contain the same short seller-friendly listing description.
 - brand must be the maker/manufacturer only, not a category or supplier phrase.
 - Do not invent or estimate a model, serial number, GC number, voltage, amps, kW rating, dimensions or weight.
 - Do not copy a model number from a guessed product name. The model or GC number must come from the data plate/label text. If the plate is blurry or ambiguous, use "" and leave manual_url empty.

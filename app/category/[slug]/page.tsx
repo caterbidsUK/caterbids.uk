@@ -2,24 +2,16 @@
 
 import Link from "next/link"
 import { use, useEffect, useMemo, useState } from "react"
-import { ArrowLeft, ExternalLink, Loader2, Plus, Tag } from "lucide-react"
+import { ArrowLeft, Bell, ExternalLink, Loader2, Plus, Tag } from "lucide-react"
 
 import { createClient } from "@/lib/supabase/client"
 import { CATERING_CATEGORIES, categoryBySlug, type CaterBidsCategory } from "@/lib/categories"
+import { applyFeaturedFirst, isFeaturedAndActive } from "@/lib/featured"
 import type { Database } from "@/types/supabase"
 
 type Listing = Database["public"]["Tables"]["listings"]["Row"]
 type CategoryPageProps = {
   params: Promise<{ slug: string }>
-}
-type EbayItem = {
-  itemId: string
-  title: string
-  image?: { imageUrl?: string }
-  price?: { value: string; currency: string }
-  itemWebUrl?: string
-  condition?: string
-  itemLocation?: { city?: string; country?: string }
 }
 type SupplierResult = {
   id: string
@@ -111,10 +103,8 @@ export default function CategoryPage({ params }: CategoryPageProps) {
   const { slug } = use(params)
   const category = categoryBySlug(slug)
   const [listings, setListings] = useState<Listing[]>([])
-  const [ebayResults, setEbayResults] = useState<EbayItem[]>([])
   const [supplierResults, setSupplierResults] = useState<SupplierResult[]>([])
   const [loadingListings, setLoadingListings] = useState(true)
-  const [loadingEbay, setLoadingEbay] = useState(true)
   const [loadingSuppliers, setLoadingSuppliers] = useState(true)
 
   const categoryQuery = useMemo(() => {
@@ -164,9 +154,11 @@ export default function CategoryPage({ params }: CategoryPageProps) {
       })
 
       setListings(
-        [...local, ...remote].filter((item) =>
-          categoryMatchesListing(item, selectedCategory)
-        )
+        applyFeaturedFirst(
+          [...local, ...remote].filter((item) =>
+            categoryMatchesListing(item, selectedCategory)
+          ) as Record<string, unknown>[]
+        ) as Listing[]
       )
       setLoadingListings(false)
     }
@@ -176,30 +168,6 @@ export default function CategoryPage({ params }: CategoryPageProps) {
 
   useEffect(() => {
     if (!category) return
-    const selectedCategory = category
-
-    async function loadEbay() {
-      setLoadingEbay(true)
-      try {
-        const params = new URLSearchParams({
-          q: categoryQuery,
-          category: selectedCategory.title,
-        })
-        const response = await fetch(`/api/ebay-search?${params.toString()}`)
-        const data = await response.json()
-        const items = Array.isArray(data.items)
-          ? data.items
-          : Array.isArray(data.itemSummaries)
-            ? data.itemSummaries
-            : []
-        setEbayResults(items.slice(0, 6))
-      } catch (error) {
-        console.warn("Category eBay results unavailable:", error)
-        setEbayResults([])
-      } finally {
-        setLoadingEbay(false)
-      }
-    }
 
     async function loadSuppliers() {
       setLoadingSuppliers(true)
@@ -216,7 +184,6 @@ export default function CategoryPage({ params }: CategoryPageProps) {
       }
     }
 
-    loadEbay()
     loadSuppliers()
   }, [category, categoryQuery])
 
@@ -327,11 +294,17 @@ export default function CategoryPage({ params }: CategoryPageProps) {
                     href={`/listing?id=${encodeURIComponent(safeId(item.id))}`}
                     className="premium-card group overflow-hidden rounded-3xl"
                   >
-                    <div className="flex h-56 items-center justify-center bg-[#001B35]">
+                    <div className="relative flex h-56 items-center justify-center bg-[#001B35]">
                       {image ? (
                         <img src={image} alt={item.title} className="h-full w-full object-contain transition group-hover:scale-[1.02]" />
                       ) : (
                         <Tag className="h-10 w-10 text-white/35" />
+                      )}
+                      {isFeaturedAndActive(item as Record<string, unknown>) && (
+                        <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full border-2 border-[#FF6B00] bg-[#0a2a4a] px-2 py-1 shadow-[0_0_10px_rgba(255,107,0,0.35)]">
+                          <Bell className="h-3 w-3 fill-[#FF6B00] text-[#FF6B00]" />
+                          <span className="text-[9px] font-black uppercase leading-none tracking-wide text-white">Featured</span>
+                        </span>
                       )}
                     </div>
                     <div className="p-4">
@@ -354,35 +327,6 @@ export default function CategoryPage({ params }: CategoryPageProps) {
                   </Link>
                 )
               })}
-            </div>
-          )}
-        </section>
-
-        <section className="mt-10" id="ebay-results">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-xl font-black">Live eBay Results</h2>
-            <span className="text-sm text-white/55">{ebayResults.length} shown</span>
-          </div>
-          {loadingEbay ? (
-            <div className="premium-card rounded-3xl p-6 text-white/60">Loading eBay results...</div>
-          ) : (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {ebayResults.map((item) => (
-                <a key={item.itemId} href={item.itemWebUrl} target="_blank" rel="noopener noreferrer" className="premium-card overflow-hidden rounded-3xl">
-                  <div className="h-48 bg-white">
-                    {item.image?.imageUrl ? (
-                      <img src={item.image.imageUrl} alt={item.title} className="h-full w-full object-contain" />
-                    ) : null}
-                  </div>
-                  <div className="p-4">
-                    <h3 className="line-clamp-2 font-black">{item.title}</h3>
-                    <p className="mt-2 text-lg font-black text-[#FF6B00]">
-                      {item.price?.value ? `£${item.price.value}` : "View price"}
-                    </p>
-                    <p className="mt-1 text-sm text-white/55">{item.itemLocation?.city || "UK"}</p>
-                  </div>
-                </a>
-              ))}
             </div>
           )}
         </section>

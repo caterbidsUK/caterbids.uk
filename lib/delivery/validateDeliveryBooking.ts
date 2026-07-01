@@ -6,6 +6,9 @@ export type DeliveryBookingOrder = {
   buyer_delivery_full_address?: string | null
   buyer_delivery_postcode?: string | null
   buyer_phone?: string | null
+  pallet_size?: string | null
+  shrink_wrapped_confirmed?: boolean | null
+  pallet_preparation_confirmed?: boolean | null
   pallet_weight_kg?: number | null
   pallet_length_cm?: number | null
   pallet_width_cm?: number | null
@@ -17,7 +20,7 @@ export type DeliveryBookingOrder = {
 const requiredFields: Array<{
   key: keyof DeliveryBookingOrder
   label: string
-  type: "text" | "number"
+  type: "text" | "number" | "boolean"
 }> = [
   { key: "collection_full_address", label: "Collection full address", type: "text" },
   { key: "collection_postcode", label: "Collection postcode", type: "text" },
@@ -26,11 +29,14 @@ const requiredFields: Array<{
   { key: "buyer_delivery_full_address", label: "Buyer delivery full address", type: "text" },
   { key: "buyer_delivery_postcode", label: "Buyer delivery postcode", type: "text" },
   { key: "buyer_phone", label: "Buyer phone", type: "text" },
+  { key: "pallet_size", label: "Pallet size", type: "text" },
   { key: "pallet_weight_kg", label: "Pallet weight kg", type: "number" },
   { key: "pallet_length_cm", label: "Pallet length cm", type: "number" },
   { key: "pallet_width_cm", label: "Pallet width cm", type: "number" },
   { key: "pallet_height_cm", label: "Pallet height cm", type: "number" },
   { key: "pallet_count", label: "Pallet count", type: "number" },
+  { key: "shrink_wrapped_confirmed", label: "Shrink-wrap confirmation", type: "boolean" },
+  { key: "pallet_preparation_confirmed", label: "Pallet preparation guide confirmation", type: "boolean" },
   { key: "insurance_value", label: "Insurance value", type: "number" },
 ]
 
@@ -40,7 +46,9 @@ export function validateDeliveryBooking(order: DeliveryBookingOrder | null | und
   for (const field of requiredFields) {
     const value = order?.[field.key]
     const isMissing =
-      field.type === "number"
+      field.type === "boolean"
+        ? value !== true
+        : field.type === "number"
         ? !(Number(value || 0) > 0)
         : typeof value !== "string" || value.trim().length === 0
 

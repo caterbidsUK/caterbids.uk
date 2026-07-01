@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useState } from "react"
 import {
   ArrowLeft,
@@ -19,15 +19,36 @@ import {
   ShieldCheck,
   LogOut,
   PackageCheck,
+  Bell,
+  Star,
 } from "lucide-react"
 import type { Database } from "@/types/supabase"
 import { createClient } from "@/lib/supabase/client"
+import { buildSellerTrustSummary } from "@/lib/trust/badges"
+import { isFeaturedAndActive } from "@/lib/featured"
 
 type Profile = Database["public"]["Tables"]["profiles"]["Row"]
 const LOCAL_PROFILE_KEY = "caterbids_profile"
 const LOCAL_LISTINGS_KEY = "caterbids_listings"
 const LOCAL_PUBLIC_LISTINGS_KEY = "caterbids_public_listings"
 const LOCAL_CURRENT_LISTING_KEY = "caterbids_current_listing"
+const ACCOUNT_ADMIN_ROLES = new Set(["owner", "admin", "super_admin"])
+
+const ukDateFormatter = new Intl.DateTimeFormat("en-GB", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  timeZone: "Europe/London",
+})
+
+function formatUKDate(date?: string | null) {
+  if (!date) return "Recent"
+
+  const parsedDate = new Date(date)
+  if (Number.isNaN(parsedDate.getTime())) return "Recent"
+
+  return ukDateFormatter.format(parsedDate)
+}
 
 function localProfileKey(userId: string) {
   return `${LOCAL_PROFILE_KEY}:${userId}`
@@ -62,6 +83,7 @@ function readLocalArray(key: string) {
 interface AccountClientProps {
   profile: Profile
   userEmail: string
+  authEmailVerified: boolean
   createdAt: string | null
   userId: string
   stats: Array<{
@@ -73,15 +95,52 @@ interface AccountClientProps {
 export default function AccountClient({
   profile,
   userEmail,
+  authEmailVerified,
   createdAt,
   userId,
   stats,
 }: AccountClientProps) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [displayProfile, setDisplayProfile] = useState(profile)
   const [displayStats, setDisplayStats] = useState(stats)
   const [loggingOut, setLoggingOut] = useState(false)
   const [legacyListingCount, setLegacyListingCount] = useState(0)
+  const [phoneInput, setPhoneInput] = useState(profile.phone_number || profile.phone || "")
+  const [emailAuthVerified, setEmailAuthVerified] = useState(authEmailVerified)
+  const [verificationMessage, setVerificationMessage] = useState("")
+  const [verificationError, setVerificationError] = useState("")
+  const [verificationBusy, setVerificationBusy] = useState<"" | "email" | "phone">("")
+  const profileTrust = displayProfile as Profile & {
+    is_email_verified?: boolean | null
+    is_phone_verified?: boolean | null
+    verified_user_badge?: boolean | null
+  }
+  const emailVerified = emailAuthVerified
+  const phoneVerified = Boolean(displayProfile.phone_verified || profileTrust.is_phone_verified)
+  const sellerVerified =
+    displayProfile.seller_verification_level === "verified" ||
+    displayProfile.seller_verification_level === "business_verified" ||
+    Boolean(displayProfile.business_verified || displayProfile.government_id_verified)
+  const showAdminLink = ACCOUNT_ADMIN_ROLES.has(String(displayProfile.role || ""))
+  const verifiedBadgeText =
+    emailVerified && phoneVerified
+      ? "Verified User"
+      : emailVerified
+        ? "Email Verified"
+        : "Basic"
+  const accountVerificationLabel = emailVerified && phoneVerified ? "Verified User" : emailVerified ? "Email Verified" : "Basic"
+  const trustSummary = buildSellerTrustSummary({
+    emailVerified,
+    phoneVerified,
+    idVerified: Boolean(displayProfile.government_id_verified),
+    businessVerified: Boolean(displayProfile.business_verified),
+    stripeConnected: Boolean(displayProfile.stripe_connect_onboarding_complete),
+    createdAt,
+  })
+  const publishedState = searchParams.get("published")
+  const publishedListingId = searchParams.get("listing")
+  const showPublishedNotice = Boolean(publishedState)
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -120,15 +179,143 @@ export default function AccountClient({
 
       try {
         const localProfile = JSON.parse(savedLocalProfile) as Partial<Profile>
+        const {
+          verified,
+          email_verified,
+          is_email_verified,
+          phone_verified,
+          is_phone_verified,
+          verified_user_badge,
+          verification_level,
+          badge,
+          ...safeLocalProfile
+        } = localProfile as Partial<Profile> & {
+          is_email_verified?: boolean | null
+          is_phone_verified?: boolean | null
+        }
         setDisplayProfile((currentProfile) => ({
           ...currentProfile,
-          ...localProfile,
+          ...safeLocalProfile,
         }))
       } catch (error) {
         console.error("Failed to load local profile:", error)
       }
     })
   }, [userId])
+
+  useEffect(() => {
+    if (!userId || userId === "local-beta-preview") return
+
+    let cancelled = false
+
+    async function syncAccountVerification() {
+      try {
+        const response = await fetch("/api/verification/sync-email-status", { method: "POST" })
+        const result = await response.json().catch(() => ({}))
+        if (!response.ok || !result.ok || cancelled) return
+
+        setEmailAuthVerified(Boolean(result.emailVerified))
+        setDisplayProfile((current) => ({
+          ...current,
+          email_verified: Boolean(result.emailVerified),
+          is_email_verified: Boolean(result.emailVerified),
+          verified: Boolean(result.emailVerified),
+          verified_user_badge: Boolean(result.emailVerified && result.phoneVerified),
+          badge: result.badge || (result.emailVerified ? "Email Verified" : "Email pending"),
+          verification_level: result.verificationLevel || (result.emailVerified ? "email_verified" : "basic"),
+        }))
+      } catch (error) {
+        console.warn("Account verification sync skipped:", error)
+      }
+    }
+
+    syncAccountVerification()
+
+    return () => {
+      cancelled = true
+    }
+  }, [userId])
+
+  type SellerListing = { id: string; title: string; featured: boolean | null; is_featured: boolean | null; featured_until: string | null }
+  const [sellerListings, setSellerListings] = useState<SellerListing[]>([])
+
+  useEffect(() => {
+    if (!userId || userId === "local-beta-preview") return
+    const supabase = createClient()
+    supabase
+      .from("listings" as never)
+      .select("id, title, featured, is_featured, featured_until")
+      .eq("seller_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(20)
+      .then(({ data }) => {
+        if (data) setSellerListings(data as SellerListing[])
+      })
+  }, [userId])
+
+  async function sendEmailVerification() {
+    if (!userEmail) {
+      setVerificationError("Email address not found.")
+      return
+    }
+
+    setVerificationBusy("email")
+    setVerificationError("")
+    setVerificationMessage("")
+
+    try {
+      const supabase = createClient()
+      const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost:3000"
+      const { error } = await supabase.auth.resend({
+        type: "signup",
+        email: userEmail.trim().toLowerCase(),
+        options: {
+          emailRedirectTo: `${origin}/auth/callback?next=/account`,
+        },
+      })
+
+      if (error) throw error
+      setVerificationMessage("Check your email. Your CaterBidsUK verification link expires soon.")
+    } catch (error) {
+      setVerificationError(error instanceof Error ? error.message : "Could not send verification email.")
+    } finally {
+      setVerificationBusy("")
+    }
+  }
+
+  async function savePhoneNumberForManualReview() {
+    setVerificationBusy("phone")
+    setVerificationError("")
+    setVerificationMessage("")
+
+    try {
+      const response = await fetch("/api/account/save-phone-number", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: phoneInput }),
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok || !result.ok) throw new Error(result.error || "Could not save mobile number.")
+      if (result.phone) {
+        setPhoneInput(result.phone)
+      }
+      setDisplayProfile((current) => ({
+        ...current,
+        phone: result.phone || phoneInput,
+        phone_number: result.phone || phoneInput,
+        phone_verified: false,
+        is_phone_verified: false,
+        phone_verified_at: null,
+        phone_verification_method: "manual",
+        phone_verification_status: "pending",
+      }))
+      setVerificationMessage(result.message || "Phone verification is reviewed manually during launch.")
+    } catch (error) {
+      setVerificationError(error instanceof Error ? error.message : "Could not save mobile number.")
+    } finally {
+      setVerificationBusy("")
+    }
+  }
 
   async function handleLogout() {
     setLoggingOut(true)
@@ -222,6 +409,38 @@ export default function AccountClient({
           <p className="text-sm text-white/60">Listings, orders and saved items.</p>
         </section>
 
+        {showPublishedNotice && (
+          <section className="rounded-3xl border border-emerald-400/25 bg-emerald-500/10 p-4">
+            <div className="flex items-start gap-3">
+              <PackageCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-300" />
+              <div className="min-w-0 flex-1">
+                <h3 className="text-base font-black text-emerald-100">
+                  {publishedState === "existing" ? "Listing already published" : "Listing published"}
+                </h3>
+                <p className="mt-1 text-sm leading-6 text-emerald-100/75">
+                  Your item is live. Manage it from your CaterBidsUK account.
+                </p>
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                  <Link
+                    href="/listing"
+                    className="rounded-2xl bg-[#FF6B00] px-4 py-2 text-center text-sm font-black text-white"
+                  >
+                    My listings
+                  </Link>
+                  {publishedListingId && (
+                    <Link
+                      href={`/listing?id=${encodeURIComponent(publishedListingId)}`}
+                      className="rounded-2xl border border-white/15 bg-white/8 px-4 py-2 text-center text-sm font-black text-white"
+                    >
+                      View public listing
+                    </Link>
+                  )}
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
+
         {/* PROFILE CARD */}
         <section className="premium-shell rounded-[2rem] p-5">
           <div className="flex items-start gap-4">
@@ -245,9 +464,18 @@ export default function AccountClient({
                 {displayProfile.business || "No business name"}
               </p>
 
-              <div className="premium-badge mt-3 inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-bold">
+              <div
+                className="premium-badge mt-3 inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-bold"
+                title={
+                  emailVerified && phoneVerified
+                    ? "This account has verified email ownership and a UK mobile number."
+                    : emailVerified
+                      ? "This account has verified email ownership."
+                      : "Verify email and phone to build trust."
+                }
+              >
                 <ShieldCheck size={14} />
-                {displayProfile.verified ? "Verified" : "Not Verified"}
+                {verifiedBadgeText}
               </div>
             </div>
           </div>
@@ -275,6 +503,111 @@ export default function AccountClient({
           >
             Edit Profile
           </Link>
+        </section>
+
+        <section className="premium-card rounded-[2rem] p-5">
+          <div className="flex items-start gap-3">
+            <div className="rounded-2xl bg-[#FF6B00]/15 p-3 text-[#FF9A4A]">
+              <ShieldCheck className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#FF6B00]">
+                Account verification
+              </p>
+              <h3 className="mt-1 text-lg font-black">Build trust on CaterBidsUK</h3>
+              <p className="mt-1 text-sm leading-6 text-white/65">
+                Verify your email and phone number to build trust on CaterBidsUK.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 space-y-3">
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-black">Email</p>
+                  <p className="mt-1 text-xs text-white/55">{userEmail || "Email not available"}</p>
+                </div>
+                <span className={`rounded-full px-3 py-1 text-xs font-black ${
+                  emailVerified ? "bg-emerald-500/15 text-emerald-300" : "bg-orange-500/15 text-orange-200"
+                }`}>
+                  {emailVerified ? "Verified" : "Not verified"}
+                </span>
+              </div>
+              {!emailVerified && (
+                <button
+                  type="button"
+                  onClick={sendEmailVerification}
+                  disabled={verificationBusy === "email"}
+                  className="premium-button mt-3 w-full rounded-2xl px-4 py-3 text-sm font-black text-white disabled:opacity-60"
+                >
+                  {verificationBusy === "email" ? "Sending..." : "Resend verification email"}
+                </button>
+              )}
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-black">Phone</p>
+                  <p className="mt-1 text-xs text-white/55">
+                    {phoneVerified ? "Phone verified." : "Phone pending admin verification."}
+                  </p>
+                </div>
+                <span className={`rounded-full px-3 py-1 text-xs font-black ${
+                  phoneVerified ? "bg-emerald-500/15 text-emerald-300" : "bg-orange-500/15 text-orange-200"
+                }`}>
+                  {phoneVerified ? "Phone verified" : "Phone pending verification"}
+                </span>
+              </div>
+
+              {!phoneVerified && (
+                <div className="mt-3 space-y-3">
+                  <p className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-xs font-semibold text-white/65">
+                    Phone verification is reviewed manually during launch.
+                  </p>
+                  <input
+                    type="tel"
+                    value={phoneInput}
+                    onChange={(event) => setPhoneInput(event.target.value)}
+                    placeholder="+447700900123"
+                    className="premium-input w-full rounded-2xl px-4 py-3 text-white placeholder-white/40"
+                  />
+                  <button
+                    type="button"
+                    onClick={savePhoneNumberForManualReview}
+                    disabled={verificationBusy === "phone"}
+                    className="soft-button w-full rounded-2xl px-4 py-3 text-sm font-black disabled:opacity-60"
+                  >
+                    {verificationBusy === "phone" ? "Saving..." : "Save mobile number"}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {(verificationMessage || verificationError) && (
+            <p className={`mt-4 rounded-2xl px-4 py-3 text-sm font-bold ${
+              verificationError
+                ? "border border-red-400/30 bg-red-500/10 text-red-100"
+                : "border border-emerald-400/30 bg-emerald-500/10 text-emerald-100"
+            }`}>
+              {verificationError || verificationMessage}
+            </p>
+          )}
+
+          <div className="mt-4 rounded-2xl bg-white/5 p-4">
+            <div className="flex items-center justify-between text-xs font-black uppercase tracking-wide text-white/65">
+              <span>Badge progress</span>
+              <span className="text-[#FF9A4A]">{accountVerificationLabel}</span>
+            </div>
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
+              <div
+                className="h-full rounded-full bg-[#FF6B00]"
+                style={{ width: `${emailVerified && phoneVerified ? 100 : emailVerified ? 55 : 15}%` }}
+              />
+            </div>
+          </div>
         </section>
 
         {/* STATS */}
@@ -320,6 +653,94 @@ export default function AccountClient({
           Sell an item
         </Link>
 
+        <section className="premium-card rounded-[2rem] p-5">
+          <div className="flex items-start gap-3">
+            <div className="rounded-2xl bg-[#FF6B00]/15 p-3 text-[#FF9A4A]">
+              <ShieldCheck className="h-5 w-5" />
+            </div>
+            <div className="flex-1">
+              <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#FF6B00]">
+                Trust profile
+              </p>
+              <h3 className="mt-1 text-lg font-black">Build buyer confidence</h3>
+              <p className="mt-1 text-sm leading-6 text-white/65">
+                {trustSummary.progressText}
+              </p>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
+                <div
+                  className="h-full rounded-full bg-[#FF6B00]"
+                  style={{ width: `${trustSummary.progressPercent}%` }}
+                />
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {trustSummary.badges.length > 0 ? (
+                  trustSummary.badges.map((badge) => (
+                    <span
+                      key={badge.key}
+                      className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-black text-white/80"
+                      title={badge.description}
+                    >
+                      {badge.label}
+                    </span>
+                  ))
+                ) : (
+                  <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-black text-white/60">
+                    Verification in progress
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {!sellerVerified && (
+          <section className="rounded-3xl border border-[#FF6B00]/25 bg-[#FF6B00]/10 p-4">
+            <div className="flex items-start gap-3">
+              <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-[#FF9A4A]" />
+              <div>
+                <h3 className="text-base font-black text-orange-100">Verified Seller</h3>
+                <p className="mt-1 text-sm leading-6 text-orange-100/80">
+                  Verify your seller profile to unlock payouts, increase buyer trust and earn your Verified Seller badge.
+                </p>
+                <Link
+                  href="/settings"
+                  className="mt-3 inline-flex rounded-2xl bg-[#FF6B00] px-4 py-2 text-sm font-black text-white"
+                >
+                  Start verification
+                </Link>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {sellerListings.length > 0 && (
+          <section className="premium-card rounded-[2rem] p-5">
+            <h3 className="mb-4 text-lg font-black">Your Listings</h3>
+            <div className="space-y-2">
+              {sellerListings.map((item) => {
+                const active = isFeaturedAndActive(item as Record<string, unknown>)
+                return (
+                  <a
+                    key={item.id}
+                    href={`/listing?id=${encodeURIComponent(item.id)}`}
+                    className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm hover:bg-white/8"
+                  >
+                    <span className="min-w-0 flex-1 truncate font-bold text-white">{item.title}</span>
+                    {active ? (
+                      <span className="flex shrink-0 items-center gap-1 rounded-full border-2 border-[#FF6B00] bg-[#0a2a4a] px-2 py-1 shadow-[0_0_8px_rgba(255,107,0,0.3)]">
+                        <Bell size={9} className="fill-[#FF6B00] text-[#FF6B00]" />
+                        <span className="text-[10px] font-black uppercase leading-none text-white">Featured</span>
+                      </span>
+                    ) : (
+                      <span className="shrink-0 text-[11px] font-bold text-[#FF6B00]/70">Feature this →</span>
+                    )}
+                  </a>
+                )
+              })}
+            </div>
+          </section>
+        )}
+
         {/* QUICK ACTIONS */}
         <section className="premium-card rounded-[2rem] p-5">
           <h3 className="mb-4 text-lg font-black">Quick Actions</h3>
@@ -355,6 +776,18 @@ export default function AccountClient({
               icon={<PackageCheck size={20} />}
               title="Orders"
             />
+            <ActionCard
+              href="/account/reviews"
+              icon={<Star size={20} />}
+              title="My Reviews"
+            />
+            {showAdminLink && (
+              <ActionCard
+                href="/admin"
+                icon={<ShieldCheck size={20} />}
+                title="Admin"
+              />
+            )}
           </div>
         </section>
 
@@ -373,14 +806,14 @@ export default function AccountClient({
             <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
               <span className="text-white/60">Verification</span>
               <span className="rounded-full bg-orange-500/15 px-3 py-1 font-bold text-orange-400">
-                {displayProfile.verified ? "Verified" : "Pending"}
+                {emailVerified ? displayProfile.verification_level || "basic" : "Pending"}
               </span>
             </div>
 
             <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
               <span className="text-white/60">Member Since</span>
               <span className="font-bold">
-                {createdAt ? new Date(createdAt).toLocaleDateString() : "Recent"}
+                {formatUKDate(createdAt)}
               </span>
             </div>
           </div>

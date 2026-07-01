@@ -1,15 +1,13 @@
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
-import { NextResponse } from "next/server"
+import { NextResponse, type NextRequest } from "next/server"
 
 function getSupabaseEnv() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key =
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
   if (!url || !key) {
-    throw new Error("Missing Supabase URL or key in .env.local")
+    throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local")
   }
 
   return { url, key }
@@ -37,8 +35,12 @@ export async function createClient() {
   })
 }
 
-export function createMiddlewareClient(request: any) {
-  let response = NextResponse.next({ request })
+export function createMiddlewareClient(request: NextRequest) {
+  let response = NextResponse.next({
+    request: {
+      headers: request.headers,
+    },
+  })
   const { url, key } = getSupabaseEnv()
 
   const supabase = createServerClient(url, key, {
@@ -46,13 +48,17 @@ export function createMiddlewareClient(request: any) {
       getAll() {
         return request.cookies.getAll()
       },
-      setAll(cookiesToSet, headers) {
+      setAll(cookiesToSet) {
         cookiesToSet.forEach(({ name, value, options }) => {
           request.cookies.set(name, value)
-          response.cookies.set(name, value, options)
         })
-        Object.entries(headers).forEach(([key, value]) => {
-          response.headers.set(key, value)
+        response = NextResponse.next({
+          request: {
+            headers: request.headers,
+          },
+        })
+        cookiesToSet.forEach(({ name, value, options }) => {
+          response.cookies.set(name, value, options)
         })
       },
     },

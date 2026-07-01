@@ -5,8 +5,10 @@ import {
   getConfiguredCaterBotSearchProviderName,
   isCaterBotWebSearchConfigured,
 } from "@/lib/caterbot/webSearch"
+import type { Database } from "@/types/supabase"
 
 export const runtime = "nodejs"
+type ListingUpdate = Database["public"]["Tables"]["listings"]["Update"]
 
 function clean(value: unknown) {
   return typeof value === "string" || typeof value === "number" ? String(value).trim() : ""
@@ -76,7 +78,7 @@ function shippingRecommendation({
   const maxDimension = dimensions ? Math.max(dimensions.width, dimensions.depth, dimensions.height) : 0
   const missingDimensions = !dimensions
   const missingWeight = !weightKg
-  const specialist =
+  const needsPalletReview =
     /gas|lpg|natural gas|propane|refrigeration|fridge|freezer|chiller|canopy|extraction|ventilation|van|trailer/.test(text) ||
     missingDimensions ||
     missingWeight ||
@@ -87,45 +89,45 @@ function shippingRecommendation({
   let shippingClass = "Needs seller check"
   if (weightKg && dimensions) {
     if (weightKg <= 30 && maxDimension <= 120) {
-      deliveryType = "Parcel courier"
-      shippingClass = "Small item"
+      deliveryType = "Collection only or CaterBids Pallet Delivery"
+      shippingClass = "Mini Quarter Pallet"
     } else if (weightKg <= 75 && maxDimension <= 180) {
-      deliveryType = "Heavy parcel or small pallet"
-      shippingClass = "Medium item"
+      deliveryType = "CaterBids Pallet Delivery"
+      shippingClass = "Quarter Pallet"
     } else {
-      deliveryType = "Pallet courier"
-      shippingClass = "Large item"
+      deliveryType = "CaterBids Pallet Delivery"
+      shippingClass = "Full Pallet"
     }
   } else if (dimensions || weightKg) {
-    deliveryType = "Heavy parcel or small pallet"
-    shippingClass = "Medium item"
+    deliveryType = "CaterBids Pallet Delivery"
+    shippingClass = "Needs seller check"
   }
 
   const notes = [
     missingDimensions || missingWeight
-      ? "Seller must confirm exact dimensions, weight, access, and collection requirements before courier booking."
+      ? "Seller must confirm exact dimensions, weight, access and pallet preparation before Interparcel booking."
       : "",
     !missingDimensions && !missingWeight && ((weightKg || 0) > 150 || maxDimension > 220)
-      ? "Specialist delivery or collection recommended for heavy or oversized catering equipment."
+      ? "Seller must confirm this item can be safely palletised before CaterBids Pallet Delivery is selected."
       : "",
     /gas|lpg|natural gas|propane/.test(text)
       ? "Gas equipment may require specialist disconnection/installation checks. Buyer should confirm suitability before purchase."
       : "",
     /refrigeration|fridge|freezer|chiller/.test(text)
-      ? "Refrigeration equipment may need upright transport and specialist handling."
+      ? "Refrigeration equipment may need upright transport and careful pallet preparation."
       : "",
     /canopy|extraction|ventilation/.test(text)
-      ? "Extraction equipment may require specialist delivery due to size and installation requirements."
+      ? "Extraction equipment may need careful measurement, boxed loose parts and clear collection access."
       : "",
   ].filter(Boolean)
 
   return {
     deliveryType,
     shippingClass,
-    palletDeliveryRecommended: shippingClass === "Large item" || specialist,
-    specialistDeliveryRecommended: specialist,
-    forkliftRequired: specialist || (weightKg || 0) > 75,
-    tailLiftRequired: specialist || (weightKg || 0) > 30,
+    palletDeliveryRecommended: deliveryType.includes("Pallet") || needsPalletReview,
+    specialistDeliveryRecommended: false,
+    forkliftRequired: needsPalletReview || (weightKg || 0) > 75,
+    tailLiftRequired: needsPalletReview || (weightKg || 0) > 30,
     twoPersonLiftRecommended: (weightKg || 0) > 30 && (weightKg || 0) <= 75,
     shippingConfidence: dimensions && weightKg ? "High" : dimensions || weightKg ? "Medium" : "Low",
     deliveryNotes: notes.join(" "),
@@ -159,11 +161,11 @@ async function saveListingSearchState({
     return { saved: false, error: "Listing does not belong to the current seller" }
   }
 
-  let { error } = await supabase.from("listings").update(payload as any).eq("id", listingId)
+  let { error } = await supabase.from("listings").update(payload as ListingUpdate).eq("id", listingId)
   if (error && isMissingColumnError(error)) {
     const retry = await supabase
       .from("listings")
-      .update(withoutOptionalSourceMetadata(payload) as any)
+      .update(withoutOptionalSourceMetadata(payload) as ListingUpdate)
       .eq("id", listingId)
     error = retry.error
   }

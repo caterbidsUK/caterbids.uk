@@ -1,6 +1,59 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { CaterBidsDeliveryOption } from "@/lib/delivery/options"
 import { resolveFullUkPostcode } from "@/lib/delivery/postcodes"
+import { createAdminClient } from "@/lib/supabase/admin"
+
+function isUuid(value: unknown) {
+  return (
+    typeof value === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+  )
+}
+
+async function resolveListingCollectionPostcode(listingId: unknown) {
+  if (!isUuid(listingId)) return ""
+  const safeListingId = listingId as string
+
+  try {
+    const supabase = createAdminClient()
+    const { data: listing } = await supabase
+      .from("listings")
+      .select("collection_postcode,collection_full_address,location,city,seller_id,user_id")
+      .eq("id", safeListingId)
+      .maybeSingle()
+
+    const listingPostcode = resolveFullUkPostcode(
+      (listing as any)?.collection_postcode,
+      (listing as any)?.collection_full_address,
+      (listing as any)?.location,
+      (listing as any)?.city
+    )
+    if (listingPostcode) return listingPostcode
+
+    const sellerId = isUuid((listing as any)?.seller_id)
+      ? (listing as any).seller_id
+      : isUuid((listing as any)?.user_id)
+        ? (listing as any).user_id
+        : ""
+    if (!sellerId) return ""
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("collection_postcode,collection_full_address,collection_city,location")
+      .eq("id", sellerId)
+      .maybeSingle()
+
+    return resolveFullUkPostcode(
+      (profile as any)?.collection_postcode,
+      (profile as any)?.collection_full_address,
+      (profile as any)?.collection_city,
+      (profile as any)?.location
+    )
+  } catch (error) {
+    console.warn("Could not resolve delivery collection postcode:", error)
+    return ""
+  }
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -9,6 +62,7 @@ export async function POST(req: NextRequest) {
     const {
       collectionPostcode,
       deliveryPostcode,
+      listingId,
       weightKg,
       lengthCm,
       widthCm,
@@ -18,7 +72,8 @@ export async function POST(req: NextRequest) {
       insuranceValue,
     } = body
 
-    const fullCollectionPostcode = resolveFullUkPostcode(collectionPostcode)
+    const fullCollectionPostcode =
+      resolveFullUkPostcode(collectionPostcode) || (await resolveListingCollectionPostcode(listingId))
     const fullDeliveryPostcode = resolveFullUkPostcode(deliveryPostcode)
 
     if (!fullCollectionPostcode) {
@@ -65,30 +120,30 @@ export async function POST(req: NextRequest) {
         name: "Economy Pallet",
         price: base,
         eta: "3-5 working days",
-        description: "Interparcel-ready UK pallet freight estimate",
+        description: "Delivery estimate. Final Interparcel booking confirmed after payment.",
         recommended: true,
       },
       {
-        id: "express-freight",
-        name: "Express Freight",
+        id: "express-pallet",
+        name: "Express Pallet",
         price: Math.max(base + 34, 127 + (weight > 150 ? 20 : 0) + (tailLiftRequired ? 30 : 0)),
         eta: "1-2 working days",
-        description: "Faster Interparcel-ready freight estimate",
+        description: "Faster Interparcel pallet estimate. Final booking confirmed after payment.",
         recommended: false,
       },
       {
-        id: "specialist-2-man",
-        name: "2-Man / Specialist Delivery",
+        id: "timed-pallet",
+        name: "Timed Pallet",
         price: Math.max(base + 97, 190 + (weight > 200 ? 40 : 0)),
-        eta: "2-5 working days",
-        description: "For awkward, heavy or non-palletised catering equipment",
+        eta: "Delivery window / premium service",
+        description: "Premium Interparcel pallet estimate with a timed delivery window.",
         recommended: false,
       },
     ]
 
     return NextResponse.json({
       success: true,
-      provider: "Interparcel-ready CaterBids Delivery",
+      provider: "Interparcel",
       mode: "test_booking_ready",
       bookingReady: true,
       interparcelReady: true,

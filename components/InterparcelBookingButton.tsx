@@ -27,7 +27,7 @@ export default function InterparcelBookingButton({
     setError("")
 
     try {
-      const res = await fetch(testMode ? "/api/delivery/test-confirm" : "/api/delivery/interparcel/book", {
+      const res = await fetch("/api/delivery/interparcel/book", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -41,11 +41,8 @@ export default function InterparcelBookingButton({
         throw new Error(missing ? `${data.error} Missing: ${missing}` : data.error || "Could not book delivery.")
       }
 
-      if (data.confirmed) {
-        setMessage("Test courier confirmation saved.")
-        window.location.reload()
-      } else if (data.booked) {
-        setMessage(`Courier confirmed: ${data.booking?.bookingReference || "confirmed"}`)
+      if (data.booked) {
+        setMessage(`Interparcel booking confirmed: ${data.booking_reference || data.tracking_number || "confirmed"}`)
         window.location.reload()
       } else {
         setMessage(data.message || "Delivery data is ready. Final courier confirmation will follow.")
@@ -67,7 +64,7 @@ export default function InterparcelBookingButton({
             disabled={loading}
             className="w-full rounded-2xl bg-[#FF6B00] px-4 py-3 text-sm font-black text-white disabled:cursor-wait disabled:opacity-60"
           >
-            {loading ? "Checking delivery data..." : testMode ? "Simulate courier confirmation" : "Request courier confirmation"}
+            {loading ? "Checking delivery data..." : testMode ? "Book Interparcel Delivery (local mock)" : "Book Interparcel Delivery"}
           </button>
           <p className="mt-2 text-xs text-white/55">
             {testMode

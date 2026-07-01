@@ -11,6 +11,7 @@ type CheckoutRequestBody = {
   title?: string
   itemPrice?: number | string
   deliveryName?: string
+  deliveryMethod?: string
   deliveryPrice?: number | string
   deliveryQuoteId?: string
   deliveryProvider?: string
@@ -48,6 +49,29 @@ function isMissingColumnError(error: unknown) {
   return code === "PGRST204" || message.includes("schema cache") || message.includes("column")
 }
 
+async function resolveSellerProfileCollectionPostcode(sellerId: string) {
+  if (!isUuid(sellerId)) return ""
+
+  try {
+    const supabaseAdmin = createAdminClient()
+    const { data } = await supabaseAdmin
+      .from("profiles")
+      .select("collection_postcode,collection_full_address,collection_city,location")
+      .eq("id", sellerId)
+      .maybeSingle()
+
+    return resolveFullUkPostcode(
+      (data as any)?.collection_postcode,
+      (data as any)?.collection_full_address,
+      (data as any)?.collection_city,
+      (data as any)?.location
+    )
+  } catch (error) {
+    console.warn("Could not resolve seller profile collection postcode:", error)
+    return ""
+  }
+}
+
 async function createPendingDeliveryOrder(payload: Record<string, unknown>) {
   const supabaseAdmin = createAdminClient()
   const result = await supabaseAdmin.from("orders").insert(payload as any).select("id").single()
@@ -55,6 +79,7 @@ async function createPendingDeliveryOrder(payload: Record<string, unknown>) {
   if (!result.error || !isMissingColumnError(result.error)) return result
 
   const {
+    delivery_method: _deliveryMethod,
     delivery_provider: _deliveryProvider,
     delivery_quote_id: _deliveryQuoteId,
     delivery_postcode: _deliveryPostcode,
@@ -64,12 +89,26 @@ async function createPendingDeliveryOrder(payload: Record<string, unknown>) {
     buyer_delivery_postcode: _buyerDeliveryPostcode,
     buyer_phone: _buyerPhone,
     buyer_access_restrictions: _buyerAccessRestrictions,
+    collection_full_address: _collectionFullAddress,
+    collection_city: _collectionCity,
+    seller_contact_name: _sellerContactName,
+    seller_phone: _sellerPhone,
+    pallet_size: _palletSize,
+    pallet_ready: _palletReady,
     pallet_weight_kg: _palletWeightKg,
     pallet_length_cm: _palletLengthCm,
     pallet_width_cm: _palletWidthCm,
     pallet_height_cm: _palletHeightCm,
     pallet_count: _palletCount,
+    tail_lift_required: _tailLiftRequired,
+    forklift_available: _forkliftAvailable,
+    commercial_premises: _commercialPremises,
+    shrink_wrapped_confirmed: _ShrinkWrappedConfirmed,
+    pallet_preparation_confirmed: _PalletPreparationConfirmed,
+    preferred_collection_date: _PreferredCollectionDate,
     insurance_value: _insuranceValue,
+    access_restrictions: _AccessRestrictions,
+    delivery_notes: _DeliveryNotes,
     ...corePayload
   } = payload
 
@@ -85,6 +124,7 @@ export async function POST(req: NextRequest) {
       title,
       itemPrice,
       deliveryName,
+      deliveryMethod,
       deliveryPrice,
       deliveryQuoteId,
       deliveryProvider,
@@ -109,10 +149,14 @@ export async function POST(req: NextRequest) {
     } = body
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
 
-    const itemAmount = Math.round(Number(itemPrice || 0) * 100)
-    const deliveryAmount = Math.round(Number(deliveryPrice || 0) * 100)
+    const requestedDeliveryMethod =
+      deliveryMethod === "pallet_delivery" || Number(deliveryPrice || 0) > 0
+        ? "pallet_delivery"
+        : "collection_only"
+    const isPalletDelivery = requestedDeliveryMethod === "pallet_delivery"
+    const deliveryAmount = isPalletDelivery ? Math.round(Number(deliveryPrice || 0) * 100) : 0
 
-    if (!listingId || !title || itemAmount <= 0) {
+    if (!listingId || !title) {
       return NextResponse.json({ error: "Missing listing details" }, { status: 400 })
     }
 
@@ -124,7 +168,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (
-      deliveryAmount > 0 &&
+      isPalletDelivery &&
       (!deliveryQuoteId || !deliveryName || !buyerDeliveryFullAddress || !buyerDeliveryPostcode || !buyerPhone)
     ) {
       return NextResponse.json(
@@ -136,7 +180,7 @@ export async function POST(req: NextRequest) {
     const supabase = await createClient()
     const buyer = await getCurrentUser(supabase)
     const checkoutBuyerId = buyer?.id || buyerId
-    let sellerId = isUuid(bodySellerId) ? bodySellerId : ""
+    let sellerId = isUuid(bodySellerId) ? String(bodySellerId) : ""
     const { data: listing } = await supabase
       .from("listings")
       .select("*")
@@ -150,12 +194,29 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    if (!listing) {
+      return NextResponse.json({ error: "Listing not found." }, { status: 404 })
+    }
+
     if (listing?.status === "sold") {
       return NextResponse.json(
         { error: "This listing has already sold." },
         { status: 409 }
       )
     }
+
+    if (!["live", "active"].includes(String((listing as any)?.status || "").toLowerCase())) {
+      return NextResponse.json(
+        { error: "This listing is not currently available for purchase." },
+        { status: 409 }
+      )
+    }
+
+    const listingPrice = Number((listing as any)?.price || 0)
+    if (listingPrice <= 0) {
+      return NextResponse.json({ error: "This listing does not have a valid price." }, { status: 400 })
+    }
+    const itemAmount = Math.round(listingPrice * 100)
 
     if (!sellerId) {
       sellerId = isUuid(listing?.seller_id)
@@ -172,57 +233,75 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const fullCollectionPostcode = resolveFullUkPostcode(
+    const listingCollectionPostcode = resolveFullUkPostcode(
       collectionPostcode,
       (listing as any)?.collection_postcode,
       (listing as any)?.collection_full_address,
       (listing as any)?.location
     )
+    const fullCollectionPostcode =
+      listingCollectionPostcode ||
+      (isPalletDelivery ? await resolveSellerProfileCollectionPostcode(sellerId) : "")
     const fullDeliveryPostcode = resolveFullUkPostcode(buyerDeliveryPostcode, deliveryPostcode)
 
-    if (deliveryAmount > 0 && !fullCollectionPostcode) {
+    if (isPalletDelivery && !fullCollectionPostcode) {
       return NextResponse.json(
         { error: "Collection postcode not provided. Seller must add a full collection postcode before delivery checkout." },
         { status: 400 }
       )
     }
 
-    if (deliveryAmount > 0 && !fullDeliveryPostcode) {
+    if (isPalletDelivery && !fullDeliveryPostcode) {
       return NextResponse.json(
         { error: "Enter a full delivery postcode before payment." },
         { status: 400 }
       )
     }
 
-    const total = Number(itemPrice || 0) + Number(deliveryPrice || 0)
+    const total = listingPrice + (isPalletDelivery ? Number(deliveryPrice || 0) : 0)
     const supabaseAdmin = createAdminClient()
     const deliveryRequestPayload = {
       listing_id: listingId,
       buyer_id: checkoutBuyerId,
       seller_id: sellerId,
       item_title: title,
-      item_price: Number(itemPrice || 0),
-      delivery_name: deliveryName || null,
-      delivery_price: Number(deliveryPrice || 0),
-      delivery_provider: deliveryProvider || (deliveryAmount > 0 ? "Interparcel-ready CaterBids Delivery" : null),
-      delivery_quote_id: deliveryQuoteId || null,
-      delivery_postcode: fullDeliveryPostcode || null,
-      collection_postcode: fullCollectionPostcode || null,
-      delivery_booking_required: deliveryAmount > 0,
-      buyer_delivery_full_address: buyerDeliveryFullAddress || null,
-      buyer_delivery_postcode: fullDeliveryPostcode || null,
-      buyer_phone: buyerPhone || null,
-      buyer_access_restrictions: buyerAccessRestrictions || null,
-      pallet_weight_kg: Number(weightKg || (listing as any)?.pallet_weight_kg || (listing as any)?.weight_kg || 0) || null,
-      pallet_length_cm: Number(lengthCm || (listing as any)?.pallet_length_cm || (listing as any)?.length_cm || 0) || null,
-      pallet_width_cm: Number(widthCm || (listing as any)?.pallet_width_cm || (listing as any)?.width_cm || 0) || null,
-      pallet_height_cm: Number(heightCm || (listing as any)?.pallet_height_cm || (listing as any)?.height_cm || 0) || null,
-      pallet_count: Number(palletCount || (listing as any)?.pallet_count || 1) || 1,
-      insurance_value: Number(insuranceValue || (listing as any)?.insurance_value || itemPrice || 0) || null,
+      item_price: listingPrice,
+      delivery_method: requestedDeliveryMethod,
+      delivery_name: isPalletDelivery ? deliveryName || null : "Collection only",
+      delivery_price: isPalletDelivery ? Number(deliveryPrice || 0) : 0,
+      delivery_provider: isPalletDelivery ? deliveryProvider || "Interparcel" : null,
+      delivery_quote_id: isPalletDelivery ? deliveryQuoteId || null : null,
+      delivery_postcode: isPalletDelivery ? fullDeliveryPostcode || null : null,
+      collection_postcode: isPalletDelivery ? fullCollectionPostcode || null : null,
+      delivery_booking_required: isPalletDelivery,
+      buyer_delivery_full_address: isPalletDelivery ? buyerDeliveryFullAddress || null : null,
+      buyer_delivery_postcode: isPalletDelivery ? fullDeliveryPostcode || null : null,
+      buyer_phone: isPalletDelivery ? buyerPhone || null : null,
+      buyer_access_restrictions: isPalletDelivery ? buyerAccessRestrictions || null : null,
+      collection_full_address: isPalletDelivery ? (listing as any)?.collection_full_address || null : null,
+      collection_city: isPalletDelivery ? (listing as any)?.collection_city || null : null,
+      seller_contact_name: isPalletDelivery ? (listing as any)?.seller_contact_name || null : null,
+      seller_phone: isPalletDelivery ? (listing as any)?.seller_phone || null : null,
+      pallet_size: isPalletDelivery ? (listing as any)?.pallet_size || null : null,
+      pallet_ready: isPalletDelivery ? Boolean((listing as any)?.pallet_ready) : false,
+      pallet_weight_kg: isPalletDelivery ? Number(weightKg || (listing as any)?.pallet_weight_kg || (listing as any)?.weight_kg || 0) || null : null,
+      pallet_length_cm: isPalletDelivery ? Number(lengthCm || (listing as any)?.pallet_length_cm || (listing as any)?.length_cm || 0) || null : null,
+      pallet_width_cm: isPalletDelivery ? Number(widthCm || (listing as any)?.pallet_width_cm || (listing as any)?.width_cm || 0) || null : null,
+      pallet_height_cm: isPalletDelivery ? Number(heightCm || (listing as any)?.pallet_height_cm || (listing as any)?.height_cm || 0) || null : null,
+      pallet_count: isPalletDelivery ? Number(palletCount || (listing as any)?.pallet_count || 1) || 1 : 1,
+      tail_lift_required: isPalletDelivery ? Boolean((listing as any)?.tail_lift_required) || tailLiftRequired === "true" : false,
+      forklift_available: isPalletDelivery ? Boolean((listing as any)?.forklift_available) : false,
+      commercial_premises: isPalletDelivery ? (listing as any)?.commercial_premises !== false : false,
+      shrink_wrapped_confirmed: isPalletDelivery ? Boolean((listing as any)?.shrink_wrapped_confirmed) : false,
+      pallet_preparation_confirmed: isPalletDelivery ? Boolean((listing as any)?.pallet_preparation_confirmed) : false,
+      preferred_collection_date: isPalletDelivery ? (listing as any)?.preferred_collection_date || null : null,
+      insurance_value: isPalletDelivery ? Number(insuranceValue || (listing as any)?.insurance_value || listingPrice) || null : null,
+      access_restrictions: isPalletDelivery ? (listing as any)?.access_restrictions || null : null,
+      delivery_notes: isPalletDelivery ? (listing as any)?.delivery_notes || null : null,
       total_price: total,
       payment_status: "pending",
       order_status: "pending_payment",
-      delivery_status: deliveryAmount > 0 ? "pending_payment" : "not_required",
+      delivery_status: isPalletDelivery ? "pending_payment" : "not_required",
       updated_at: new Date().toISOString(),
     }
 
@@ -238,7 +317,7 @@ export async function POST(req: NextRequest) {
 
     let deliveryOrderId = ""
 
-    if (deliveryAmount > 0) {
+    if (isPalletDelivery) {
       const { data: deliveryOrder, error: deliveryOrderError } = await createDeliveryOrderBeforePayment(supabaseAdmin, {
         order_id: pendingOrder?.id || null,
         listing_id: listingId,
@@ -251,12 +330,12 @@ export async function POST(req: NextRequest) {
         width_cm: Number(widthCm || (listing as any)?.pallet_width_cm || (listing as any)?.width_cm || 0) || null,
         height_cm: Number(heightCm || (listing as any)?.pallet_height_cm || (listing as any)?.height_cm || 0) || null,
         pallet_count: Number(palletCount || (listing as any)?.pallet_count || 1) || 1,
-        insurance_value: Number(insuranceValue || (listing as any)?.insurance_value || itemPrice || 0) || null,
-        selected_service_name: deliveryName || "CaterBids Delivery",
+        insurance_value: Number(insuranceValue || (listing as any)?.insurance_value || listingPrice) || null,
+        selected_service_name: deliveryName || "CaterBids Pallet Delivery",
         selected_service_price: Number(deliveryPrice || 0),
         estimated_delivery_time: estimatedDeliveryTime || null,
         courier_provider: "Interparcel",
-        pallet_size_name: null,
+        pallet_size_name: (listing as any)?.pallet_size || null,
         tail_lift_required: tailLiftRequired === "true" || (listing as any)?.tail_lift_required === true,
         forklift_available: (listing as any)?.forklift_available ?? null,
         pallet_truck_available: (listing as any)?.pallet_truck_available ?? null,
@@ -302,7 +381,7 @@ export async function POST(req: NextRequest) {
       },
     ]
 
-    if (deliveryAmount > 0) {
+    if (isPalletDelivery) {
       lineItems.push({
         price_data: {
           currency: "gbp",
@@ -326,14 +405,16 @@ export async function POST(req: NextRequest) {
         listingId,
         listing_id: listingId,
         title,
-        itemPrice: String(itemPrice || 0),
+        itemPrice: String(listingPrice),
         deliveryName: deliveryName || "",
-        deliveryPrice: String(deliveryPrice || 0),
-        selected_service_name: deliveryName || "",
-        selected_service_price: String(deliveryPrice || 0),
+        deliveryMethod: requestedDeliveryMethod,
+        delivery_method: requestedDeliveryMethod,
+        deliveryPrice: String(isPalletDelivery ? deliveryPrice || 0 : 0),
+        selected_service_name: isPalletDelivery ? deliveryName || "" : "Collection only",
+        selected_service_price: String(isPalletDelivery ? deliveryPrice || 0 : 0),
         deliveryQuoteId: deliveryQuoteId || "",
-        deliveryProvider: deliveryProvider || "",
-        courier_provider: "Interparcel",
+        deliveryProvider: isPalletDelivery ? deliveryProvider || "Interparcel" : "",
+        courier_provider: isPalletDelivery ? "Interparcel" : "",
         estimated_delivery_time: estimatedDeliveryTime || "",
         deliveryPostcode: fullDeliveryPostcode || "",
         delivery_postcode: fullDeliveryPostcode || "",
@@ -349,7 +430,10 @@ export async function POST(req: NextRequest) {
         widthCm: String(widthCm || ""),
         heightCm: String(heightCm || ""),
         palletReady: palletReady || "",
+        palletSize: String((listing as any)?.pallet_size || ""),
         tailLiftRequired: tailLiftRequired || "",
+        shrinkWrappedConfirmed: String(Boolean((listing as any)?.shrink_wrapped_confirmed)),
+        palletPreparationConfirmed: String(Boolean((listing as any)?.pallet_preparation_confirmed)),
         palletCount: String(palletCount || ""),
         insuranceValue: String(insuranceValue || ""),
         order_id: pendingOrder?.id || "",

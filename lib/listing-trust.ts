@@ -37,13 +37,8 @@ export const TESTED_STATUS_OPTIONS = [
 ]
 
 export const DELIVERY_OPTION_OPTIONS = [
-  "Collection only",
-  "Delivery available through CaterBids",
-  "Local delivery available",
-  "Pallet delivery available",
-  "Courier delivery available",
-  "Buyer arranges transport",
-  "Delivery quote required",
+  "Collection Only",
+  "CaterBids Pallet Delivery",
 ]
 
 export const BUYER_WARNING =

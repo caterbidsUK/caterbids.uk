@@ -55,17 +55,33 @@ const TRUSTED_SOURCE_HINTS = [
   "hobart",
   "foster",
   "polar",
+  "buffalo",
+  "hoshizaki",
+  "williams",
   "true",
   "gram",
   "winterhalter",
   "manitowoc",
   "manualslib",
+  "bravilor",
+  "bonamat",
+  "hatco",
+  "electroluxprofessional",
+  "electrolux",
   "manuals",
+  "catering-appliance",
   "caterkwik",
   "nisbets",
   "caterboss",
   "ukcateringequipment",
   "cateringequipment",
+  "alexanders-direct",
+  "h2products",
+  "electricaldealsdirect",
+  "ceonline",
+  "caterquip",
+  "caterfair",
+  "angliacateringequipment",
 ]
 
 const MANUALSLIB_BASE_URL = "https://www.manualslib.com"
@@ -92,6 +108,9 @@ export function sourcePriorityRank(url: string, brand?: string | null) {
   if (host.endsWith("caterkwik.co.uk")) return 5
   if (host.endsWith("cs-catering-equipment.co.uk")) return 6
   if (host.endsWith("allianceonline.co.uk")) return 7
+  if (host.endsWith("caterfair.co.uk")) return 7
+  if (host.endsWith("angliacateringequipment.com")) return 7
+  if (host.endsWith("cater2.co.uk")) return 7
   if (isManufacturerHost(host)) return 3
   if (lowerUrl.includes(".pdf") || lowerUrl.includes("/manual") || lowerUrl.includes("spec")) return 8
 
@@ -115,6 +134,12 @@ function isManufacturerHost(host: string) {
     "true-mfg",
     "gram-commercial",
     "imperialrange",
+    "polar-refrigerator",
+    "buffalo-appliances",
+    "hoshizaki",
+    "williams-refrigeration",
+    "bravilor",
+    "hatco",
   ].some((domain) => host.includes(domain))
 }
 
@@ -128,6 +153,14 @@ function isTrustedSupplierOrManualHost(host: string) {
     "ukcateringequipment",
     "cateringequipment",
     "lockhart",
+    "alexanders-direct",
+    "h2products",
+    "electricaldealsdirect",
+    "ceonline",
+    "caterquip",
+    "caterfair",
+    "angliacateringequipment",
+    "cater2",
   ].some((domain) => host.includes(domain))
 }
 
@@ -142,6 +175,30 @@ function compactModel(value: string | null | undefined) {
   return String(value || "")
     .toLowerCase()
     .replace(/[^a-z0-9]/g, "")
+}
+
+// Returns the 0-based column index of compactModelHint in the first comparison-table
+// header row found in text (a run of ≥2 model-like tokens within 25 chars of each other).
+// Returns -1 if no comparison table is detected, or the model is not in the header.
+function tableColumnIndex(text: string, compactModelHint: string): number {
+  if (!compactModelHint) return -1
+  const tokenRe = /\b([A-Z]{1,5}[- ]?[0-9][A-Z0-9]{1,9}(?:[- .][0-9A-Z]{1,8})*)\b/gi
+  const tokens = Array.from(text.matchAll(tokenRe))
+  for (let i = 0; i < tokens.length - 1; i++) {
+    const run: string[] = [tokens[i][1]]
+    let lastEnd = tokens[i].index! + tokens[i][0].length
+    for (let j = i + 1; j < Math.min(i + 8, tokens.length); j++) {
+      if (tokens[j].index! - lastEnd > 25) break
+      run.push(tokens[j][1])
+      lastEnd = tokens[j].index! + tokens[j][0].length
+    }
+    if (run.length >= 2) {
+      const compacts = run.map((t) => compactModel(t))
+      const idx = compacts.indexOf(compactModelHint)
+      if (idx !== -1) return idx
+    }
+  }
+  return -1
 }
 
 function hasLettersAndDigits(value: string) {
@@ -185,7 +242,7 @@ function modelMatchGroups(model: string | null | undefined) {
     .map((term) => compactModel(term))
     .filter((term) => term.length >= 4 && hasPlateIdentifierShape(term))
 
-  const exactAliases = variants.filter((term) => term === compactRaw || compactRaw.includes(term) && term.length >= compactRaw.length - 1)
+  const exactAliases = variants.filter((term) => term === compactRaw || (compactRaw.includes(term) && term.length >= compactRaw.length))
   const closeAliases = variants.filter((term) => !exactAliases.includes(term))
 
   return {
@@ -203,6 +260,44 @@ function normaliseManualLookupBrand(brand: string) {
     .trim()
 
   return cleaned.length >= 3 ? cleaned : ""
+}
+
+function brandAliases(brand: string | null | undefined) {
+  const cleaned = normaliseManualLookupBrand(String(brand || "").trim())
+  const aliases = new Set<string>()
+  const add = (value: string) => {
+    const cleanValue = clean(value)
+    if (cleanValue.length >= 3) aliases.add(cleanValue)
+  }
+
+  add(cleaned)
+  if (/\bbravilor\b/i.test(cleaned) || /\bbonamat\b/i.test(cleaned)) {
+    add("bravilor")
+    add("bonamat")
+    add("bravilor bonamat")
+  }
+  if (/\belectrolux\b/i.test(cleaned)) {
+    add("electrolux")
+    add("electrolux professional")
+    add("electroluxprofessional")
+  }
+  if (/\bhatco\b/i.test(cleaned)) {
+    add("hatco")
+    add("hatco corporation")
+  }
+  if (/\bblue\s*seal\b/i.test(cleaned)) {
+    add("blue seal")
+    add("blue-seal")
+  }
+  cleaned.split(/\s+/).filter((part) => part.length >= 5).forEach(add)
+
+  return Array.from(aliases)
+}
+
+function sourceMatchesBrand(combinedText: string, hostAndUrlText: string, brand: string | null | undefined) {
+  const aliases = brandAliases(brand)
+  if (aliases.length === 0) return true
+  return aliases.some((alias) => combinedText.includes(alias) || hostAndUrlText.includes(alias))
 }
 
 function manualsLibBrandSlug(brand: string) {
@@ -231,7 +326,9 @@ function sourceTypeFor(url: string) {
       host.includes("rational") ||
       host.includes("hobart") ||
       host.includes("imperialrange") ||
-      host.includes("falconfoodservice")
+      host.includes("falconfoodservice") ||
+      host.includes("bravilor") ||
+      host.includes("hatco")
       ? "Manufacturer source"
       : "Supplier / manual source"
   }
@@ -303,7 +400,7 @@ function normaliseUnit(value: string | null | undefined) {
   return ""
 }
 
-function numberAfterLabel(text: string, labels: string[]) {
+function numberAfterLabel(text: string, labels: string[], columnHint = -1) {
   const normalised = text.replace(/\s+/g, " ")
 
   for (const label of labels) {
@@ -312,12 +409,30 @@ function numberAfterLabel(text: string, labels: string[]) {
       "i"
     )
     const match = normalised.match(pattern)
-    if (!match) continue
+    if (!match || match.index === undefined) continue
 
-    return {
-      value: compactNumber(match[2]),
-      unit: normaliseUnit(match[3] || match[1]),
+    const unitHint = normaliseUnit(match[3] || match[1])
+
+    // Detect comparison-table rows: additional 2–5 digit numbers immediately following
+    // the first match value, separated only by whitespace (e.g. "Width (mm) 860 860 860 760").
+    const afterFirst = normalised.slice(match.index + match[0].length)
+    const rowRest = afterFirst.match(/^((?:\s+\d{2,5}(?:[,.]\d+)?)+)/)
+    if (rowRest) {
+      // Multi-column row detected.
+      if (columnHint < 0) {
+        // Column position unknown — returning the first value risks the wrong model's spec.
+        return null
+      }
+      const extraNums = Array.from(rowRest[1].matchAll(/(\d{2,5}(?:[,.]\d+)?)/g)).map((m) => m[1])
+      const allVals = [match[2], ...extraNums]
+      if (columnHint < allVals.length) {
+        return { value: compactNumber(allVals[columnHint]), unit: unitHint }
+      }
+      return null // column index beyond row length
     }
+
+    // Single-value row (normal single-model page).
+    return { value: compactNumber(match[2]), unit: unitHint }
   }
 
   return null
@@ -385,33 +500,102 @@ function kilowattsFromLabels(text: string) {
   return ""
 }
 
-function extractedSpecsFrom(text: string): CaterBotSourceValidationResult["extractedSpecs"] {
-  const productWidth = numberAfterLabel(text, ["Product Width", "Width"])
-  const productDepth = numberAfterLabel(text, ["Product Depth", "Depth"])
-  const productHeight = numberAfterLabel(text, ["Product Height", "Height"])
+// Parse "NNN x NNN x NNN mm/cm" → [w, d, h] in mm, or null if unparseable.
+function parseDimStringToMm(dimStr: string): [number, number, number] | null {
+  const m = dimStr.match(
+    /(\d+(?:[,.]\d+)?)\s*(?:mm|cm)?\s*[x×]\s*(\d+(?:[,.]\d+)?)\s*(?:mm|cm)?\s*[x×]\s*(\d+(?:[,.]\d+)?)\s*(mm|cm)?/i
+  )
+  if (!m) return null
+  const unit = (m[4] || "mm").toLowerCase()
+  const factor = unit === "cm" ? 10 : unit === "m" ? 1000 : 1
+  const vals = [m[1], m[2], m[3]].map((v) => Number(v.replace(",", ".")) * factor)
+  if (vals.some((v) => !Number.isFinite(v) || v <= 0)) return null
+  return [vals[0], vals[1], vals[2]]
+}
+
+// Clears a dimension string that fails plausibility for commercial catering equipment:
+// each axis must be 100–3500 mm, and the largest/smallest ratio must be ≤ 6.
+// Returns "" so the field is left blank for seller check rather than showing a wrong value.
+function sanitiseDimensions(dimStr: string): string {
+  if (!dimStr) return dimStr
+  const mm = parseDimStringToMm(dimStr)
+  if (!mm) return dimStr // unparseable — leave for seller to verify
+  if (mm.some((v) => v < 100 || v > 3500)) return ""
+  const max = Math.max(...mm)
+  const min = Math.min(...mm)
+  if (min > 0 && max / min > 6) return ""
+  return dimStr
+}
+
+// Clears a weight string outside the plausible commercial kitchen range (1–3000 kg).
+function sanitiseWeight(weightStr: string): string {
+  if (!weightStr) return weightStr
+  const m = weightStr.match(/(\d+(?:[,.]\d+)?)\s*kg/i)
+  if (!m) return weightStr
+  const kg = Number(m[1].replace(",", "."))
+  if (!Number.isFinite(kg) || kg < 1 || kg > 3000) return ""
+  return weightStr
+}
+
+function extractedSpecsFrom(
+  text: string,
+  modelHint?: string
+): CaterBotSourceValidationResult["extractedSpecs"] {
+  // Determine which column in a comparison table belongs to our model.
+  // -1 = no table detected or column unknown → falls through to single-value logic.
+  const columnHint = modelHint ? tableColumnIndex(text, compactModel(modelHint)) : -1
+
+  const productWidth = numberAfterLabel(text, ["Product Width", "Width"], columnHint)
+  const productDepth = numberAfterLabel(text, ["Product Depth", "Depth"], columnHint)
+  const productHeight = numberAfterLabel(text, ["Product Height", "Height"], columnHint)
+  // Ship/packed dimensions are rarely model-specific in comparison tables.
   const shipWidth = numberAfterLabel(text, ["Ship Width", "Shipping Width", "Packed Width"])
   const shipDepth = numberAfterLabel(text, ["Ship Depth", "Shipping Depth", "Packed Depth"])
   const shipHeight = numberAfterLabel(text, ["Ship Height", "Shipping Height", "Packed Height"])
   const productWeight = numberAfterLabel(text, ["Product Weight", "Net Weight", "Weight"])
   const shipWeight = numberAfterLabel(text, ["Ship Weight", "Shipping Weight", "Packed Weight", "Gross Weight"])
 
-  return {
-    dimensions: dimensionsFromLabeledFields(productWidth, productDepth, productHeight, "mm") || firstMatch(text, [
+  const rawDimensions =
+    dimensionsFromLabeledFields(productWidth, productDepth, productHeight, "mm") ||
+    firstMatch(text, [
       /\b(?:dimensions?|size|w\s?x\s?d\s?x\s?h)[^\d]{0,24}(\d{2,4}\s?(?:mm|cm)?\s?[x×]\s?\d{2,4}\s?(?:mm|cm)?\s?[x×]\s?\d{2,4}\s?(?:mm|cm)?)/i,
+      /\b(?:dimensions?|size)[^\d]{0,40}(\d{2,4}\s*\(\s*[hwd]\s*\)\s?[x×]\s?\d{2,4}\s*\(\s*[hwd]\s*\)\s?[x×]\s?\d{2,4}\s*\(\s*[hwd]\s*\)\s?(?:mm|cm)?)/i,
       /\b(\d{2,4}\s?(?:mm|cm)?\s?[x×]\s?\d{2,4}\s?(?:mm|cm)?\s?[x×]\s?\d{2,4}\s?(?:mm|cm)?)\b/i,
-    ]),
+      /\b(\d{2,4}\s*\(\s*[hwd]\s*\)\s?[x×]\s?\d{2,4}\s*\(\s*[hwd]\s*\)\s?[x×]\s?\d{2,4}\s*\(\s*[hwd]\s*\)\s?(?:mm|cm)?)\b/i,
+    ])
+  const rawWeight =
+    formatMeasurement(productWeight, "kg") ||
+    firstMatch(text, [
+      /\b(?:weight|net weight|product weight|empty weight)[^\d]{0,40}(\d{1,4}(?:\.\d+)?\s?kg)\b/i,
+      /\b(\d{1,4}(?:\.\d+)?\s?kg)\s*(?:empty\s*)?(?:weight|net)\b/i,
+    ])
+  const rawGrossWeight =
+    formatMeasurement(shipWeight, "kg") ||
+    firstMatch(text, [
+      /\b(?:gross weight|ship weight|shipping weight|packed weight)[^\d]{0,40}(\d{1,4}(?:\.\d+)?\s?kg)\b/i,
+    ])
+
+  return {
+    dimensions: sanitiseDimensions(rawDimensions),
     packedDimensions: dimensionsFromLabeledFields(shipWidth, shipDepth, shipHeight, "cm"),
-    weight: formatMeasurement(productWeight, "kg") ||
-      firstMatch(text, [/\b(?:weight|net weight|product weight)[^\d]{0,40}(\d{1,4}(?:\.\d+)?\s?kg)\b/i]),
-    grossWeight: formatMeasurement(shipWeight, "kg") ||
-      firstMatch(text, [/\b(?:gross weight|ship weight|shipping weight|packed weight)[^\d]{0,40}(\d{1,4}(?:\.\d+)?\s?kg)\b/i]),
-    voltage: formatMeasurement(numberAfterLabel(text, ["Electrical Voltage", "Voltage"]), "V") ||
-      firstMatch(text, [/\b(2[23]0v|240v|400v|415v)\b/i]),
-    phase: phaseFromLabel(text) || firstMatch(text, [/\b(single phase|three phase|3 phase|1 phase|3-phase|1-phase)\b/i]),
-    amps: ampsFromLabel(text) || firstMatch(text, [/\b(\d{1,3}(?:\.\d+)?\s?a(?:mp|mps)?)\b/i]),
-    kwRating: kilowattsFromLabels(text) || firstMatch(text, [/\b(\d{1,3}(?:\.\d+)?\s?kW)\b/i]),
+    weight: sanitiseWeight(rawWeight),
+    grossWeight: sanitiseWeight(rawGrossWeight),
+    voltage:
+      formatMeasurement(numberAfterLabel(text, ["Electrical Voltage", "Voltage"]), "V") ||
+      firstMatch(text, [/\b(2[23]0\s?v|240\s?v|400\s?v|415\s?v)\b/i]),
+    phase:
+      phaseFromLabel(text) ||
+      firstMatch(text, [/\b(single phase|three phase|3 phase|1 phase|3-phase|1-phase)\b/i]),
+    amps:
+      ampsFromLabel(text) || firstMatch(text, [/\b(\d{1,3}(?:\.\d+)?\s?a(?:mp|mps)?)\b/i]),
+    kwRating:
+      kilowattsFromLabels(text) || firstMatch(text, [/\b(\d{1,3}(?:\.\d+)?\s?kW)\b/i]),
     gasType: firstMatch(text, [/\b(natural gas|lpg|propane)\b/i]),
-    capacity: firstMatch(text, [/\b(?:capacity)[^\d]{0,24}(\d{1,4}(?:\.\d+)?\s?(?:litres?|ltr|trays?|kg))\b/i]),
+    capacity: firstMatch(text, [
+      /\b(?:capacity)[^\d]{0,24}(\d{1,4}(?:\.\d+)?\s?(?:litres?|ltr|l\b|trays?|kg))\b/i,
+      /\b(\d{1,2}\s*x\s*\d{1,3}\s?(?:litres?|ltr|l\b))\b/i,
+      /\b(\d{2,4}(?:\.\d+)?\s?(?:litres?|ltr|l\b))\b(?=[^.\n]{0,80}\b(?:fridge|freezer|refrigerator|chiller|capacity)\b)/i,
+    ]),
   }
 }
 
@@ -504,7 +688,10 @@ function sourceMatchesEquipment(text: string, equipmentType: string | null | und
     return /\b(oven|combi|range|pizza)\b/.test(text)
   }
   if (/\b(dishwasher|glasswasher|warewasher|washer)\b/.test(equipmentText)) {
-    return /\b(dishwasher|glasswasher|warewasher|washer)\b/.test(text)
+    return /\b(dishwasher|glasswasher|warewasher|washer|warewashing|hood type|pass through|passthrough|green clean|greenandclean)\b/.test(text)
+  }
+  if (/\b(coffee|bulk brew|filter coffee|beverage|hot water|boiler|dispenser)\b/.test(equipmentText)) {
+    return /\b(coffee|bulk brew|filter coffee|beverage|hot water|boiler|dispenser|bravilor|bonamat)\b/.test(text)
   }
   if (/\b(fridge|refrigerator|refrigeration|chiller|cooler)\b/.test(equipmentText)) {
     return /\b(fridge|refrigerator|refrigeration|chiller|cooler)\b/.test(text)
@@ -942,9 +1129,15 @@ export async function validateCaterBotProductSource({
 
     const titleText = `${candidateText} ${pageTitle}`.trim()
     const sourceText = `${titleText} ${bodyText}`
-    const combinedText = clean(`${url} ${finalUrl} ${getHostname(finalUrl)} ${sourceText}`)
+    // pageText excludes the search-engine snippet (candidateText). Brand, equipment, and
+    // fuel checks MUST be satisfied by the actual fetched page — not by the search query's
+    // own text, which always echoes the brand/model we searched for.
+    const pageText = clean(`${url} ${finalUrl} ${getHostname(finalUrl)} ${pageTitle} ${bodyText}`)
     const compactCombinedText = compactModel(`${url} ${finalUrl} ${sourceText}`)
-    const brandMatches = !brandText || combinedText.includes(brandText) || hostAndUrlText.includes(brandText)
+    const compactTitleUrlText = compactModel(`${url} ${finalUrl} ${pageTitle}`)
+    const brandMatches = sourceMatchesBrand(pageText, hostAndUrlText, brand)
+    const titleOrUrlExactModelMatches =
+      exactAliases.length > 0 && exactAliases.some((modelText) => compactTitleUrlText.includes(modelText))
     const exactModelMatches =
       exactAliases.length > 0 &&
       exactAliases.some(
@@ -955,11 +1148,30 @@ export async function validateCaterBotProductSource({
       closeAliases.some(
         (modelText) => compactCombinedText.includes(modelText) || compactModel(finalUrl).includes(modelText)
       )
-    const equipmentMatches = sourceMatchesEquipment(combinedText, equipmentType)
-    const fuelMatch = sourceMatchesFuel(combinedText, fuelType)
+    const equipmentMatches = sourceMatchesEquipment(pageText, equipmentType)
+    const fuelMatch = sourceMatchesFuel(pageText, fuelType)
     const usefulDetails = usefulDetailsFrom(`${finalUrl} ${sourceText}`)
-    const extractedSpecs = extractedSpecsFrom(sourceText)
+    const extractedSpecs = extractedSpecsFrom(sourceText, model || undefined)
     const priorityRank = sourcePriorityRank(finalUrl, brand)
+
+    if (exactModelMatches && !titleOrUrlExactModelMatches) {
+      console.info("CaterBot rejected source", {
+        url: finalUrl,
+        reason: "title/url missing exact model",
+        pageTitle,
+      })
+      return rejectedSourceResult({
+        url: finalUrl,
+        brand,
+        model,
+        candidateTitle: pageTitle || candidateTitle,
+        checkedAt,
+        matchNotes:
+          "CaterBot rejected this source because the page title or URL did not match the exact model.",
+        usefulDetails,
+        extractedSpecs: specsWithSellerCheckFallback(extractedSpecs),
+      })
+    }
 
     if (!closeModelMatches || !brandMatches) {
       console.info("CaterBot rejected source", {
@@ -1039,10 +1251,10 @@ export async function validateCaterBotProductSource({
       priorityRank,
     })
 
-    // Confidence scoring: exact model + trusted/manual/spec sources are
-    // publishable; close model-family matches are medium at best. Low matches
-    // remain seller-only and are not saved as verified buyer-facing links.
-    if (confidence === "low" || (!exactModelMatches && priorityRank > 7)) {
+    // Require exact model in body text AND confirmed by page title/URL (checked
+    // above). Close model-family matches never auto-fill: wrong specs are worse
+    // than no specs.
+    if (!exactModelMatches || confidence === "low") {
       console.info("CaterBot rejected source", {
         url: finalUrl,
         reason: "low confidence source",
@@ -1133,70 +1345,91 @@ export async function findValidatedCaterBotSource({
   const modelText = String(model || "").trim()
   if (!modelText) return null
 
-  const candidates = new Map<string, { title?: string; snippet?: string }>()
+  async function bestFromCandidates(
+    candidateMap: Map<string, { title?: string; snippet?: string }>
+  ): Promise<CaterBotSourceValidationResult | null> {
+    const validations: CaterBotSourceValidationResult[] = []
+    for (const [url, context] of Array.from(candidateMap.entries())
+      .sort(([a], [b]) => sourcePriority(a, brandText) - sourcePriority(b, brandText))
+      .slice(0, 16)) {
+      const validation = await validateCaterBotProductSource({
+        url,
+        brand: brandText,
+        model: modelText,
+        equipmentType,
+        fuelType,
+        candidateTitle: context.title,
+        candidateSnippet: context.snippet,
+      })
+      if (validation.valid) validations.push(validation)
+    }
+    return (
+      validations.sort(
+        (a, b) => b.score - a.score || sourcePriority(a.url, brandText) - sourcePriority(b.url, brandText)
+      )[0] || null
+    )
+  }
+
+  // Phase 1: try AI-suggested candidate URLs as a fast path (no web search cost).
+  // If ALL fail validation, fall through to the web search rather than giving up.
+  const aiCandidates = new Map<string, { title?: string; snippet?: string }>()
   candidateUrls
     .filter((url) => !isGenericOrBadUrl(url))
-    .forEach((url) => candidates.set(url, {}))
+    .forEach((url) => aiCandidates.set(url, {}))
 
-  if (candidates.size === 0) {
-    const queries = buildCaterBotSourceQueries({
-      brand: brandText,
-      model: modelText,
-      serial,
-      productTitle,
-      category,
-      equipmentType,
-      fuelType,
-      voltage: voltage == null ? null : String(voltage),
-      phase,
-      amps,
-      powerRating,
-      gasRating,
-    })
-    console.info("CaterBot source search started", {
-      provider: "you.com",
-      apiKeyPresent: Boolean(process.env.YOU_API_KEY),
-      queries,
-    })
-    const search = await searchCaterBotSources(
-      queries,
-      { maxResultsPerQuery: 5 }
-    )
-
-    search.results.forEach((result) =>
-      candidates.set(result.url, {
-        title: result.title,
-        snippet: result.snippet,
+  if (aiCandidates.size > 0) {
+    const fastResult = await bestFromCandidates(aiCandidates)
+    if (fastResult) {
+      console.info("CaterBot source search completed (AI candidate validated)", {
+        bestSelectedUrl: fastResult.url,
+        extractedDimensions: fastResult.extractedSpecs.dimensions || null,
+        extractedWeight: fastResult.extractedSpecs.weight || null,
+        finalConfidence: fastResult.confidence || "low",
+        score: fastResult.score || 0,
       })
-    )
-
-    if (search.errors.length > 0) {
-      console.warn("CaterBot source search returned errors:", search.errors)
+      return fastResult
     }
-    console.info("CaterBot source candidates found", {
-      count: candidates.size,
-      urls: Array.from(candidates.keys()).slice(0, 20),
+    console.info("CaterBot AI-suggested candidates failed validation — falling through to web search", {
+      rejectedUrls: Array.from(aiCandidates.keys()),
     })
   }
 
-  const validations: CaterBotSourceValidationResult[] = []
-  for (const [url, context] of Array.from(candidates.entries())
-    .sort(([a], [b]) => sourcePriority(a, brandText) - sourcePriority(b, brandText))
-    .slice(0, 16)) {
-    const validation = await validateCaterBotProductSource({
-      url,
-      brand: brandText,
-      model: modelText,
-      equipmentType,
-      fuelType,
-      candidateTitle: context.title,
-      candidateSnippet: context.snippet,
-    })
+  // Phase 2: web search (runs when no AI candidates were provided, or all failed)
+  const queries = buildCaterBotSourceQueries({
+    brand: brandText,
+    model: modelText,
+    serial,
+    productTitle,
+    category,
+    equipmentType,
+    fuelType,
+    voltage: voltage == null ? null : String(voltage),
+    phase,
+    amps,
+    powerRating,
+    gasRating,
+  })
+  console.info("CaterBot source search started", {
+    provider: "you.com",
+    apiKeyPresent: Boolean(process.env.YOU_API_KEY),
+    queries,
+  })
+  const search = await searchCaterBotSources(queries, { maxResultsPerQuery: 5 })
 
-    if (validation.valid) validations.push(validation)
+  const webCandidates = new Map<string, { title?: string; snippet?: string }>()
+  search.results.forEach((result) =>
+    webCandidates.set(result.url, { title: result.title, snippet: result.snippet })
+  )
+
+  if (search.errors.length > 0) {
+    console.warn("CaterBot source search returned errors:", search.errors)
   }
+  console.info("CaterBot source candidates found", {
+    count: webCandidates.size,
+    urls: Array.from(webCandidates.keys()).slice(0, 20),
+  })
 
-  const selected = validations.sort((a, b) => b.score - a.score || sourcePriority(a.url, brandText) - sourcePriority(b.url, brandText))[0] || null
+  const selected = await bestFromCandidates(webCandidates)
   console.info("CaterBot source search completed", {
     bestSelectedUrl: selected?.url || null,
     extractedDimensions: selected?.extractedSpecs.dimensions || null,

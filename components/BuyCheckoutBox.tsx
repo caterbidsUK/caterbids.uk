@@ -43,6 +43,7 @@ export default function BuyCheckoutBox({
         ? selectedDelivery?.name || "Delivery not selected"
         : "Collection only",
       deliveryPrice: String(deliveryPrice),
+      deliveryMethod: deliveryAvailable ? "pallet_delivery" : "collection_only",
       total: String(total),
       sellerId: sellerId || "",
       returnUrl: `/listing?id=${listingId}`,
@@ -69,7 +70,7 @@ export default function BuyCheckoutBox({
       <h3 className="text-xl font-black">Buy now</h3>
       <p className="mt-1 text-sm text-slate-600">
         {deliveryAvailable
-          ? "Choose delivery, then pay securely."
+          ? "Choose Interparcel pallet delivery, then pay securely."
           : "Pay securely and arrange collection."}
       </p>
 
@@ -130,7 +131,7 @@ export default function BuyCheckoutBox({
       </button>
 
       <p className="mt-3 text-center text-xs text-slate-500">
-        Secure checkout. Delivery support included.
+        Secure checkout. {deliveryAvailable ? "Pallet delivery support included." : "Collection is arranged directly with the seller."}
       </p>
     </div>
   )

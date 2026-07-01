@@ -2,18 +2,20 @@
 
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
+import { isProtectedSuperAdminEmail } from "@/lib/admin-access"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { PAYMENT_SETTINGS_ID } from "@/lib/pricing"
 import { PROTECTED_SUPER_ADMIN_EMAIL, requireAdmin, writeAdminAuditLog } from "./admin-utils"
 
-const LISTING_STATUSES = ["live", "draft", "hidden", "sold", "expired", "pending_payment", "paused", "removed"] as const
-const USER_ROLES = ["buyer", "seller", "admin", "owner", "super_admin"] as const
+const LISTING_STATUSES = ["live", "pending", "draft", "hidden", "sold", "expired", "pending_payment", "paused", "removed"] as const
+const USER_ROLES = ["user", "seller", "dealer", "admin", "super_admin"] as const
 const USER_VERIFICATION_FIELDS = [
   "verified",
   "email_verified",
   "is_email_verified",
   "phone_verified",
   "is_phone_verified",
+  "verified_dealer",
 ] as const
 
 type PaymentSettingsUpsertResult = {
@@ -232,8 +234,17 @@ export async function setUserVerificationFlag(formData: FormData) {
 
   if (field === "email_verified") update.is_email_verified = verified
   if (field === "is_email_verified") update.email_verified = verified
-  if (field === "phone_verified") update.is_phone_verified = verified
-  if (field === "is_phone_verified") update.phone_verified = verified
+  if (field === "phone_verified" || field === "is_phone_verified") {
+    update.phone_verified = verified
+    update.is_phone_verified = verified
+    update.phone_verified_at = verified ? new Date().toISOString() : null
+    update.phone_verification_method = "manual"
+    update.phone_verification_status = verified ? "verified" : "pending"
+  }
+  if (field === "verified_dealer") {
+    update.seller_verification_level = verified ? "verified" : "unverified"
+    update.business_verified = verified
+  }
 
   const admin = createAdminClient()
   const { error } = await admin.from("profiles").update(update as any).eq("id", userId)
@@ -253,6 +264,44 @@ export async function setUserVerificationFlag(formData: FormData) {
   revalidatePath("/listing")
 }
 
+export async function setPhoneVerificationStatus(formData: FormData) {
+  const context = await requireAdmin()
+  const userId = formString(formData, "user_id")
+  const status = formString(formData, "status")
+
+  if (!userId || !isAllowed(status, ["pending", "verified", "rejected"])) {
+    throw new Error("Choose a valid phone verification status.")
+  }
+
+  const verified = status === "verified"
+  const update: Record<string, unknown> = {
+    phone_verified: verified,
+    is_phone_verified: verified,
+    phone_verified_at: verified ? new Date().toISOString() : null,
+    phone_verification_method: "manual",
+    phone_verification_status: status,
+    updated_at: new Date().toISOString(),
+  }
+
+  const admin = createAdminClient()
+  const { error } = await admin.from("profiles").update(update as any).eq("id", userId)
+  if (error) throw new Error(error.message)
+
+  await writeAdminAuditLog({
+    adminUserId: context.userId,
+    adminEmail: context.email,
+    action: `user.phone.${status}`,
+    entityType: "profile",
+    entityId: userId,
+    metadata: { status },
+  })
+
+  revalidatePath("/admin")
+  revalidatePath("/account")
+  revalidatePath("/settings")
+  revalidatePath("/listing")
+}
+
 export async function updateUserRole(formData: FormData) {
   const context = await requireAdmin()
   const userId = formString(formData, "user_id")
@@ -263,7 +312,7 @@ export async function updateUserRole(formData: FormData) {
   }
 
   if (
-    context.email.toLowerCase() === PROTECTED_SUPER_ADMIN_EMAIL &&
+    isProtectedSuperAdminEmail(context.email) &&
     context.userId === userId &&
     role !== "super_admin"
   ) {
@@ -342,7 +391,7 @@ export async function updateSiteSetting(formData: FormData) {
 export async function updatePaymentSettings(formData: FormData) {
   const context = await requireAdmin()
   const isSuperAdmin =
-    context.profile.role === "super_admin" || context.email.toLowerCase() === PROTECTED_SUPER_ADMIN_EMAIL
+    context.profile.role === "super_admin" || isProtectedSuperAdminEmail(context.email)
 
   if (!isSuperAdmin) {
     throw new Error("Only the super admin can update payment settings.")
@@ -358,6 +407,8 @@ export async function updatePaymentSettings(formData: FormData) {
     listing_packs_enabled: formBoolean(formData, "listing_packs_enabled"),
     subscriptions_enabled: formBoolean(formData, "subscriptions_enabled"),
     featured_boosts_enabled: formBoolean(formData, "featured_boosts_enabled"),
+    featured_price_7d: Math.max(0, Number(formString(formData, "featured_price_7d") || "4.99")),
+    featured_price_30d: Math.max(0, Number(formString(formData, "featured_price_30d") || "14.99")),
     test_mode: formBoolean(formData, "test_mode"),
     currency: currency || "GBP",
     updated_at: new Date().toISOString(),
@@ -381,4 +432,108 @@ export async function updatePaymentSettings(formData: FormData) {
   revalidatePath("/admin")
   revalidatePath("/pricing")
   revalidatePath("/post-listing")
+}
+
+export async function updateSellerPlan(
+  _prevState: { success?: boolean; error?: string } | null,
+  formData: FormData
+): Promise<{ success?: boolean; error?: string }> {
+  const context = await requireAdmin()
+  const isSuperAdmin =
+    context.profile.role === "super_admin" || isProtectedSuperAdminEmail(context.email)
+
+  if (!isSuperAdmin) {
+    return { error: "Only the super admin can edit seller plans." }
+  }
+
+  const planId = formString(formData, "plan_id")
+  const priceRaw = formString(formData, "price")
+  const listingCountRaw = formString(formData, "listing_count")
+  const durationDaysRaw = formString(formData, "duration_days")
+  const featuresRaw = formString(formData, "features")
+  const active = formBoolean(formData, "active")
+  const overagePriceRaw = formString(formData, "overage_price")
+  const overagePrice = overagePriceRaw && Number.isFinite(Number(overagePriceRaw))
+    ? Math.max(0, Number(overagePriceRaw))
+    : null
+
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(planId)) {
+    return { error: "Invalid plan ID." }
+  }
+
+  const price = Number(priceRaw)
+  if (!Number.isFinite(price) || price <= 0) {
+    return { error: "Price must be a positive number." }
+  }
+
+  const listingCount = Math.round(Number(listingCountRaw))
+  if (!Number.isFinite(listingCount) || listingCount < 1) {
+    return { error: "Listing count must be a whole number of at least 1." }
+  }
+
+  const durationDays = Math.round(Number(durationDaysRaw))
+  if (!Number.isFinite(durationDays) || durationDays < 1) {
+    return { error: "Duration must be a whole number of at least 1 day." }
+  }
+
+  const features = featuresRaw
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+
+  const admin = createAdminClient()
+  const updateResult = await (admin.from("seller_plans" as never) as any)
+    .update({
+      price,
+      listing_count: listingCount,
+      duration_days: durationDays,
+      features,
+      active,
+      overage_price: overagePrice,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", planId)
+  const dbError: { message: string } | null = updateResult?.error ?? null
+
+  if (dbError) {
+    return { error: dbError.message || "Failed to save plan." }
+  }
+
+  await writeAdminAuditLog({
+    adminUserId: context.userId,
+    adminEmail: context.email,
+    action: "seller_plan.update",
+    entityType: "seller_plan",
+    entityId: planId,
+    metadata: { price, listingCount, durationDays, features, active, overagePrice },
+  })
+
+  revalidatePath("/admin")
+  revalidatePath("/pricing")
+
+  return { success: true }
+}
+
+export async function deleteBlogPost(formData: FormData) {
+  const context = await requireAdmin()
+  const postId = formString(formData, "post_id")
+
+  if (!postId) throw new Error("Missing post_id.")
+
+  const admin = createAdminClient()
+  const { error } = await (admin.from("blog_posts" as any) as any).delete().eq("id", postId)
+
+  if (error) throw new Error(error.message)
+
+  await writeAdminAuditLog({
+    adminUserId: context.userId,
+    adminEmail: context.email,
+    action: "blog.post.delete",
+    entityType: "blog_post",
+    entityId: postId,
+    metadata: {},
+  })
+
+  revalidatePath("/admin")
+  revalidatePath("/blog")
 }

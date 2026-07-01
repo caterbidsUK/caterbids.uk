@@ -16,9 +16,13 @@ function CheckoutContent() {
   const listingId = searchParams.get("listingId") || searchParams.get("listing") || ""
   const title = searchParams.get("title") || "CaterBids item"
   const itemPrice = Number(searchParams.get("itemPrice") || 0)
+  const deliveryMethodParam = searchParams.get("deliveryMethod") || ""
   const deliveryName = searchParams.get("deliveryName") || "Not selected"
   const deliveryPrice = Number(searchParams.get("deliveryPrice") || 0)
-  const total = Number(searchParams.get("total") || itemPrice + deliveryPrice)
+  const deliveryMethod = deliveryMethodParam === "pallet_delivery" || deliveryPrice > 0 ? "pallet_delivery" : "collection_only"
+  const isPalletDelivery = deliveryMethod === "pallet_delivery"
+  const appliedDeliveryPrice = isPalletDelivery ? deliveryPrice : 0
+  const total = isPalletDelivery ? Number(searchParams.get("total") || itemPrice + appliedDeliveryPrice) : itemPrice
   const deliveryPostcode = searchParams.get("deliveryPostcode") || ""
   const collectionPostcodeParam = searchParams.get("collectionPostcode") || ""
   const deliveryQuoteId = searchParams.get("deliveryQuoteId") || ""
@@ -79,7 +83,7 @@ function CheckoutContent() {
   }, [collectionPostcodeParam, listingId])
 
   const deliveryDetailsComplete =
-    deliveryPrice <= 0 ||
+    !isPalletDelivery ||
     Boolean(
       resolvedCollectionPostcode &&
         buyerDeliveryFullAddress.trim() &&
@@ -87,7 +91,7 @@ function CheckoutContent() {
         buyerPhone.trim()
     )
   const missingDeliveryDetails =
-    deliveryPrice <= 0
+    !isPalletDelivery
       ? []
       : [
           !resolvedCollectionPostcode ? "seller collection postcode" : "",
@@ -98,7 +102,7 @@ function CheckoutContent() {
   const canContinueToPayment =
     !checkoutLoading &&
     Boolean(listingId && title && itemPrice > 0 && sellerId) &&
-    (deliveryPrice <= 0 || Boolean(deliveryName && deliveryQuoteId && deliveryDetailsComplete))
+    (!isPalletDelivery || Boolean(deliveryName && deliveryQuoteId && deliveryDetailsComplete))
 
   return (
     <main className="min-h-screen bg-[#001B35] px-4 py-6 text-white">
@@ -141,11 +145,11 @@ function CheckoutContent() {
             <div className="flex justify-between gap-3 text-sm">
               <span className="font-semibold text-slate-600">Delivery</span>
               <span className="text-right font-black">
-                {deliveryName} - £{money(deliveryPrice)}
+                {isPalletDelivery ? `${deliveryName} - £${money(appliedDeliveryPrice)}` : "Collection only - £0"}
               </span>
             </div>
 
-            {deliveryPrice > 0 && (
+            {isPalletDelivery && (
               <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-3 text-xs text-slate-600">
                 <div>
                   <p className="font-black text-[#002E5D]">Delivery details</p>
@@ -155,6 +159,32 @@ function CheckoutContent() {
                   </p>
                   <p className="mt-1 leading-relaxed">
                     Package: {weightKg || "?"}kg, {lengthCm || "?"} x {widthCm || "?"} x {heightCm || "?"}cm
+                  </p>
+                  <p className="mt-2 rounded-xl border border-[#FF6B00]/20 bg-[#FF6B00]/10 p-3 font-semibold leading-relaxed text-[#8A3A00]">
+                    Pallet delivery requires the item to be securely palletised, strapped and shrink-wrapped before collection.
+                    {" "}
+                    <a href="/pallet-delivery-guide" target="_blank" rel="noreferrer" className="font-black underline">
+                      How pallet collection works
+                    </a>
+                    {" · "}
+                    <a href="/delivery-policy" target="_blank" rel="noreferrer" className="font-black underline">
+                      Delivery Policy
+                    </a>
+                  </p>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                    {[
+                      ["Economy Pallet", "ETA 3-5 working days"],
+                      ["Express Pallet", "ETA 1-2 working days"],
+                      ["Timed Pallet", "Delivery window / premium service"],
+                    ].map(([name, eta]) => (
+                      <div key={name} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                        <p className="font-black text-[#002E5D]">{name}</p>
+                        <p className="mt-1 font-semibold text-slate-600">{eta}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-2 font-bold text-slate-500">
+                    Delivery estimate. Final Interparcel booking confirmed after payment.
                   </p>
                 </div>
 
@@ -169,7 +199,7 @@ function CheckoutContent() {
                     className="min-h-20 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-[#002E5D] outline-none placeholder:text-slate-500 focus:border-[#FF6B00]"
                   />
                   <p className="mt-1 text-xs font-semibold text-slate-500">
-                    Courier delivery address.
+                    Pallet delivery address.
                   </p>
                 </div>
 
@@ -231,9 +261,9 @@ function CheckoutContent() {
           <div className="mt-5 rounded-2xl border border-green-200 bg-green-50 p-4">
             <h2 className="font-black text-[#002E5D]">Delivery request</h2>
             <p className="mt-1 text-sm text-slate-700">
-              {deliveryPrice > 0
-                ? "CaterBids will confirm the courier booking after payment."
-                : "No paid delivery option selected for this checkout."}
+              {isPalletDelivery
+                ? "CaterBids will confirm the Interparcel pallet booking after payment."
+                : "Collection only. No delivery charge will be added."}
             </p>
           </div>
 
@@ -271,7 +301,7 @@ function CheckoutContent() {
 
                 const fullBuyerDeliveryPostcode = resolveFullUkPostcode(buyerDeliveryPostcode)
 
-                if (deliveryPrice > 0 && (!resolvedCollectionPostcode || !buyerDeliveryFullAddress.trim() || !fullBuyerDeliveryPostcode || !buyerPhone.trim())) {
+                if (isPalletDelivery && (!resolvedCollectionPostcode || !buyerDeliveryFullAddress.trim() || !fullBuyerDeliveryPostcode || !buyerPhone.trim())) {
                   alert("Please add delivery address, delivery postcode and phone number before payment.")
                   return
                 }
@@ -286,7 +316,8 @@ function CheckoutContent() {
                     title,
                     itemPrice,
                     deliveryName,
-                    deliveryPrice,
+                    deliveryPrice: appliedDeliveryPrice,
+                    deliveryMethod,
                     deliveryQuoteId,
                     deliveryProvider,
                     estimatedDeliveryTime,
@@ -329,7 +360,7 @@ function CheckoutContent() {
             disabled={!canContinueToPayment}
             className="mt-5 w-full rounded-2xl bg-[#FF6B00] px-5 py-4 text-base font-black text-white shadow-lg shadow-orange-500/20 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 disabled:shadow-none"
           >
-            {checkoutLoading ? "Opening secure payment..." : deliveryPrice > 0 ? "Pay and book delivery" : "Pay"}
+            {checkoutLoading ? "Opening secure payment..." : isPalletDelivery ? "Pay and book delivery" : "Pay"}
           </button>
 
           {checkoutUrl && (

@@ -19,7 +19,7 @@ function numberFromMetadata(value: string | undefined) {
 
 function nullableUuid(value: string | undefined | null) {
   if (!value) return null
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(value)
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
     ? value
     : null
 }
@@ -76,8 +76,11 @@ async function upsertOrderWithSchemaFallback(
     buyer_access_restrictions: _buyerAccessRestrictions,
     collection_full_address: _collectionFullAddress,
     collection_city: _collectionCity,
+    delivery_method: _deliveryMethod,
     seller_contact_name: _sellerContactName,
     seller_phone: _sellerPhone,
+    pallet_size: _palletSize,
+    pallet_ready: _palletReady,
     pallet_weight_kg: _palletWeightKg,
     pallet_length_cm: _palletLengthCm,
     pallet_width_cm: _palletWidthCm,
@@ -86,6 +89,8 @@ async function upsertOrderWithSchemaFallback(
     tail_lift_required: _tailLiftRequired,
     forklift_available: _forkliftAvailable,
     commercial_premises: _commercialPremises,
+    shrink_wrapped_confirmed: _shrinkWrappedConfirmed,
+    pallet_preparation_confirmed: _palletPreparationConfirmed,
     preferred_collection_date: _preferredCollectionDate,
     insurance_value: _insuranceValue,
     access_restrictions: _accessRestrictions,
@@ -146,9 +151,13 @@ export async function POST(req: NextRequest) {
       sellerId = nullableUuid(listingData?.seller_id) || nullableUuid(listingData?.user_id)
     }
     const sellerUuid = nullableUuid(sellerId)
-    const nextDeliveryStatus = deliveryPrice > 0 ? "booking_requested" : "not_required"
+    const requestedDeliveryMethod =
+      metadata.deliveryMethod || metadata.delivery_method || (deliveryPrice > 0 ? "pallet_delivery" : "collection_only")
+    const isPalletDelivery = requestedDeliveryMethod === "pallet_delivery"
+    const appliedDeliveryPrice = isPalletDelivery ? deliveryPrice : 0
+    const nextDeliveryStatus = isPalletDelivery ? "awaiting_booking" : "not_required"
     const deliveryProvider =
-      metadata.courier_provider || metadata.deliveryProvider || (deliveryPrice > 0 ? "Interparcel" : null)
+      isPalletDelivery ? metadata.courier_provider || metadata.deliveryProvider || "Interparcel" : null
     const metadataDeliveryOrderId = deliveryOrderIdFromMetadata(metadata)
     const fullCollectionPostcode = resolveFullUkPostcode(
       metadata.collection_postcode,
@@ -183,13 +192,14 @@ export async function POST(req: NextRequest) {
       stripe_payment_intent_id: paymentIntentId(session.payment_intent),
       item_title: metadata.title || "CaterBids item",
       item_price: itemPrice,
-      delivery_name: metadata.deliveryName || null,
-      delivery_price: deliveryPrice,
+      delivery_method: isPalletDelivery ? "pallet_delivery" : "collection_only",
+      delivery_name: isPalletDelivery ? metadata.deliveryName || "CaterBids Pallet Delivery" : "Collection Only",
+      delivery_price: appliedDeliveryPrice,
       delivery_provider: deliveryProvider,
       delivery_quote_id: metadata.deliveryQuoteId || null,
       delivery_postcode: fullDeliveryPostcode || null,
       collection_postcode: fullCollectionPostcode || null,
-      delivery_booking_required: deliveryPrice > 0,
+      delivery_booking_required: isPalletDelivery,
       buyer_delivery_full_address: metadata.buyerDeliveryFullAddress || null,
       buyer_delivery_postcode: fullDeliveryPostcode || null,
       buyer_phone: metadata.buyerPhone || null,
@@ -198,6 +208,8 @@ export async function POST(req: NextRequest) {
       collection_city: listingData?.collection_city || null,
       seller_contact_name: listingData?.seller_contact_name || null,
       seller_phone: listingData?.seller_phone || null,
+      pallet_size: isPalletDelivery ? listingData?.pallet_size || metadata.palletSize || null : null,
+      pallet_ready: isPalletDelivery ? Boolean(listingData?.pallet_ready) || metadata.palletReady === "true" : false,
       pallet_weight_kg: listingData?.pallet_weight_kg || listingData?.weight_kg || numberFromMetadata(metadata.weightKg),
       pallet_length_cm: listingData?.pallet_length_cm || listingData?.length_cm || numberFromMetadata(metadata.lengthCm),
       pallet_width_cm: listingData?.pallet_width_cm || listingData?.width_cm || numberFromMetadata(metadata.widthCm),
@@ -206,6 +218,8 @@ export async function POST(req: NextRequest) {
       tail_lift_required: Boolean(listingData?.tail_lift_required) || metadata.tailLiftRequired === "true",
       forklift_available: Boolean(listingData?.forklift_available),
       commercial_premises: listingData?.commercial_premises !== false,
+      shrink_wrapped_confirmed: isPalletDelivery ? Boolean(listingData?.shrink_wrapped_confirmed) || metadata.shrinkWrappedConfirmed === "true" : false,
+      pallet_preparation_confirmed: isPalletDelivery ? Boolean(listingData?.pallet_preparation_confirmed) || metadata.palletPreparationConfirmed === "true" : false,
       preferred_collection_date: listingData?.preferred_collection_date || null,
       insurance_value: listingData?.insurance_value || numberFromMetadata(metadata.insuranceValue) || itemPrice,
       access_restrictions: listingData?.access_restrictions || null,
@@ -248,12 +262,14 @@ export async function POST(req: NextRequest) {
       throw savedOrderError
     }
 
-    const deliveryOrderResult = await upsertDeliveryOrderAfterPayment({
-      supabase,
-      session,
-      orderId: savedOrder?.id || existingOrder?.id || null,
-      listingData,
-    })
+    const deliveryOrderResult = isPalletDelivery
+      ? await upsertDeliveryOrderAfterPayment({
+          supabase,
+          session,
+          orderId: savedOrder?.id || existingOrder?.id || null,
+          listingData,
+        })
+      : { data: null, error: null }
 
     if (deliveryOrderResult.error) {
       if (isMissingDeliveryOrdersTable(deliveryOrderResult.error)) {
@@ -267,7 +283,7 @@ export async function POST(req: NextRequest) {
         .from("orders")
         .update({
           delivery_order_id: deliveryOrderResult.data.id,
-          delivery_status: "booking_requested",
+          delivery_status: "awaiting_booking",
           updated_at: new Date().toISOString(),
         } as any)
         .eq("id", savedOrder.id)

@@ -1,10 +1,12 @@
 "use client"
 
 import { useRouter } from 'next/navigation'
-import { useEffect, useState, useTransition } from 'react'
+import { useEffect, useState, useTransition, type ReactNode } from 'react'
 import { updateProfile } from './server-actions'
 import { createClient } from '@/lib/supabase/client'
 import { getCurrentUser } from '@/lib/supabase/auth'
+import SellerSocialLinksForm from '@/components/social/SellerSocialLinksForm'
+import type { SellerSocialLinksValue } from '@/components/social/SellerSocialLinks'
 import type { Database } from '@/types/supabase'
 import Link from "next/link"
 import {
@@ -21,10 +23,47 @@ import {
   Search,
   Plus,
   MessageCircle,
+  BadgeCheck,
+  ShieldCheck,
 } from 'lucide-react'
 
-type Profile = Database['public']['Tables']['profiles']['Row'] & { email: string }
+type Profile = Database['public']['Tables']['profiles']['Row'] & {
+  email: string
+  social_links?: SellerSocialLinksValue | null
+}
+
+type PhoneVerificationResponse = {
+  ok?: boolean
+  error?: string
+  phone?: string
+  message?: string
+  emailVerified?: boolean
+  badge?: string
+  verificationLevel?: string
+}
+
+type IdentityVerificationResponse = {
+  error?: string
+  url?: string
+}
+
+type BusinessVerificationResponse = {
+  error?: string
+  businessName?: string
+  businessVerified?: boolean
+  needsStripeConnect?: boolean
+}
+
 const LOCAL_PROFILE_KEY = 'caterbids_profile'
+const SOCIAL_LINK_KEYS: Array<keyof SellerSocialLinksValue> = [
+  'instagram',
+  'facebook',
+  'tiktok',
+  'linkedin',
+  'youtube',
+  'website',
+  'whatsapp',
+]
 
 function localProfileKey(userId: string) {
   return `${LOCAL_PROFILE_KEY}:${userId}`
@@ -68,6 +107,18 @@ function saveLocalProfile(profile: Profile) {
   }
 }
 
+function normaliseSocialLinks(value: unknown): SellerSocialLinksValue {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+
+  return SOCIAL_LINK_KEYS.reduce<SellerSocialLinksValue>((links, key) => {
+    const rawValue = (value as Record<string, unknown>)[key]
+    if (typeof rawValue === 'string' && rawValue.trim()) {
+      links[key] = rawValue.trim()
+    }
+    return links
+  }, {})
+}
+
 function resizeAvatar(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader()
@@ -105,36 +156,102 @@ function SettingsClient({ initialProfile }: { initialProfile: Profile | null }) 
   const router = useRouter()
   const [profile, setProfile] = useState<Profile>(initialProfile || {
     id: '',
+    email: '',
     name: '',
+    full_name: '',
     business: '',
+    business_name: '',
+    account_type: 'buyer',
     location: '',
     phone: '',
+    phone_number: '',
     seller_contact_name: '',
     collection_full_address: '',
     collection_city: '',
     collection_postcode: '',
     avatar_url: '',
     verified: false,
+    email_verified: false,
+    is_email_verified: false,
+    verification_level: 'basic',
+    badge: 'Email pending',
+    verified_user_badge: false,
+    auth_provider: null,
+    auth_providers: [],
+    last_login_at: null,
+    phone_verified: false,
+    is_phone_verified: false,
+    phone_verified_at: null,
+    phone_verification_method: 'manual',
+    phone_verification_status: 'pending',
+    phone_verification_code: null,
+    phone_verification_expires_at: null,
+    phone_verification_attempts: 0,
+    role: 'user',
+    verified_dealer: false,
+    stripe_connect_onboarding_complete: false,
+    stripe_identity_session_id: null,
+    stripe_identity_status: null,
+    government_id_verified: false,
+    business_verified: false,
+    companies_house_number: null,
+    vat_number: null,
+    trust_notes: null,
+    seller_verification_level: 'unverified',
     created_at: null,
     updated_at: null,
-    email: ''
+    deletion_scheduled_at: null,
+    social_links: null,
   })
   const [editingProfile, setEditingProfile] = useState(false)
   const [draftProfile, setDraftProfile] = useState<Profile>(initialProfile || {
     id: '',
+    email: '',
     name: '',
+    full_name: '',
     business: '',
+    business_name: '',
+    account_type: 'buyer',
     location: '',
     phone: '',
+    phone_number: '',
     seller_contact_name: '',
     collection_full_address: '',
     collection_city: '',
     collection_postcode: '',
     avatar_url: '',
     verified: false,
+    email_verified: false,
+    is_email_verified: false,
+    verification_level: 'basic',
+    badge: 'Email pending',
+    verified_user_badge: false,
+    auth_provider: null,
+    auth_providers: [],
+    last_login_at: null,
+    phone_verified: false,
+    is_phone_verified: false,
+    phone_verified_at: null,
+    phone_verification_method: 'manual',
+    phone_verification_status: 'pending',
+    phone_verification_code: null,
+    phone_verification_expires_at: null,
+    phone_verification_attempts: 0,
+    role: 'user',
+    verified_dealer: false,
+    stripe_connect_onboarding_complete: false,
+    stripe_identity_session_id: null,
+    stripe_identity_status: null,
+    government_id_verified: false,
+    business_verified: false,
+    companies_house_number: null,
+    vat_number: null,
+    trust_notes: null,
+    seller_verification_level: 'unverified',
     created_at: null,
     updated_at: null,
-    email: ''
+    deletion_scheduled_at: null,
+    social_links: null,
   })
   const [notifications, setNotifications] = useState({
     messages: true,
@@ -143,8 +260,19 @@ function SettingsClient({ initialProfile }: { initialProfile: Profile | null }) 
   })
   const [isPending, startTransition] = useTransition()
   const [message, setMessage] = useState('')
+  const [verificationPhone, setVerificationPhone] = useState('')
+  const [companiesHouseNumber, setCompaniesHouseNumber] = useState('')
+  const [vatNumber, setVatNumber] = useState('')
+  const [verificationConsent, setVerificationConsent] = useState(false)
+  const [trustActionPending, setTrustActionPending] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState("")
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deletePassword, setDeletePassword] = useState('')
+  const [deleteConfirmEmail, setDeleteConfirmEmail] = useState('')
+  const [deleteTypeConfirm, setDeleteTypeConfirm] = useState('')
+  const [deleteError, setDeleteError] = useState('')
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false)
 
   function openProfileEditor() {
     const localProfile = readLocalProfile(profile.id)
@@ -173,27 +301,64 @@ function SettingsClient({ initialProfile }: { initialProfile: Profile | null }) 
         .select('*')
         .eq('id', user.id)
         .maybeSingle()
+      const dbProfile = data as Profile | null
       const localProfile = readLocalProfile(user.id)
 
       const loadedProfile = {
         id: user.id,
-        name: localProfile?.name || data?.name || user.email?.split('@')[0] || '',
-        business: localProfile?.business || data?.business || '',
-        location: localProfile?.location || data?.location || '',
-        phone: localProfile?.phone || data?.phone || '',
-        seller_contact_name: localProfile?.seller_contact_name || data?.seller_contact_name || '',
-        collection_full_address: localProfile?.collection_full_address || data?.collection_full_address || '',
-        collection_city: localProfile?.collection_city || data?.collection_city || data?.location || '',
-        collection_postcode: localProfile?.collection_postcode || data?.collection_postcode || '',
-        avatar_url: localProfile?.avatar_url || data?.avatar_url || '',
-        verified: data?.verified || false,
-        created_at: data?.created_at || null,
-        updated_at: data?.updated_at || null,
-        email: user.email || ''
-      }
+        email: dbProfile?.email || user.email || '',
+        name: localProfile?.name || dbProfile?.name || user.email?.split('@')[0] || '',
+        full_name: dbProfile?.full_name || localProfile?.name || dbProfile?.name || user.email?.split('@')[0] || '',
+        business: localProfile?.business || dbProfile?.business || '',
+        business_name: dbProfile?.business_name || localProfile?.business || dbProfile?.business || '',
+        account_type: dbProfile?.account_type || (dbProfile?.role === 'seller' || dbProfile?.role === 'dealer' ? 'seller' : 'buyer'),
+        location: localProfile?.location || dbProfile?.location || '',
+        phone: localProfile?.phone || dbProfile?.phone || '',
+        phone_number: dbProfile?.phone_number || localProfile?.phone || dbProfile?.phone || '',
+        seller_contact_name: localProfile?.seller_contact_name || dbProfile?.seller_contact_name || '',
+        collection_full_address: localProfile?.collection_full_address || dbProfile?.collection_full_address || '',
+        collection_city: localProfile?.collection_city || dbProfile?.collection_city || dbProfile?.location || '',
+        collection_postcode: localProfile?.collection_postcode || dbProfile?.collection_postcode || '',
+        avatar_url: localProfile?.avatar_url || dbProfile?.avatar_url || '',
+        verified: dbProfile?.verified || false,
+        email_verified: dbProfile?.email_verified || dbProfile?.verified || false,
+        is_email_verified: dbProfile?.is_email_verified || dbProfile?.email_verified || dbProfile?.verified || false,
+        verification_level: dbProfile?.verification_level || 'basic',
+        badge: dbProfile?.badge || (dbProfile?.verified ? 'Verified User' : 'Email pending'),
+        verified_user_badge: dbProfile?.verified_user_badge || false,
+        auth_provider: dbProfile?.auth_provider || null,
+        auth_providers: dbProfile?.auth_providers || [],
+        last_login_at: dbProfile?.last_login_at || null,
+        phone_verified: dbProfile?.phone_verified || false,
+        is_phone_verified: dbProfile?.is_phone_verified || dbProfile?.phone_verified || false,
+        phone_verified_at: dbProfile?.phone_verified_at || null,
+        phone_verification_method: dbProfile?.phone_verification_method || 'manual',
+        phone_verification_status: dbProfile?.phone_verification_status || (dbProfile?.phone_verified ? 'verified' : 'pending'),
+        phone_verification_code: null,
+        phone_verification_expires_at: null,
+        phone_verification_attempts: dbProfile?.phone_verification_attempts || 0,
+        role: dbProfile?.role || 'user',
+        verified_dealer: dbProfile?.verified_dealer || false,
+        stripe_connect_onboarding_complete: dbProfile?.stripe_connect_onboarding_complete || false,
+        stripe_identity_session_id: dbProfile?.stripe_identity_session_id || null,
+        stripe_identity_status: dbProfile?.stripe_identity_status || null,
+        government_id_verified: dbProfile?.government_id_verified || false,
+        business_verified: dbProfile?.business_verified || false,
+        companies_house_number: dbProfile?.companies_house_number || null,
+        vat_number: dbProfile?.vat_number || null,
+        trust_notes: dbProfile?.trust_notes || null,
+        seller_verification_level: dbProfile?.seller_verification_level || 'unverified',
+        created_at: dbProfile?.created_at || null,
+        updated_at: dbProfile?.updated_at || null,
+        deletion_scheduled_at: dbProfile?.deletion_scheduled_at ?? null,
+        social_links: normaliseSocialLinks(dbProfile?.social_links),
+      } satisfies Profile
 
       setProfile(loadedProfile)
       setDraftProfile(loadedProfile)
+      setVerificationPhone(loadedProfile.phone_number || loadedProfile.phone || '')
+      setCompaniesHouseNumber(dbProfile?.companies_house_number || '')
+      setVatNumber(dbProfile?.vat_number || '')
     }
 
     loadProfile()
@@ -280,10 +445,144 @@ function SettingsClient({ initialProfile }: { initialProfile: Profile | null }) 
     }
   }
 
-  const handleDeleteAccount = () => {
-    if (confirm('Are you sure you want to delete your account? This cannot be undone.')) {
+  async function savePhoneNumberForManualReview() {
+    const phoneToVerify = verificationPhone || profile.phone || profile.phone_number
+    if (!phoneToVerify) {
+      setMessage('Enter a valid UK mobile number.')
+      return
+    }
+
+    setTrustActionPending(true)
+    try {
+      const response = await fetch('/api/account/save-phone-number', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: phoneToVerify }),
+      })
+      const result = await response.json().catch(() => ({})) as PhoneVerificationResponse
+      if (!response.ok || !result.ok) throw new Error(result.error || 'Could not save mobile number.')
+      if (result.phone) {
+        setVerificationPhone(result.phone)
+        setProfile({
+          ...profile,
+          phone: result.phone,
+          phone_number: result.phone,
+          phone_verified: false,
+          is_phone_verified: false,
+          phone_verified_at: null,
+          phone_verification_method: 'manual',
+          phone_verification_status: 'pending',
+        })
+        setDraftProfile({
+          ...draftProfile,
+          phone: result.phone,
+          phone_number: result.phone,
+          phone_verified: false,
+          is_phone_verified: false,
+          phone_verified_at: null,
+          phone_verification_method: 'manual',
+          phone_verification_status: 'pending',
+        })
+      }
+      setMessage(result.message || 'Phone verification is reviewed manually during launch.')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not save mobile number.')
+    } finally {
+      setTrustActionPending(false)
+    }
+  }
+
+  async function startIdentityVerification() {
+    setTrustActionPending(true)
+    try {
+      const response = await fetch('/api/trust/identity', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ returnUrl: '/account' }),
+      })
+      const result = await response.json().catch(() => ({})) as IdentityVerificationResponse
+      if (!response.ok) throw new Error(result.error || 'Could not start ID verification.')
+      if (result.url) {
+        window.location.href = result.url
+        return
+      }
+      setMessage('ID verification started.')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not start ID verification.')
+    } finally {
+      setTrustActionPending(false)
+    }
+  }
+
+  async function verifyBusiness() {
+    if (!companiesHouseNumber || !verificationConsent) {
+      setMessage('Add your Companies House number and accept verification consent.')
+      return
+    }
+
+    setTrustActionPending(true)
+    try {
+      const response = await fetch('/api/trust/business', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          companiesHouseNumber,
+          vatNumber,
+          consentAccepted: verificationConsent,
+        }),
+      })
+      const result = await response.json().catch(() => ({})) as BusinessVerificationResponse
+      if (!response.ok) throw new Error(result.error || 'Could not verify business.')
+      setProfile({
+        ...profile,
+        business: result.businessName || profile.business,
+        business_verified: Boolean(result.businessVerified),
+        seller_verification_level: result.businessVerified ? 'business_verified' : 'business_pending',
+      })
+      setMessage(
+        result.businessVerified
+          ? 'Business verified.'
+          : result.needsStripeConnect
+            ? 'Companies House matched. Connect Stripe payouts to complete business verification.'
+            : 'Companies House matched. Verification is pending.'
+      )
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not verify business.')
+    } finally {
+      setTrustActionPending(false)
+    }
+  }
+
+  const isSocialLogin = Boolean(profile.auth_provider && profile.auth_provider !== 'email')
+
+  async function submitDeleteAccount() {
+    setDeleteError('')
+    if (deleteTypeConfirm !== 'DELETE') {
+      setDeleteError('Type DELETE to confirm.')
+      return
+    }
+    setDeleteSubmitting(true)
+    try {
+      const res = await fetch('/api/account/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(
+          isSocialLogin
+            ? { confirmEmail: deleteConfirmEmail }
+            : { password: deletePassword }
+        ),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setDeleteError(data.error || 'Could not delete account. Please try again.')
+        setDeleteSubmitting(false)
+        return
+      }
       localStorage.clear()
       router.push('/')
+    } catch {
+      setDeleteError('Network error. Please try again.')
+      setDeleteSubmitting(false)
     }
   }
 
@@ -329,7 +628,7 @@ function SettingsClient({ initialProfile }: { initialProfile: Profile | null }) 
         <div className="space-y-6">
 
           {/* SECTION 1: PROFILE */}
-          <section className="premium-card rounded-[2rem] p-6 md:p-8">
+          <section id="profile" className="premium-card scroll-mt-24 rounded-[2rem] p-6 md:p-8">
             <div className="flex items-center justify-between">
               <h3 className="text-2xl font-black">Profile</h3>
               <button
@@ -477,8 +776,132 @@ function SettingsClient({ initialProfile }: { initialProfile: Profile | null }) 
             )}
           </section>
 
+          <SellerSocialLinksForm initialLinks={profile.social_links || null} />
+
+          {/* SECTION 2: TRUST */}
+          <section id="verification" className="premium-card scroll-mt-24 rounded-[2rem] p-6 md:p-8">
+            <div className="flex items-start gap-3">
+              <div className="rounded-2xl bg-[#FF6B00]/15 p-3 text-[#FF9A4A]">
+                <ShieldCheck className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-2xl font-black">Trust & verification</h3>
+                <p className="mt-1 text-sm text-white/60">
+                  Fast checks that help buyers trust your CaterBidsUK account.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6 grid gap-3 md:grid-cols-3">
+              <TrustStatus
+                icon={<BadgeCheck className="h-5 w-5" />}
+                title="Verified User"
+                active={Boolean(profile.email_verified && profile.phone_verified)}
+                text={profile.email_verified ? (profile.phone_verified ? 'Email + phone checked' : 'Phone pending verification') : 'Email pending'}
+              />
+              <TrustStatus
+                icon={<ShieldCheck className="h-5 w-5" />}
+                title="ID Verified"
+                active={Boolean(profile.government_id_verified)}
+                text="Required before payouts"
+              />
+              <TrustStatus
+                icon={<Building2 className="h-5 w-5" />}
+                title="Verified Business"
+                active={Boolean(profile.business_verified)}
+                text="Companies House + payouts"
+              />
+            </div>
+
+            <div className="mt-6 space-y-4">
+              <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
+                <h4 className="font-black">Mobile verification</h4>
+                <p className="mt-1 text-sm text-white/60">
+                  Phone verification is reviewed manually during launch.
+                </p>
+                <div className="mt-4 grid gap-3">
+                  <InputField
+                    label="Mobile number"
+                    value={verificationPhone}
+                    onChange={setVerificationPhone}
+                    type="tel"
+                    id="verification-phone"
+                  />
+                  <p className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/60">
+                    {profile.phone_verified ? 'Phone verified.' : 'Status: Phone pending admin verification.'}
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={savePhoneNumberForManualReview}
+                      disabled={trustActionPending || Boolean(profile.phone_verified)}
+                      className="soft-button rounded-2xl px-4 py-4 text-sm font-black disabled:opacity-50"
+                    >
+                      {trustActionPending ? 'Saving...' : 'Save mobile number'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
+                <h4 className="font-black">Seller verification</h4>
+                <p className="mt-1 text-sm text-white/60">
+                  ID checks are handled by Stripe Identity. Raw ID files are not stored by CaterBidsUK.
+                </p>
+                <button
+                  type="button"
+                  onClick={startIdentityVerification}
+                  disabled={trustActionPending || Boolean(profile.government_id_verified)}
+                  className="premium-button mt-4 w-full rounded-2xl px-4 py-4 text-sm font-black text-white disabled:opacity-50"
+                >
+                  Start ID verification
+                </button>
+              </div>
+
+              <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
+                <h4 className="font-black">Business verification</h4>
+                <p className="mt-1 text-sm text-white/60">
+                  Check your UK company and connect payouts to unlock Verified Business.
+                </p>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <InputField
+                    label="Companies House number"
+                    value={companiesHouseNumber}
+                    onChange={(value) => setCompaniesHouseNumber(value.toUpperCase())}
+                    id="companies-house-number"
+                  />
+                  <InputField
+                    label="VAT number optional"
+                    value={vatNumber}
+                    onChange={(value) => setVatNumber(value.toUpperCase())}
+                    id="vat-number"
+                  />
+                </div>
+                <label className="mt-4 flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-white/70">
+                  <input
+                    type="checkbox"
+                    checked={verificationConsent}
+                    onChange={(event) => setVerificationConsent(event.target.checked)}
+                    className="mt-1 h-4 w-4 accent-[#FF6B00]"
+                  />
+                  <span>
+                    I agree that CaterBidsUK can check these business details for verification.
+                  </span>
+                </label>
+                <button
+                  type="button"
+                  onClick={verifyBusiness}
+                  disabled={trustActionPending || Boolean(profile.business_verified)}
+                  className="premium-button mt-4 w-full rounded-2xl px-4 py-4 text-sm font-black text-white disabled:opacity-50"
+                >
+                  Check business
+                </button>
+              </div>
+            </div>
+          </section>
+
           {/* SECTION 2: SECURITY */}
-          <section className="premium-card rounded-[2rem] p-6 md:p-8">
+          <section id="security" className="premium-card scroll-mt-24 rounded-[2rem] p-6 md:p-8">
             <h3 className="mb-6 text-2xl font-black">Security</h3>
             <div className="space-y-4">
               <InputField
@@ -515,7 +938,7 @@ function SettingsClient({ initialProfile }: { initialProfile: Profile | null }) 
           </section>
 
           {/* SECTION 3: NOTIFICATIONS */}
-          <section className="premium-card rounded-[2rem] p-6 md:p-8">
+          <section id="notifications" className="premium-card scroll-mt-24 rounded-[2rem] p-6 md:p-8">
             <h3 className="mb-6 text-2xl font-black">Notifications</h3>
             <div className="space-y-4">
               <ToggleItem
@@ -551,7 +974,13 @@ function SettingsClient({ initialProfile }: { initialProfile: Profile | null }) 
                 Log Out
               </button>
               <button
-                onClick={handleDeleteAccount}
+                onClick={() => {
+                  setDeletePassword('')
+                  setDeleteConfirmEmail('')
+                  setDeleteTypeConfirm('')
+                  setDeleteError('')
+                  setShowDeleteModal(true)
+                }}
                 className="flex w-full items-center justify-center gap-3 rounded-2xl border border-red-500/50 bg-red-500/10 py-4 font-bold text-red-400 hover:bg-red-500/20"
               >
                 <AlertTriangle size={20} />
@@ -562,6 +991,86 @@ function SettingsClient({ initialProfile }: { initialProfile: Profile | null }) 
 
         </div>
       </div>
+
+      {/* Account deletion modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-3xl bg-[#0f1f35] p-6 shadow-2xl">
+            <h3 className="mb-2 text-xl font-black text-white">Delete your account?</h3>
+            <div className="mb-5 space-y-2 text-sm text-white/70">
+              <p>This will permanently delete your CaterBids account. Here&apos;s what happens:</p>
+              <ul className="mt-2 list-disc space-y-1 pl-5">
+                <li>Your <strong className="text-white">live listings are removed</strong> from the marketplace immediately.</li>
+                <li>Your <strong className="text-white">messages are anonymised</strong> — the other party keeps their conversation history.</li>
+                <li><strong className="text-white">Order records are kept</strong> for legal purposes (UK law requires 6 years for financial records), but your personal details are removed.</li>
+                <li>Your account is <strong className="text-white">disabled immediately</strong> and permanently purged after 30 days.</li>
+              </ul>
+            </div>
+
+            <div className="space-y-3">
+              {isSocialLogin ? (
+                <div>
+                  <label className="mb-1 block text-xs font-bold text-white/60">
+                    Confirm your email address
+                  </label>
+                  <input
+                    type="email"
+                    value={deleteConfirmEmail}
+                    onChange={(e) => setDeleteConfirmEmail(e.target.value)}
+                    placeholder={profile.email ?? 'your@email.com'}
+                    className="premium-input w-full rounded-2xl px-4 py-3 text-white placeholder-white/30"
+                  />
+                </div>
+              ) : (
+                <div>
+                  <label className="mb-1 block text-xs font-bold text-white/60">
+                    Enter your password
+                  </label>
+                  <input
+                    type="password"
+                    value={deletePassword}
+                    onChange={(e) => setDeletePassword(e.target.value)}
+                    placeholder="Current password"
+                    className="premium-input w-full rounded-2xl px-4 py-3 text-white placeholder-white/30"
+                  />
+                </div>
+              )}
+              <div>
+                <label className="mb-1 block text-xs font-bold text-white/60">
+                  Type DELETE to confirm
+                </label>
+                <input
+                  type="text"
+                  value={deleteTypeConfirm}
+                  onChange={(e) => setDeleteTypeConfirm(e.target.value)}
+                  placeholder="DELETE"
+                  className="premium-input w-full rounded-2xl px-4 py-3 font-mono text-white placeholder-white/30"
+                />
+              </div>
+              {deleteError && (
+                <p className="text-sm font-bold text-red-400">{deleteError}</p>
+              )}
+            </div>
+
+            <div className="mt-5 flex gap-3">
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                disabled={deleteSubmitting}
+                className="flex-1 rounded-2xl border border-white/20 py-3 font-bold text-white/70 hover:bg-white/10 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitDeleteAccount}
+                disabled={deleteSubmitting || deleteTypeConfirm !== 'DELETE'}
+                className="flex-1 rounded-2xl bg-red-600 py-3 font-black text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {deleteSubmitting ? 'Deleting…' : 'Delete my account'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Mobile Bottom Navigation */}
       <nav className="bottom-nav fixed bottom-0 left-0 right-0 lg:hidden">
@@ -624,6 +1133,32 @@ onClick={() => togglePasswordVisibility((id?.split('-')[0] as 'current' | 'new' 
           </button>
         )}
       </div>
+    </div>
+  )
+}
+
+function TrustStatus({
+  icon,
+  title,
+  text,
+  active,
+}: {
+  icon: ReactNode
+  title: string
+  text: string
+  active: boolean
+}) {
+  return (
+    <div className={`rounded-3xl border p-4 ${
+      active
+        ? 'border-emerald-400/25 bg-emerald-500/10'
+        : 'border-white/10 bg-white/5'
+    }`}>
+      <div className={`flex items-center gap-2 ${active ? 'text-emerald-200' : 'text-white/75'}`}>
+        {icon}
+        <span className="font-black">{title}</span>
+      </div>
+      <p className="mt-2 text-sm text-white/55">{active ? 'Active' : text}</p>
     </div>
   )
 }

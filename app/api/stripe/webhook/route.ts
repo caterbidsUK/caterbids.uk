@@ -29,6 +29,11 @@ function paymentIntentId(paymentIntent: Stripe.Checkout.Session["payment_intent"
   return typeof paymentIntent === "string" ? paymentIntent : paymentIntent.id
 }
 
+function subscriptionId(subscription: Stripe.Checkout.Session["subscription"]) {
+  if (!subscription) return null
+  return typeof subscription === "string" ? subscription : subscription.id
+}
+
 function isMissingColumnError(error: unknown) {
   if (!error || typeof error !== "object") return false
   const message = "message" in error && typeof error.message === "string" ? error.message.toLowerCase() : ""
@@ -64,6 +69,7 @@ async function upsertOrderWithSchemaFallback(
   console.warn("Webhook order insert hit a schema mismatch. Retrying with core order columns only:", result.error.message)
 
   const {
+    delivery_method: _deliveryMethod,
     delivery_provider: _deliveryProvider,
     delivery_order_id: _deliveryOrderId,
     delivery_quote_id: _deliveryQuoteId,
@@ -78,6 +84,8 @@ async function upsertOrderWithSchemaFallback(
     collection_city: _collectionCity,
     seller_contact_name: _sellerContactName,
     seller_phone: _sellerPhone,
+    pallet_size: _palletSize,
+    pallet_ready: _palletReady,
     pallet_weight_kg: _palletWeightKg,
     pallet_length_cm: _palletLengthCm,
     pallet_width_cm: _palletWidthCm,
@@ -86,6 +94,8 @@ async function upsertOrderWithSchemaFallback(
     tail_lift_required: _tailLiftRequired,
     forklift_available: _forkliftAvailable,
     commercial_premises: _commercialPremises,
+    shrink_wrapped_confirmed: _shrinkWrappedConfirmed,
+    pallet_preparation_confirmed: _palletPreparationConfirmed,
     preferred_collection_date: _preferredCollectionDate,
     insurance_value: _insuranceValue,
     access_restrictions: _accessRestrictions,
@@ -129,6 +139,147 @@ export async function POST(req: NextRequest) {
   const metadata = session.metadata || {}
   console.log("Stripe metadata:", metadata)
 
+  if (metadata.checkout_type === "seller_plan") {
+    const sellerId = nullableUuid(metadata.sellerId)
+
+    if (!sellerId) {
+      return NextResponse.json({ error: "Missing sellerId metadata" }, { status: 400 })
+    }
+
+    const listingCount = Math.max(1, Math.floor(numberFromMetadata(metadata.listingCount) || 1))
+    const durationDays = Math.max(1, Math.floor(numberFromMetadata(metadata.durationDays) || 30))
+    const expiresAt = new Date()
+    expiresAt.setDate(expiresAt.getDate() + durationDays)
+
+    try {
+      const supabase = createAdminClient()
+      const planId = nullableUuid(metadata.planId)
+      const { error } = await supabase.from("seller_listing_entitlements").upsert(
+        {
+          seller_id: sellerId,
+          plan_id: planId,
+          plan_name: metadata.planName || "Seller plan",
+          stripe_session_id: session.id,
+          stripe_subscription_id: subscriptionId(session.subscription),
+          listing_count_total: listingCount,
+          listing_count_used: 0,
+          monthly: metadata.monthly === "true",
+          starts_at: new Date().toISOString(),
+          expires_at: expiresAt.toISOString(),
+          active: true,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "stripe_session_id" }
+      )
+
+      if (error) throw error
+      return NextResponse.json({ received: true, sellerPlan: true })
+    } catch (error) {
+      console.error("Seller plan entitlement failed:", error)
+      return NextResponse.json({ error: "Could not save seller plan entitlement" }, { status: 500 })
+    }
+  }
+
+  if (metadata.checkout_type === "founding_member") {
+    const sellerId = nullableUuid(metadata.sellerId)
+    if (!sellerId) {
+      return NextResponse.json({ error: "Missing sellerId in founding_member webhook" }, { status: 400 })
+    }
+    try {
+      const supabase = createAdminClient()
+      const { data: claimed, error: rpcError } = await (supabase as any).rpc("claim_founding_member_slot")
+      if (rpcError) throw rpcError
+      if (!claimed) {
+        // Cap reached between checkout creation and payment. Log for manual refund.
+        console.warn("Founding member cap reached at webhook time — session:", session.id, "seller:", sellerId)
+        return NextResponse.json({ received: true, capReached: true })
+      }
+      const planId = nullableUuid(metadata.planId)
+      const { error: entitlementError } = await supabase
+        .from("seller_listing_entitlements")
+        .upsert(
+          {
+            seller_id: sellerId,
+            plan_id: planId,
+            plan_name: "Founding Trade Member",
+            stripe_session_id: session.id,
+            listing_count_total: 30,
+            listing_count_used: 0,
+            monthly: false,
+            starts_at: new Date().toISOString(),
+            expires_at: null,
+            active: true,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "stripe_session_id" }
+        )
+      if (entitlementError) throw entitlementError
+      await (supabase.from("profiles") as any)
+        .update({ is_founding_member: true, updated_at: new Date().toISOString() })
+        .eq("id", sellerId)
+      return NextResponse.json({ received: true, foundingMember: true })
+    } catch (error) {
+      console.error("Founding member webhook failed:", error)
+      return NextResponse.json({ error: "Could not grant founding membership" }, { status: 500 })
+    }
+  }
+
+  if (metadata.checkout_type === "featured_boost") {
+    const boostListingId = metadata.listingId || ""
+    if (!boostListingId) {
+      return NextResponse.json({ error: "Missing listingId in featured_boost webhook" }, { status: 400 })
+    }
+    const boostDays = Math.max(1, Math.floor(numberFromMetadata(metadata.durationDays) || 7))
+    const boostUntil = new Date()
+    boostUntil.setDate(boostUntil.getDate() + boostDays)
+    try {
+      const supabase = createAdminClient()
+      const { error } = await supabase
+        .from("listings")
+        .update({
+          featured: true,
+          is_featured: true,
+          featured_type: "paid",
+          featured_at: new Date().toISOString(),
+          featured_by: nullableUuid(metadata.sellerId),
+          featured_until: boostUntil.toISOString(),
+          updated_at: new Date().toISOString(),
+        } as any)
+        .eq("id", boostListingId)
+      if (error) throw error
+      return NextResponse.json({ received: true, featuredBoost: true })
+    } catch (error) {
+      console.error("Featured boost webhook failed:", error)
+      return NextResponse.json({ error: "Could not apply featured boost" }, { status: 500 })
+    }
+  }
+
+  if (metadata.checkout_type === "listing_overage") {
+    const entitlementId = metadata.entitlementId || ""
+    if (!entitlementId) {
+      return NextResponse.json({ error: "Missing entitlementId in listing_overage webhook" }, { status: 400 })
+    }
+    try {
+      const supabase = createAdminClient()
+      const { data: ent, error: fetchError } = await supabase
+        .from("seller_listing_entitlements")
+        .select("listing_count_total")
+        .eq("id", entitlementId)
+        .maybeSingle()
+      if (fetchError) throw fetchError
+      const newTotal = Math.max(1, (Number(ent?.listing_count_total) || 0) + 1)
+      const { error: updateError } = await supabase
+        .from("seller_listing_entitlements")
+        .update({ listing_count_total: newTotal, updated_at: new Date().toISOString() })
+        .eq("id", entitlementId)
+      if (updateError) throw updateError
+      return NextResponse.json({ received: true, overageGranted: true })
+    } catch (error) {
+      console.error("Listing overage webhook failed:", error)
+      return NextResponse.json({ error: "Could not grant listing overage" }, { status: 500 })
+    }
+  }
+
   const listingId = metadata.listingId || ""
 
   if (!listingId) {
@@ -163,9 +314,12 @@ export async function POST(req: NextRequest) {
       sellerId = nullableUuid(listingData?.seller_id) || nullableUuid(listingData?.user_id)
     }
     const sellerUuid = nullableUuid(sellerId)
-    const nextDeliveryStatus = deliveryPrice > 0 ? "booking_requested" : "not_required"
+    const deliveryMethod =
+      metadata.deliveryMethod || metadata.delivery_method || (deliveryPrice > 0 ? "pallet_delivery" : "collection_only")
+    const isPalletDelivery = deliveryMethod === "pallet_delivery"
+    const nextDeliveryStatus = isPalletDelivery ? "awaiting_booking" : "not_required"
     const deliveryProvider =
-      metadata.courier_provider || metadata.deliveryProvider || (deliveryPrice > 0 ? "Interparcel" : null)
+      isPalletDelivery ? metadata.courier_provider || metadata.deliveryProvider || "Interparcel" : null
     const metadataDeliveryOrderId = deliveryOrderIdFromMetadata(metadata)
     const fullCollectionPostcode = resolveFullUkPostcode(
       metadata.collection_postcode,
@@ -200,33 +354,38 @@ export async function POST(req: NextRequest) {
       stripe_payment_intent_id: paymentIntentId(session.payment_intent),
       item_title: metadata.title || null,
       item_price: itemPrice,
-      delivery_name: metadata.deliveryName || null,
-      delivery_price: deliveryPrice,
+      delivery_method: isPalletDelivery ? "pallet_delivery" : "collection_only",
+      delivery_name: isPalletDelivery ? metadata.deliveryName || null : "Collection only",
+      delivery_price: isPalletDelivery ? deliveryPrice : 0,
       delivery_provider: deliveryProvider,
-      delivery_quote_id: metadata.deliveryQuoteId || null,
-      delivery_postcode: fullDeliveryPostcode || null,
-      collection_postcode: fullCollectionPostcode || null,
-      delivery_booking_required: deliveryPrice > 0,
-      buyer_delivery_full_address: metadata.buyerDeliveryFullAddress || null,
-      buyer_delivery_postcode: fullDeliveryPostcode || null,
-      buyer_phone: metadata.buyerPhone || null,
-      buyer_access_restrictions: metadata.buyerAccessRestrictions || null,
-      collection_full_address: listingData?.collection_full_address || null,
-      collection_city: listingData?.collection_city || null,
-      seller_contact_name: listingData?.seller_contact_name || null,
-      seller_phone: listingData?.seller_phone || null,
-      pallet_weight_kg: listingData?.pallet_weight_kg || listingData?.weight_kg || numberFromMetadata(metadata.weightKg),
-      pallet_length_cm: listingData?.pallet_length_cm || listingData?.length_cm || numberFromMetadata(metadata.lengthCm),
-      pallet_width_cm: listingData?.pallet_width_cm || listingData?.width_cm || numberFromMetadata(metadata.widthCm),
-      pallet_height_cm: listingData?.pallet_height_cm || listingData?.height_cm || numberFromMetadata(metadata.heightCm),
-      pallet_count: listingData?.pallet_count || numberFromMetadata(metadata.palletCount) || 1,
-      tail_lift_required: Boolean(listingData?.tail_lift_required) || metadata.tailLiftRequired === "true",
-      forklift_available: Boolean(listingData?.forklift_available),
-      commercial_premises: listingData?.commercial_premises !== false,
-      preferred_collection_date: listingData?.preferred_collection_date || null,
-      insurance_value: listingData?.insurance_value || numberFromMetadata(metadata.insuranceValue) || itemPrice,
-      access_restrictions: listingData?.access_restrictions || null,
-      delivery_notes: listingData?.delivery_notes || null,
+      delivery_quote_id: isPalletDelivery ? metadata.deliveryQuoteId || null : null,
+      delivery_postcode: isPalletDelivery ? fullDeliveryPostcode || null : null,
+      collection_postcode: isPalletDelivery ? fullCollectionPostcode || null : null,
+      delivery_booking_required: isPalletDelivery,
+      buyer_delivery_full_address: isPalletDelivery ? metadata.buyerDeliveryFullAddress || null : null,
+      buyer_delivery_postcode: isPalletDelivery ? fullDeliveryPostcode || null : null,
+      buyer_phone: isPalletDelivery ? metadata.buyerPhone || null : null,
+      buyer_access_restrictions: isPalletDelivery ? metadata.buyerAccessRestrictions || null : null,
+      collection_full_address: isPalletDelivery ? listingData?.collection_full_address || null : null,
+      collection_city: isPalletDelivery ? listingData?.collection_city || null : null,
+      seller_contact_name: isPalletDelivery ? listingData?.seller_contact_name || null : null,
+      seller_phone: isPalletDelivery ? listingData?.seller_phone || null : null,
+      pallet_size: isPalletDelivery ? listingData?.pallet_size || metadata.palletSize || null : null,
+      pallet_ready: isPalletDelivery ? Boolean(listingData?.pallet_ready) : false,
+      pallet_weight_kg: isPalletDelivery ? listingData?.pallet_weight_kg || listingData?.weight_kg || numberFromMetadata(metadata.weightKg) : null,
+      pallet_length_cm: isPalletDelivery ? listingData?.pallet_length_cm || listingData?.length_cm || numberFromMetadata(metadata.lengthCm) : null,
+      pallet_width_cm: isPalletDelivery ? listingData?.pallet_width_cm || listingData?.width_cm || numberFromMetadata(metadata.widthCm) : null,
+      pallet_height_cm: isPalletDelivery ? listingData?.pallet_height_cm || listingData?.height_cm || numberFromMetadata(metadata.heightCm) : null,
+      pallet_count: isPalletDelivery ? listingData?.pallet_count || numberFromMetadata(metadata.palletCount) || 1 : 1,
+      tail_lift_required: isPalletDelivery ? Boolean(listingData?.tail_lift_required) || metadata.tailLiftRequired === "true" : false,
+      forklift_available: isPalletDelivery ? Boolean(listingData?.forklift_available) : false,
+      commercial_premises: isPalletDelivery ? listingData?.commercial_premises !== false : false,
+      shrink_wrapped_confirmed: isPalletDelivery ? Boolean(listingData?.shrink_wrapped_confirmed) || metadata.shrinkWrappedConfirmed === "true" : false,
+      pallet_preparation_confirmed: isPalletDelivery ? Boolean(listingData?.pallet_preparation_confirmed) || metadata.palletPreparationConfirmed === "true" : false,
+      preferred_collection_date: isPalletDelivery ? listingData?.preferred_collection_date || null : null,
+      insurance_value: isPalletDelivery ? listingData?.insurance_value || numberFromMetadata(metadata.insuranceValue) || itemPrice : null,
+      access_restrictions: isPalletDelivery ? listingData?.access_restrictions || null : null,
+      delivery_notes: isPalletDelivery ? listingData?.delivery_notes || null : null,
       total_price: totalPrice,
       payment_status: paymentStatus,
       order_status: paymentStatus === "paid" ? "paid" : "payment_pending",
@@ -251,12 +410,14 @@ export async function POST(req: NextRequest) {
       throw savedOrderError
     }
 
-    const deliveryOrderResult = await upsertDeliveryOrderAfterPayment({
-      supabase,
-      session,
-      orderId: savedOrder?.id || existingOrder?.id || null,
-      listingData,
-    })
+    const deliveryOrderResult = isPalletDelivery
+      ? await upsertDeliveryOrderAfterPayment({
+          supabase,
+          session,
+          orderId: savedOrder?.id || existingOrder?.id || null,
+          listingData,
+        })
+      : { data: null, error: null }
 
     if (deliveryOrderResult.error) {
       if (isMissingDeliveryOrdersTable(deliveryOrderResult.error)) {
@@ -265,12 +426,12 @@ export async function POST(req: NextRequest) {
       throw deliveryOrderResult.error
     }
 
-    if (savedOrder?.id && deliveryOrderResult.data?.id) {
+    if (isPalletDelivery && savedOrder?.id && deliveryOrderResult.data?.id) {
       const { error: orderDeliveryLinkError } = await supabase
         .from("orders")
         .update({
           delivery_order_id: deliveryOrderResult.data.id,
-          delivery_status: "booking_requested",
+          delivery_status: "awaiting_booking",
           updated_at: new Date().toISOString(),
         } as any)
         .eq("id", savedOrder.id)

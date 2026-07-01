@@ -9,13 +9,15 @@ export type PaymentSettings = {
   listing_packs_enabled: boolean
   subscriptions_enabled: boolean
   featured_boosts_enabled: boolean
+  featured_price_7d: number
+  featured_price_30d: number
   test_mode: boolean
   currency: string
   created_at?: string | null
   updated_at?: string | null
 }
 
-export type SellerPlanType = "single_pack" | "subscription"
+export type SellerPlanType = "single_pack" | "subscription" | "founding_member"
 
 export type SellerPlan = {
   id?: string
@@ -27,6 +29,7 @@ export type SellerPlan = {
   monthly: boolean
   features: string[]
   active: boolean
+  overage_price: number | null
 }
 
 export type SellerListingEntitlement = {
@@ -50,6 +53,8 @@ export const DEFAULT_PAYMENT_SETTINGS: PaymentSettings = {
   listing_packs_enabled: true,
   subscriptions_enabled: true,
   featured_boosts_enabled: true,
+  featured_price_7d: 4.99,
+  featured_price_30d: 14.99,
   test_mode: true,
   currency: "GBP",
   created_at: null,
@@ -66,6 +71,7 @@ export const SELLER_PLANS: SellerPlan[] = [
     monthly: false,
     features: ["30 days live", "Up to 10 photos", "Buyer messages included"],
     active: true,
+    overage_price: null,
   },
   {
     name: "3 Listings Pack",
@@ -76,6 +82,7 @@ export const SELLER_PLANS: SellerPlan[] = [
     monthly: false,
     features: ["Save £3", "For small clear-outs"],
     active: true,
+    overage_price: null,
   },
   {
     name: "10 Listings Pack",
@@ -86,6 +93,7 @@ export const SELLER_PLANS: SellerPlan[] = [
     monthly: false,
     features: ["Save £15", "For trade sellers"],
     active: true,
+    overage_price: null,
   },
   {
     name: "Starter Plan",
@@ -96,6 +104,7 @@ export const SELLER_PLANS: SellerPlan[] = [
     monthly: true,
     features: ["3 listings included", "£4 extra listing"],
     active: true,
+    overage_price: 3,
   },
   {
     name: "Pro Plan",
@@ -106,6 +115,7 @@ export const SELLER_PLANS: SellerPlan[] = [
     monthly: true,
     features: ["10 listings included", "AI listing tools", "1 featured boost"],
     active: true,
+    overage_price: null,
   },
   {
     name: "Trade Plan",
@@ -116,6 +126,7 @@ export const SELLER_PLANS: SellerPlan[] = [
     monthly: true,
     features: ["30 listings included", "Bulk tools", "Priority support"],
     active: true,
+    overage_price: null,
   },
 ]
 
@@ -142,6 +153,8 @@ export function normalisePaymentSettings(row?: PaymentSettingsRow | null): Payme
     listing_packs_enabled: booleanValue(row.listing_packs_enabled, DEFAULT_PAYMENT_SETTINGS.listing_packs_enabled),
     subscriptions_enabled: booleanValue(row.subscriptions_enabled, DEFAULT_PAYMENT_SETTINGS.subscriptions_enabled),
     featured_boosts_enabled: booleanValue(row.featured_boosts_enabled, DEFAULT_PAYMENT_SETTINGS.featured_boosts_enabled),
+    featured_price_7d: numberValue(row.featured_price_7d, DEFAULT_PAYMENT_SETTINGS.featured_price_7d),
+    featured_price_30d: numberValue(row.featured_price_30d, DEFAULT_PAYMENT_SETTINGS.featured_price_30d),
     test_mode: booleanValue(row.test_mode, DEFAULT_PAYMENT_SETTINGS.test_mode),
     currency: typeof row.currency === "string" && row.currency.trim() ? row.currency.trim().toUpperCase() : DEFAULT_PAYMENT_SETTINGS.currency,
     created_at: typeof row.created_at === "string" ? row.created_at : null,
@@ -159,13 +172,14 @@ export function normaliseSellerPlan(row: SellerPlanRow): SellerPlan {
   return {
     id: typeof row.id === "string" ? row.id : undefined,
     name: typeof row.name === "string" && row.name.trim() ? row.name : fallback.name,
-    type: row.type === "subscription" ? "subscription" : "single_pack",
+    type: row.type === "subscription" ? "subscription" : row.type === "founding_member" ? "founding_member" : "single_pack",
     price: numberValue(row.price, fallback.price),
     listing_count: Math.max(1, Math.floor(numberValue(row.listing_count, fallback.listing_count))),
     duration_days: row.duration_days === null ? null : Math.max(1, Math.floor(numberValue(row.duration_days, fallback.duration_days || 30))),
     monthly: booleanValue(row.monthly, fallback.monthly),
     features,
     active: booleanValue(row.active, true),
+    overage_price: row.overage_price != null && Number.isFinite(Number(row.overage_price)) ? Number(row.overage_price) : null,
   }
 }
 

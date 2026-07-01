@@ -1,6 +1,7 @@
 import AdminDashboard, {
   type AdminAuditLog,
   type AdminBlogPost,
+  type AdminFoundingMember,
   type AdminListing,
   type AdminOrder,
   type AdminPaymentSettings,
@@ -148,6 +149,8 @@ export default async function AdminPage({
     trustReportsTotal,
     blogPostsTotal,
     blogPostsRaw,
+    foundingCounterRaw,
+    foundingMembersRaw,
   ] = await Promise.all([
     safeCount(admin.from("listings").select("*", { count: "exact", head: true }), "listings"),
     safeCount(admin.from("listings").select("*", { count: "exact", head: true }).eq("status", "live"), "live listings"),
@@ -211,7 +214,6 @@ export default async function AdminPage({
       admin
         .from("seller_plans" as never)
         .select("*")
-        .eq("active", true)
         .order("price", { ascending: true }),
       "seller plans"
     ),
@@ -235,10 +237,28 @@ export default async function AdminPage({
         .limit(80),
       "blog posts"
     ),
+    safeData<{ cap: number; sold: number }>(
+      admin.from("founding_member_counter" as never).select("cap,sold").limit(1) as any,
+      "founding member counter"
+    ),
+    safeData<AdminFoundingMember>(
+      admin
+        .from("seller_listing_entitlements")
+        .select("id,seller_id,stripe_session_id,created_at")
+        .eq("plan_name", "Founding Trade Member")
+        .eq("active", true)
+        .order("created_at", { ascending: true }),
+      "founding members"
+    ),
   ])
 
   const usersById = new Map(usersRaw.map((user) => [user.id, user]))
   const listingsById = new Map(listingsRaw.map((listing) => [listing.id, listing]))
+  const foundingCounter = foundingCounterRaw[0] || { cap: 100, sold: 0 }
+  const foundingMembers: AdminFoundingMember[] = foundingMembersRaw.map((member) => ({
+    ...member,
+    email: usersById.get(String((member as any).seller_id || ""))?.email || null,
+  }))
   const activeListingCounts = new Map<string, number>()
   const setupWarnings: string[] = []
 
@@ -344,6 +364,9 @@ export default async function AdminPage({
       paymentSettings={paymentSettings}
       sellerPlans={sellerPlans}
       auditLogs={auditLogsRaw}
+      foundingMemberSold={foundingCounter.sold}
+      foundingMemberCap={foundingCounter.cap}
+      foundingMembers={foundingMembers}
       messagesTotal={messagesTotal}
       reportsTotal={reportsTotal}
       marketplaceLive={marketplaceLive}

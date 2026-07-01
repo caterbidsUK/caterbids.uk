@@ -39,6 +39,7 @@ type DeliveryQuoteBoxProps = {
 }
 
 export default function DeliveryQuoteBox({
+  listingId,
   collectionPostcode,
   weightKg,
   lengthCm,
@@ -59,6 +60,28 @@ export default function DeliveryQuoteBox({
   const [quoteProvider, setQuoteProvider] = useState("")
   const fullCollectionPostcode = resolveFullUkPostcode(collectionPostcode)
 
+  function quoteWithResolvedCollectionPostcode(
+    quote: DeliveryQuote,
+    provider: string,
+    deliveryPostcode: string,
+    resolvedCollectionPostcode?: string | null
+  ): DeliveryQuote {
+    return {
+      ...quote,
+      provider,
+      collectionPostcode: resolvedCollectionPostcode || fullCollectionPostcode || null,
+      deliveryPostcode,
+      weightKg,
+      lengthCm,
+      widthCm,
+      heightCm,
+      palletReady,
+      tailLiftRequired,
+      palletCount,
+      insuranceValue,
+    }
+  }
+
   async function getQuote() {
     setError("")
     setQuotes([])
@@ -71,8 +94,8 @@ export default function DeliveryQuoteBox({
       return
     }
 
-    if (!fullCollectionPostcode) {
-      setError("Collection postcode not provided.")
+    if (!fullCollectionPostcode && !listingId) {
+      setError("Seller collection postcode is missing. Contact the seller before booking delivery.")
       return
     }
 
@@ -86,10 +109,10 @@ export default function DeliveryQuoteBox({
 
     try {
       const apiBase =
-        process.env.NEXT_PUBLIC_CATERBIDS_DELIVERY_API ||
-        "http://157.245.42.103:3001"
+        process.env.NEXT_PUBLIC_CATERBIDS_DELIVERY_API?.trim() || ""
 
       const requestBody = {
+        listingId,
         collectionPostcode: fullCollectionPostcode,
         deliveryPostcode: fullDeliveryPostcode,
         weightKg,
@@ -102,7 +125,8 @@ export default function DeliveryQuoteBox({
         insuranceValue,
       }
 
-      const res = await fetch(`${apiBase}/api/delivery/quote`, {
+      const quoteEndpoint = apiBase ? `${apiBase}/api/delivery/quote` : "/api/delivery/quote"
+      const res = await fetch(quoteEndpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -117,22 +141,17 @@ export default function DeliveryQuoteBox({
       }
 
       setQuoteProvider(data.provider || "Live delivery API")
+      const resolvedCollectionPostcode = data.collectionPostcode || fullCollectionPostcode || null
       setQuotes(
         Array.isArray(data.quotes)
-          ? data.quotes.map((quote: DeliveryQuote) => ({
-              ...quote,
-              provider: data.provider || "Live delivery API",
-              collectionPostcode: fullCollectionPostcode,
-              deliveryPostcode: fullDeliveryPostcode,
-              weightKg,
-              lengthCm,
-              widthCm,
-              heightCm,
-              palletReady,
-              tailLiftRequired,
-              palletCount,
-              insuranceValue,
-            }))
+          ? data.quotes.map((quote: DeliveryQuote) =>
+              quoteWithResolvedCollectionPostcode(
+                quote,
+                data.provider || "Live delivery API",
+                fullDeliveryPostcode,
+                resolvedCollectionPostcode
+              )
+            )
           : []
       )
     } catch (err) {
@@ -145,6 +164,7 @@ export default function DeliveryQuoteBox({
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
+            listingId,
             collectionPostcode: fullCollectionPostcode,
             deliveryPostcode: fullDeliveryPostcode,
             weightKg,
@@ -164,28 +184,23 @@ export default function DeliveryQuoteBox({
         }
 
         setQuoteProvider("Local beta fallback")
+        const resolvedCollectionPostcode = fallbackData.collectionPostcode || fullCollectionPostcode || null
         setQuotes(
           Array.isArray(fallbackData.quotes)
-            ? fallbackData.quotes.map((quote: DeliveryQuote) => ({
-                ...quote,
-                provider: "Local beta fallback",
-                collectionPostcode: fullCollectionPostcode,
-                deliveryPostcode: fullDeliveryPostcode,
-                weightKg,
-                lengthCm,
-                widthCm,
-                heightCm,
-                palletReady,
-                tailLiftRequired,
-                palletCount,
-                insuranceValue,
-              }))
+            ? fallbackData.quotes.map((quote: DeliveryQuote) =>
+                quoteWithResolvedCollectionPostcode(
+                  quote,
+                  "Local beta fallback",
+                  fullDeliveryPostcode,
+                  resolvedCollectionPostcode
+                )
+              )
             : []
         )
         setError("Live delivery prices are unavailable, so these are beta estimates.")
       } catch (fallbackError) {
         console.error("Delivery quote fallback error:", fallbackError)
-        setError("Unable to get live delivery prices right now. Please try again shortly.")
+        setError(fallbackError instanceof Error ? fallbackError.message : "Unable to get live delivery prices right now. Please try again shortly.")
       }
     } finally {
       setLoading(false)
@@ -208,15 +223,15 @@ export default function DeliveryQuoteBox({
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="text-xl font-black text-white">
-            Check delivery
+            CaterBids Pallet Delivery
           </h3>
           <p className="mt-1 text-sm leading-relaxed text-white/65">
-            Enter a postcode for pallet options.
+            Enter a postcode for Interparcel pallet estimates.
           </p>
         </div>
 
         <span className="rounded-full bg-[#FF6B00]/10 px-3 py-1 text-xs font-black text-[#FF6B00]">
-          Delivery
+          Interparcel
         </span>
       </div>
 
@@ -237,8 +252,16 @@ export default function DeliveryQuoteBox({
       </div>
 
       <p className="mt-4 text-xs font-semibold text-orange-100">
-        Choose delivery before checkout.
+        Delivery estimate. Final Interparcel booking confirmed after payment.
       </p>
+      <a
+        href="/pallet-delivery-guide"
+        target="_blank"
+        rel="noreferrer"
+        className="mt-2 inline-flex text-xs font-black text-[#FF9A4A] underline-offset-4 hover:underline"
+      >
+        View pallet preparation guide
+      </a>
 
       <div className="mt-5">
         <label className="text-sm font-bold text-white">

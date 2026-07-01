@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import { validateDeliveryBooking } from "@/lib/delivery/validateDeliveryBooking"
+import type { Database } from "@/types/supabase"
 
 export const runtime = "nodejs"
+type OrderUpdate = Database["public"]["Tables"]["orders"]["Update"]
 
 function isUuid(value: string | undefined | null): value is string {
   return Boolean(
@@ -70,12 +72,19 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    const bookingReference = `TEST-IP-${String(order.id).slice(0, 8)}`
+    const trackingNumber = `IPTEST${Date.now()}`
+    const localMockMode = process.env.NODE_ENV !== "production" || process.env.INTERPARCEL_MOCK_BOOKING === "true"
+
     const { data: updatedOrder, error: updateError } = await supabaseAdmin
       .from("orders")
       .update({
-        delivery_status: "booking_requested",
+        delivery_status: localMockMode ? "booked" : "awaiting_booking",
+        delivery_provider: "Interparcel",
+        delivery_booking_reference: localMockMode ? bookingReference : order.delivery_booking_reference || null,
+        delivery_tracking_number: localMockMode ? trackingNumber : order.delivery_tracking_number || null,
         updated_at: new Date().toISOString(),
-      } as any)
+      } satisfies OrderUpdate)
       .eq("id", order.id)
       .select("*")
       .single()
@@ -86,12 +95,16 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      booked: false,
-      mode: "live_not_connected",
-      status: "booking_requested",
+      booked: localMockMode,
+      mode: localMockMode ? "local_mock" : "live_not_connected",
+      status: updatedOrder.delivery_status,
+      booking_reference: localMockMode ? bookingReference : updatedOrder.delivery_booking_reference,
+      tracking_number: localMockMode ? trackingNumber : updatedOrder.delivery_tracking_number,
       order: updatedOrder,
       message:
-        "Delivery request is ready. No courier booking has been made because the real Interparcel booking API is not connected.",
+        localMockMode
+          ? "Local mock Interparcel booking created."
+          : "Delivery request is ready. No courier booking has been made because the real Interparcel booking API is not connected.",
     })
   } catch (error) {
     console.error("Interparcel booking failed:", error)

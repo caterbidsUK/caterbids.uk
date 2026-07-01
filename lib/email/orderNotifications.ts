@@ -1,6 +1,7 @@
 import type { createAdminClient } from "@/lib/supabase/admin"
 import type { DeliveryOrderRow } from "@/lib/delivery/deliveryOrders"
 import type { Database } from "@/types/supabase"
+import { sendEmail } from "@/lib/email/sendEmail"
 
 type SupabaseAdmin = ReturnType<typeof createAdminClient>
 type OrderRow = Database["public"]["Tables"]["orders"]["Row"]
@@ -47,34 +48,26 @@ async function emailForUser(supabase: SupabaseAdmin, userId?: string | null) {
   }
 }
 
-async function sendWithResend(input: EmailEventInput) {
-  const apiKey = process.env.RESEND_API_KEY
-  const from = process.env.EMAIL_FROM || "CaterBids <support@caterbids.uk>"
-
-  if (!apiKey || !input.recipientEmail) {
-    return { status: "prepared" as const, provider: apiKey ? "resend" : "local", error: null }
+async function sendWithConfiguredProvider(input: EmailEventInput) {
+  if (!input.recipientEmail) {
+    return { status: "prepared" as const, provider: "local", error: null }
   }
 
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from,
-      to: input.recipientEmail,
-      subject: input.subject,
-      text: input.body,
-    }),
+  const result = await sendEmail({
+    to: input.recipientEmail,
+    subject: input.subject,
+    text: input.body,
   })
 
-  if (!response.ok) {
-    const errorText = await response.text()
-    return { status: "failed" as const, provider: "resend", error: errorText || response.statusText }
+  if (result.ok) {
+    return { status: "sent" as const, provider: result.provider, error: null }
   }
 
-  return { status: "sent" as const, provider: "resend", error: null }
+  if (result.status === "not_configured") {
+    return { status: "prepared" as const, provider: "local", error: null }
+  }
+
+  return { status: "failed" as const, provider: result.provider, error: result.error }
 }
 
 async function prepareEmailEvent(supabase: SupabaseAdmin, input: EmailEventInput) {
@@ -89,7 +82,7 @@ async function prepareEmailEvent(supabase: SupabaseAdmin, input: EmailEventInput
     console.warn("Could not check email event:", existing.error.message)
   }
 
-  const deliveryResult = await sendWithResend(input)
+  const deliveryResult = await sendWithConfiguredProvider(input)
   const now = new Date().toISOString()
   const insert = await supabase
     .from("email_events")
@@ -107,7 +100,7 @@ async function prepareEmailEvent(supabase: SupabaseAdmin, input: EmailEventInput
       sent_at: deliveryResult.status === "sent" ? now : null,
       error: deliveryResult.error,
       updated_at: now,
-    } as any)
+    })
 
   if (insert.error) {
     if (isMissingEmailEventsTable(insert.error)) {
