@@ -1,5 +1,5 @@
-import Image from "next/image"
 import Link from "next/link"
+import SiteLogo from "@/components/SiteLogo"
 import { ArrowRight, Bot, CheckCircle2, Clock, Store } from "lucide-react"
 import { redirect } from "next/navigation"
 import { marketplaceIsLive } from "@/lib/launch-gates"
@@ -13,23 +13,8 @@ export default function MarketplaceRedirectPage() {
     <main className="min-h-screen bg-[radial-gradient(circle_at_top_right,rgba(255,107,0,0.18),transparent_34%),linear-gradient(145deg,#001A35_0%,#002E5D_54%,#001427_100%)] text-white">
       <header className="border-b border-white/10 bg-[#001A35]/88 backdrop-blur-xl">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-5 sm:px-6 lg:px-8">
-          <Link href="/" className="flex items-center gap-3" aria-label="CaterBidsUK home">
-            <Image
-              src="/brand/caterbids-logo.png"
-              alt="CaterBidsUK bell logo"
-              width={64}
-              height={64}
-              className="h-14 w-14 rounded-2xl object-contain"
-              priority
-            />
-            <span>
-              <span className="block text-2xl font-black leading-none tracking-[-0.04em] text-white sm:text-3xl">
-                Cater<span className="text-[#FF6B00]">Bids</span>UK
-              </span>
-              <span className="mt-1 block text-[0.64rem] font-black uppercase tracking-[0.32em] text-[#FF6B00] sm:text-xs">
-                BUY • SELL • SAVE
-              </span>
-            </span>
+          <Link href="/" aria-label="CaterBidsUK home">
+            <SiteLogo size="sm" priority />
           </Link>
 
           <Link

@@ -1,4 +1,5 @@
 import Link from "next/link"
+import SiteLogo from "@/components/SiteLogo"
 import type { ReactNode } from "react"
 import { AlertTriangle, BadgeCheck, Building2, ShieldCheck, Star } from "lucide-react"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -27,7 +28,7 @@ export default async function AdminTrustPage() {
         .order("updated_at", { ascending: false })
         .limit(20),
       admin
-        .from("seller_review_stats" as any)
+        .from("seller_review_stats")
         .select("*")
         .gte("review_count", 1)
         .order("average_rating", { ascending: false })
@@ -55,12 +56,7 @@ export default async function AdminTrustPage() {
           <Link href="/account" className="soft-button rounded-2xl px-4 py-2 text-sm font-black">
             Account
           </Link>
-          <div className="text-center">
-            <h1 className="text-2xl font-black">
-              Cater<span className="text-[#FF6B00]">Bids</span>UK
-            </h1>
-            <p className="text-xs font-black tracking-[0.3em] text-[#FF6B00]">BUY • SELL • SAVE</p>
-          </div>
+          <SiteLogo size="sm" />
           <Link href="/" className="soft-button rounded-2xl px-4 py-2 text-sm font-black">
             Home
           </Link>

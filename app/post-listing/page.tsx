@@ -1,14 +1,16 @@
 "use client"
 
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import NextImage from "next/image"
-import { useEffect, useState, useTransition } from "react"
-import { ClipboardCheck, ImagePlus, ScanSearch, UploadCloud, X } from "lucide-react"
+import SiteLogo from "@/components/SiteLogo"
+import { useEffect, useState, useTransition, type Dispatch, type SetStateAction } from "react"
+import { Bell, CheckCircle2, ClipboardCheck, ImagePlus, Loader2, PackageCheck, ScanSearch, UploadCloud, X } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { getCurrentUser } from "@/lib/supabase/auth"
 import { createListing } from "./actions"
 import type { CaterBidsDeliveryOption } from "@/lib/delivery/options"
 import { DELIVERY_PREVIEW_MODE_LABEL } from "@/lib/delivery/options"
+import { PAYMENTS_DISABLED_MESSAGE } from "@/lib/pricing"
 import {
   BUYER_WARNING,
   CONDITION_OPTIONS,
@@ -23,6 +25,7 @@ import { CATEGORY_OPTIONS, subcategoriesForCategory } from "@/lib/categories"
 type QuickListAiResponse = {
   suggested_title: string
   title?: string
+  short_description?: string
   description: string
   category: string
   subcategory?: string
@@ -66,6 +69,13 @@ type QuickListAiResponse = {
   condition?: "New" | "Used" | "Refurbished" | "Spares or Repair"
   error?: string
   detail?: string
+  _diag?: {
+    ai_dimensions: string
+    source_valid: boolean
+    source_url: string
+    source_found_dimensions: string
+    final_dimensions: string
+  }
 }
 
 type CaterBotSourceValidationResponse = {
@@ -115,6 +125,102 @@ type CaterBotSourceValidationResponse = {
   } | null
 }
 
+type CaterBotSpecLookupResponse = {
+  success?: boolean
+  error?: string
+  checkedAt?: string
+  image_analysis?: {
+    main_image?: {
+      equipment_type?: string
+      visible_brand?: string
+      visible_model?: string
+      visual_category?: string
+      condition_clues?: string[]
+      confidence?: number
+      raw_text?: string
+    }
+    spec_plate?: {
+      raw_text?: string
+      brand?: string
+      model?: string
+      product_name?: string
+      serial?: string
+      equipment_type?: string
+      gas_type?: string
+      voltage?: string
+      heat_input_kw?: number | null
+      refrigerant?: string
+      confidence?: number
+    }
+  }
+  extracted?: {
+    raw_text?: string
+    brand?: string
+    model?: string
+    product_name?: string
+    serial?: string
+    equipment_type?: string
+    power?: string
+    gas_type?: string
+    gas_connection?: string
+    heat_input_kw?: number | null
+    refrigerant?: string
+    frequency?: string
+    confidence?: number
+  }
+  specs?: {
+    title?: string
+    category?: string
+    type?: string
+    condition?: string
+    brand?: string
+    model?: string
+    weight_kg?: number | null
+    height_cm?: number | null
+    width_cm?: number | null
+    depth_cm?: number | null
+    net_weight_kg?: number | null
+    gross_weight_kg?: number | null
+    capacity_litres?: number | null
+    power_type?: string
+    voltage?: string
+    phase?: string
+    watts?: number | null
+    amps?: number | null
+    gas_type?: string
+    gas_connection?: string
+    heat_input_kw?: number | null
+    refrigerant?: string
+    refrigerant_mass?: string
+    frequency?: string
+    power_details?: string
+    short_description?: string
+    safety_note?: string
+    pallet_required?: boolean
+    suggested_pallet_size?: string
+    delivery_notes?: string
+  }
+  source?: CaterBotSourceValidationResponse["source"]
+  sources?: Array<{
+    title?: string
+    url?: string
+    source_type?: string
+    trust_score?: number
+    matched_fields?: string[]
+  }>
+  search_queries?: string[]
+  confidence_score?: number
+  warnings?: string[]
+  debug?: {
+    raw_text?: string
+    model_candidates?: string[]
+    brand_candidates?: string[]
+    search_queries?: string[]
+    selected_source?: string | null
+    extracted_specs?: unknown
+  }
+}
+
 type DeliveryPreviewQuote = CaterBidsDeliveryOption
 type SellerProfileDetails = {
   name?: string | null
@@ -131,6 +237,99 @@ type DeliveryRecommendation = {
   recommendation: string
   palletRecommended: boolean
   specialistRecommended: boolean
+}
+
+function CaterBotSearchBar({
+  label,
+  progress,
+  tone = "dark",
+}: {
+  label: string
+  progress: number
+  tone?: "dark" | "light"
+}) {
+  const trackClass = tone === "light" ? "bg-[#002E5D]/10" : "bg-white/10"
+  const textClass = tone === "light" ? "text-[#002E5D]" : "text-white"
+  const helperClass = tone === "light" ? "text-[#002E5D]/60" : "text-white/60"
+
+  return (
+    <div className={`rounded-2xl border px-4 py-3 ${tone === "light" ? "border-[#002E5D]/10 bg-white" : "border-[#FF6B00]/30 bg-[#FF6B00]/10"}`}>
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <span className={`text-sm font-black ${textClass}`}>{label}</span>
+        <span className={`flex items-center gap-1.5 text-xs font-black ${helperClass}`}>
+          <Loader2 className="h-3 w-3 animate-spin" />
+          Searching...
+        </span>
+      </div>
+      <div className={`h-2 overflow-hidden rounded-full ${trackClass}`}>
+        <div
+          className="h-full rounded-full bg-[#FF6B00] animate-pulse transition-all duration-500 ease-out"
+          style={{ width: `${Math.max(8, Math.min(progress, 94))}%` }}
+        />
+      </div>
+    </div>
+  )
+}
+
+function formatMetric(value: unknown, suffix: string) {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return `${Number(value.toFixed(2)).toString()} ${suffix}`
+  }
+  if (typeof value === "string" && value.trim()) return `${value.trim()} ${suffix}`.trim()
+  return ""
+}
+
+function caterBotDimensionsSummary(specs?: CaterBotSpecLookupResponse["specs"] | null) {
+  if (!specs?.width_cm || !specs.depth_cm || !specs.height_cm) return "Needs seller check"
+  return `${formatMetric(specs.width_cm, "cm")} × ${formatMetric(specs.depth_cm, "cm")} × ${formatMetric(specs.height_cm, "cm")}`
+}
+
+function extractDimensionHint(suggestion: QuickListAiResponse | undefined): string | undefined {
+  if (!suggestion) return undefined
+
+  // Check useful_details first (where AI puts structured "Dimensions: …" lines)
+  const fromDetails = suggestion.manual_source_useful_details?.find(
+    (line) => /^dimensions:/i.test(line.trim())
+  )
+  // Fall back to scanning description line-by-line
+  const fromDescription = !fromDetails
+    ? suggestion.description?.split(/[\n\r]+/).find((line) => /^\s*[-•]?\s*dimensions:/i.test(line))?.trim()
+    : undefined
+  // Last resort: structured dimensions field
+  const raw = (fromDetails ?? fromDescription ?? suggestion.dimensions ?? "").trim()
+
+  if (!raw) return undefined
+
+  const valueOnly = raw.replace(/^[-•]?\s*dimensions:\s*/i, "").trim()
+  if (!valueOnly) return undefined
+
+  // Sanity: every axis must be 100–3500 mm. Convert cm→mm if units say cm.
+  const mmVals = [...valueOnly.matchAll(/(\d+(?:\.\d+)?)\s*mm/gi)].map((m) => Number(m[1]))
+  const cmVals = [...valueOnly.matchAll(/(\d+(?:\.\d+)?)\s*cm/gi)].map((m) => Number(m[1]) * 10)
+  const axesMm = mmVals.length >= 3 ? mmVals.slice(0, 3) : cmVals.length >= 3 ? cmVals.slice(0, 3) : []
+  // TODO: axesMm is empty when values arrive as bare numbers ("860 x 967 x 1160" with no per-axis unit) — bounds check is skipped in that case; tighten later
+  if (axesMm.length === 3 && axesMm.some((v) => v < 100 || v > 3500)) return undefined
+
+  return valueOnly
+}
+
+function caterBotWeightSummary(specs?: CaterBotSpecLookupResponse["specs"] | null) {
+  const weight = specs?.gross_weight_kg || specs?.net_weight_kg || specs?.weight_kg
+  return weight ? formatMetric(weight, "kg") : "Needs seller check"
+}
+
+function caterBotPowerSummary(specs?: CaterBotSpecLookupResponse["specs"] | null, extracted?: CaterBotSpecLookupResponse["extracted"] | null) {
+  const parts = [
+    specs?.power_type,
+    specs?.gas_type || extracted?.gas_type,
+    specs?.voltage,
+    specs?.phase,
+    specs?.frequency,
+    specs?.amps ? `${specs.amps}A` : "",
+    specs?.watts ? `${specs.watts}W` : "",
+    specs?.heat_input_kw ? `${specs.heat_input_kw}kW` : "",
+  ].filter(Boolean)
+  return parts.join(" · ") || "Needs seller check"
 }
 
 const LISTING_IMAGES_BUCKET = "listing-images"
@@ -150,6 +349,133 @@ const SHIPPING_SPEC_CATEGORIES = [
   "Other",
 ] as const
 const SHIPPING_POWER_TYPES = ["Electric", "Gas", "Both", "Not sure"] as const
+
+function cleanTitlePart(value?: string | number | null) {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .replace(/\bunknown\b|\bnot sure\b|\bneeds seller check\b/gi, "")
+    .trim()
+}
+
+function displayBrand(value?: string | null) {
+  const brand = cleanTitlePart(value)
+  if (!brand) return ""
+  if (brand === brand.toUpperCase() && brand.length > 3) {
+    return brand.toLowerCase().replace(/\b[a-z]/g, (letter) => letter.toUpperCase())
+  }
+  return brand
+}
+
+function titleFuelType(suggestion: QuickListAiResponse) {
+  const text = [
+    suggestion.gas_type,
+    suggestion.power_type,
+    suggestion.gas_or_electric,
+    suggestion.voltage,
+    suggestion.electrical_phase,
+    suggestion.kw_rating,
+    suggestion.amps,
+    suggestion.suggested_title,
+    suggestion.title,
+  ].filter(Boolean).join(" ").toLowerCase()
+
+  if (/\blpg\b|\bpropane\b/.test(text)) return "LPG"
+  if (/\bnatural gas\b|\bmains gas\b|\bg20\b/.test(text)) return "Natural Gas"
+  if (/\b3\s*phase\b|\bthree phase\b|\b400v\b|\b415v\b/.test(text)) return "Three Phase Electric"
+  if (/\b13a\b|\b13 amp\b/.test(text)) return "13A Electric"
+  if (/\belectric\b|\b230v\b|\b240v\b/.test(text)) return "Electric"
+  if (/\bgas\b/.test(text)) return "Gas"
+  return ""
+}
+
+function titleEquipmentType(suggestion: QuickListAiResponse) {
+  const text = [
+    suggestion.suggested_title,
+    suggestion.title,
+    suggestion.subcategory,
+    suggestion.category,
+    suggestion.description,
+  ].filter(Boolean).join(" ").toLowerCase()
+
+  const matches: Array<[RegExp, string]> = [
+    [/\bcombi\s*oven\b/, "Combi Oven"],
+    [/\bchar\s*grill\b|\bchargrill\b/, "Chargrill"],
+    [/\bgriddle\b/, "Griddle"],
+    [/\bfryer\b/, "Fryer"],
+    [/\bpizza\s*oven\b/, "Pizza Oven"],
+    [/\boven\b/, "Oven"],
+    [/\bglass\s*washer\b|\bglasswasher\b/, "Glasswasher"],
+    [/\bdish\s*washer\b|\bdishwasher\b/, "Dishwasher"],
+    [/\bfreezer\b/, "Freezer"],
+    [/\bfridge\b|\brefrigerator\b|\brefrigeration\b|\bchiller\b/, "Refrigeration"],
+    [/\bmixer\b/, "Mixer"],
+    [/\bcoffee\b|\bespresso\b/, "Coffee Machine"],
+    [/\bbain\s*marie\b/, "Bain Marie"],
+    [/\bslicer\b/, "Slicer"],
+    [/\bprep\b|\bpreparation\b|\bprocessor\b/, "Prep Equipment"],
+  ]
+
+  return matches.find(([pattern]) => pattern.test(text))?.[1] || cleanTitlePart(suggestion.subcategory) || "Commercial Catering Equipment"
+}
+
+function titleModelFamily(suggestion: QuickListAiResponse) {
+  const text = [suggestion.suggested_title, suggestion.title, suggestion.description].filter(Boolean).join(" ")
+  return (
+    text.match(/\bOpus\s*800\b/i)?.[0] ||
+    text.match(/\bSilverlink\s*600\b/i)?.[0] ||
+    text.match(/\biCombi\b/i)?.[0] ||
+    ""
+  )
+}
+
+function buildSeoListingTitle(suggestion: QuickListAiResponse, fallbackCondition = "Used") {
+  const brand = displayBrand(suggestion.brand)
+  const model = cleanTitlePart(suggestion.model || suggestion.gc_number).toUpperCase()
+  const family = titleModelFamily(suggestion)
+  const fuel = titleFuelType(suggestion)
+  const equipmentType = titleEquipmentType(suggestion)
+  const condition = cleanTitlePart(suggestion.condition || fallbackCondition)
+
+  const coreParts = [brand, model, family, fuel, equipmentType]
+    .filter(Boolean)
+    .filter((part, index, parts) => parts.findIndex((candidate) => candidate.toLowerCase() === part.toLowerCase()) === index)
+
+  if (coreParts.length < 2) {
+    return cleanTitlePart(suggestion.suggested_title || suggestion.title)
+  }
+
+  const title = coreParts.join(" ")
+  return condition ? `${title} - ${condition}` : title
+}
+
+function buildCaterBotShortDescription(suggestion: QuickListAiResponse, fallbackCondition = "Used") {
+  const suppliedDescription = cleanTitlePart(suggestion.short_description || suggestion.description)
+  const genericDescription =
+    !suppliedDescription ||
+    /upload at least one|add clear photos|commercial catering item/i.test(suppliedDescription)
+
+  if (!genericDescription) {
+    return suppliedDescription
+  }
+
+  const brand = displayBrand(suggestion.brand)
+  const model = cleanTitlePart(suggestion.model || suggestion.gc_number).toUpperCase()
+  const fuel = titleFuelType(suggestion)
+  const equipmentType = titleEquipmentType(suggestion).toLowerCase()
+  const conditionText = cleanTitlePart(suggestion.condition || fallbackCondition).toLowerCase() || "used"
+  const itemName = [brand, model, fuel, equipmentType]
+    .filter(Boolean)
+    .filter((part, index, parts) => parts.findIndex((candidate) => candidate.toLowerCase() === part.toLowerCase()) === index)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim()
+
+  if (itemName) {
+    return `${conditionText.charAt(0).toUpperCase()}${conditionText.slice(1)} ${itemName} suitable for commercial catering use. Please check photos and confirm condition, dimensions and collection requirements before purchase.`
+  }
+
+  return "Used catering equipment item. Please review photos carefully and confirm condition, dimensions and collection requirements before purchase."
+}
 
 function isManualsLibUrl(url: string) {
   try {
@@ -181,98 +507,45 @@ function preferredManualSourceUrl(suggestion: QuickListAiResponse) {
   return manualsLibUrl || directSourceUrl || ""
 }
 
-function compactSearchModel(value: string) {
-  return value.replace(/[^a-z0-9]/gi, "")
-}
-
-function trustedSearchModelTerms(model: string) {
-  const raw = model.trim()
-  if (!raw) return []
-  const parts = raw.split(/[\/_\-\s]+/).filter(Boolean)
-  const base = parts.find((part) => /[a-z]/i.test(part) && /\d/.test(part)) || parts[0] || raw
-  const suffix = parts.filter((part) => part !== base).join("")
-  return Array.from(new Set([
-    raw,
-    raw.replace(/[\/_\-]+/g, " "),
-    compactSearchModel(raw),
-    base,
-    suffix ? `${base} ${suffix}` : "",
-  ].map((term) => term.trim()).filter(Boolean)))
-}
-
-function manufacturerDomainForTrustedSearch(brand: string) {
-  const brandKey = brand.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
-  const knownDomains: Record<string, string> = {
-    lincat: "lincat.co.uk",
-    falcon: "falconfoodservice.com",
-    rational: "rational-online.com",
-    hobart: "hobartuk.com",
-    foster: "fosterrefrigerator.com",
-    imperial: "imperialrange.com",
-  }
-  return knownDomains[brandKey] || `${brandKey.replace(/\s+/g, "")}.co.uk`
-}
-
-function externalSearchUrl(query: string) {
-  return `https://www.google.com/search?q=${encodeURIComponent(query)}`
-}
-
-function trustedSourceSearchLinks({
-  brand,
-  model,
-  title,
-  equipmentType,
-}: {
-  brand: string
-  model: string
-  title: string
-  equipmentType: string
-}) {
-  if (!brand.trim() || !model.trim()) return []
-
-  const modelTerms = trustedSearchModelTerms(model)
-  const primaryModel = modelTerms.find((term) => /[a-z]/i.test(term) && /\d/.test(term)) || model
-  const readableModel = modelTerms.find((term) => term.includes(" ")) || primaryModel
-  const titleText = `${title} ${equipmentType}`.toLowerCase()
-  const family = titleText.match(/\bopus\s*800\b/)?.[0] || ""
-  const categoryTerm =
-    /\bfryer\b/.test(titleText) ? "fryer" :
-    /\bgriddle|grill\b/.test(titleText) ? "griddle" :
-    /\boven\b/.test(titleText) ? "oven" :
-    /\bfridge|freezer|refrigerat/.test(titleText) ? "refrigeration" :
-    equipmentType
-  const searchTail = [brand, readableModel, family, categoryTerm].filter(Boolean).join(" ")
-  const manufacturerDomain = manufacturerDomainForTrustedSearch(brand)
-
-  return [
-    {
-      label: "Search Catering Appliance",
-      url: externalSearchUrl(`site:catering-appliance.com ${searchTail}`),
-    },
-    {
-      label: "Search ManualsLib",
-      url: externalSearchUrl(`site:manualslib.com ${brand} ${primaryModel} manual`),
-    },
-    {
-      label: "Search manufacturer site",
-      url: externalSearchUrl(`site:${manufacturerDomain} ${brand} ${primaryModel}`),
-    },
-    {
-      label: "Search Nisbets",
-      url: externalSearchUrl(`site:nisbets.co.uk ${brand} ${primaryModel}`),
-    },
-  ]
-}
-
-function deliveryOptionForDeliveryMethod(value: string) {
-  if (value === "collection_only") return "Collection only"
-  if (value === "buyer_courier") return "Seller arranged delivery"
-  return "Delivery available through CaterBids"
+function buildDeliveryOptionSummary(pallet: boolean, collection: boolean, buyerArranges: boolean) {
+  const parts: string[] = []
+  if (pallet) parts.push("CaterBids Pallet Delivery")
+  if (collection) parts.push("Collection")
+  if (buyerArranges) parts.push("Buyer arranges delivery")
+  return parts.join(" + ") || "Collection only"
 }
 
 function positiveNumber(value: string) {
   const numberValue = Number(String(value || "").replace(/[^0-9.]/g, ""))
   return Number.isFinite(numberValue) && numberValue > 0 ? numberValue : 0
+}
+
+const PALLET_TIERS: Array<{ slug: string; label: string; maxH: number; maxW: number }> = [
+  { slug: "mini_quarter", label: "Mini Quarter pallet", maxH: 60,  maxW: 150 },
+  { slug: "quarter",      label: "Quarter pallet",      maxH: 80,  maxW: 300 },
+  { slug: "half",         label: "Half pallet",          maxH: 110, maxW: 500 },
+  { slug: "light",        label: "Light pallet",         maxH: 220, maxW: 750 },
+  { slug: "full",         label: "Full pallet",          maxH: 220, maxW: 1000 },
+]
+
+const PALLET_CARDS = [
+  { slug: "mini_quarter", name: "Mini Quarter",      image: "/images/pallets/pallet_mini_quarter.png", maxH: "0.6m", maxW: "150kg",  example: "Small countertop equipment" },
+  { slug: "quarter",      name: "Quarter",           image: "/images/pallets/pallet_quarter.png",      maxH: "0.8m", maxW: "300kg",  example: "Under-counter fridge, small fryer" },
+  { slug: "half",         name: "Half",              image: "/images/pallets/pallet_half.png",          maxH: "1.1m", maxW: "500kg",  example: "Single oven, prep table" },
+  { slug: "light",        name: "Light",             image: "/images/pallets/pallet_light.png",         maxH: "2.2m", maxW: "750kg",  example: "Tall upright fridge (lighter)" },
+  { slug: "full",         name: "Full",              image: "/images/pallets/pallet_full.png",          maxH: "2.2m", maxW: "1000kg", example: "Heavy range cooker, full-size" },
+] as const
+
+function inferPalletSizeFromSpecs(
+  heightCm: number,
+  weightKg: number
+): { slug: string; label: string } | { tooBig: true } | null {
+  if (heightCm <= 0 || weightKg <= 0) return null
+  if (heightCm > 220 || weightKg > 1000) return { tooBig: true }
+  for (const tier of PALLET_TIERS) {
+    if (heightCm <= tier.maxH && weightKg <= tier.maxW) return { slug: tier.slug, label: tier.label }
+  }
+  return null
 }
 
 function deliveryRecommendationFromSpecs({
@@ -299,7 +572,7 @@ function deliveryRecommendationFromSpecs({
   const maxDimension = Math.max(...dimensions, 0)
   const hasCompleteSpecs = weight > 0 && dimensions.every((value) => value > 0)
   const equipmentText = `${category} ${subcategory} ${powerType}`.toLowerCase()
-  const specialCase = /(gas|lpg|propane|refriger|fridge|freezer|extraction|canopy|trailer|van)/.test(equipmentText)
+  const needsCare = /(gas|lpg|propane|refriger|fridge|freezer)/.test(equipmentText)
 
   if (!hasCompleteSpecs) {
     return {
@@ -310,36 +583,56 @@ function deliveryRecommendationFromSpecs({
     }
   }
 
-  if (specialCase || weight >= 250 || maxDimension >= 220) {
+  if (weight > 1000 && maxDimension <= 120) {
     return {
-      label: hasVerifiedSource ? "Source-based delivery estimate" : "Seller confirmation needed",
-      recommendation: "Specialist delivery or collection recommended.",
-      palletRecommended: true,
-      specialistRecommended: true,
-    }
-  }
-
-  if (weight <= 30 && maxDimension <= 120) {
-    return {
-      label: hasVerifiedSource ? "Source-based delivery estimate" : "Seller confirmation needed",
-      recommendation: "Parcel courier may be suitable.",
+      label: "Seller confirmation needed",
+      recommendation: "Weight looks incorrect. Seller must confirm before booking delivery.",
       palletRecommended: false,
       specialistRecommended: false,
     }
   }
 
-  if (weight <= 80 && maxDimension <= 160) {
+  if (weight <= 30 && maxDimension <= 120) {
     return {
-      label: hasVerifiedSource ? "Source-based delivery estimate" : "Seller confirmation needed",
-      recommendation: "Heavy parcel or small pallet recommended.",
+      label: hasVerifiedSource ? "CaterBot estimate" : "Seller confirmation needed",
+      recommendation: needsCare
+        ? "Collection only unless the seller can palletise and shrink-wrap the item."
+        : "Collection only may be suitable for small items.",
+      palletRecommended: false,
+      specialistRecommended: false,
+    }
+  }
+
+  if (weight > 1000 || maxDimension >= 220) {
+    return {
+      label: hasVerifiedSource ? "CaterBot estimate" : "Seller confirmation needed",
+      recommendation: "Collection only unless a pallet-ready Interparcel service can safely handle the item.",
+      palletRecommended: true,
+      specialistRecommended: false,
+    }
+  }
+
+  if (weight <= 150) {
+    return {
+      label: hasVerifiedSource ? "CaterBot estimate" : "Seller confirmation needed",
+      recommendation: "Mini Quarter pallet delivery may be suitable if pallet-ready.",
+      palletRecommended: true,
+      specialistRecommended: false,
+    }
+  }
+
+  if (weight <= 300) {
+    return {
+      label: hasVerifiedSource ? "CaterBot estimate" : "Seller confirmation needed",
+      recommendation: "Quarter pallet recommended.",
       palletRecommended: true,
       specialistRecommended: false,
     }
   }
 
   return {
-    label: hasVerifiedSource ? "Source-based delivery estimate" : "Seller confirmation needed",
-    recommendation: "Pallet courier or specialist van recommended.",
+    label: hasVerifiedSource ? "CaterBot estimate" : "Seller confirmation needed",
+    recommendation: "CaterBids Pallet Delivery may be suitable if pallet-ready.",
     palletRecommended: true,
     specialistRecommended: false,
   }
@@ -385,6 +678,8 @@ function upperPostcode(value?: string | null) {
 
 export default function PostListingPage() {
   const router = useRouter()
+  const postListingParams = useSearchParams()
+  const [showOverageSuccess, setShowOverageSuccess] = useState(postListingParams.get("overage") === "success")
 
   const [title, setTitle] = useState("")
   const [price, setPrice] = useState("")
@@ -396,9 +691,10 @@ export default function PostListingPage() {
   const [powerType, setPowerType] = useState("Unknown")
   const [description, setDescription] = useState("")
   const [dimensions, setDimensions] = useState("")
-  const [deliveryMethod, setDeliveryMethod] = useState("caterbids_delivery")
-  const [deliveryOption, setDeliveryOption] = useState(deliveryOptionForDeliveryMethod("caterbids_delivery"))
-  const deliveryAvailable = deliveryMethod === "caterbids_delivery"
+  const [palletEnabled, setPalletEnabled] = useState(false)
+  const [palletTooBig, setPalletTooBig] = useState(false)
+  const [collectionEnabled, setCollectionEnabled] = useState(true)
+  const [buyerArrangesEnabled, setBuyerArrangesEnabled] = useState(false)
   const [manualsAvailable, setManualsAvailable] = useState(false)
   const [weightKg, setWeightKg] = useState("")
   const [lengthCm, setLengthCm] = useState("")
@@ -410,9 +706,19 @@ export default function PostListingPage() {
   const [collectionCity, setCollectionCity] = useState("")
   const [sellerContactName, setSellerContactName] = useState("")
   const [sellerPhone, setSellerPhone] = useState("")
+  const [palletSize, setPalletSize] = useState("full")
+  const [palletSizeNote, setPalletSizeNote] = useState("")
+  const [palletSizeManuallySet, setPalletSizeManuallySet] = useState(false)
+  const [palletImgErrors, setPalletImgErrors] = useState<ReadonlySet<string>>(new Set())
   const [palletCount, setPalletCount] = useState("1")
   const [preferredCollectionDate, setPreferredCollectionDate] = useState("")
   const [insuranceValue, setInsuranceValue] = useState("")
+  const [featureBoostDays, setFeatureBoostDays] = useState<7 | 30 | null>(null)
+  const [boostSettings, setBoostSettings] = useState<{
+    featured_boosts_enabled: boolean
+    featured_price_7d: number
+    featured_price_30d: number
+  } | null>(null)
   const [accessRestrictions, setAccessRestrictions] = useState("")
   const [deliveryNotes, setDeliveryNotes] = useState("")
   const [deliveryDetailsConfirmed, setDeliveryDetailsConfirmed] = useState(false)
@@ -424,6 +730,7 @@ export default function PostListingPage() {
   const [interparcelPreviewError, setInterparcelPreviewError] = useState("")
   const [interparcelPreviewLoading, setInterparcelPreviewLoading] = useState(false)
   const [palletReady, setPalletReady] = useState(false)
+  const [palletPreparationConfirmed, setPalletPreparationConfirmed] = useState(false)
   const [tailLiftRequired, setTailLiftRequired] = useState(true)
   const [forkliftAvailable, setForkliftAvailable] = useState(false)
   const [groundFloorCollection, setGroundFloorCollection] = useState(true)
@@ -452,6 +759,7 @@ export default function PostListingPage() {
   const [manualLinkError, setManualLinkError] = useState("")
   const [manualLinkChecking, setManualLinkChecking] = useState(false)
   const [specPlateValidation, setSpecPlateValidation] = useState("")
+  const [caterBotProgress, setCaterBotProgress] = useState(0)
   const [shippingSpecBrand, setShippingSpecBrand] = useState("")
   const [shippingSpecModel, setShippingSpecModel] = useState("")
   const [shippingSpecSerial, setShippingSpecSerial] = useState("")
@@ -471,13 +779,43 @@ export default function PostListingPage() {
   const [shippingSpecForkliftRequired, setShippingSpecForkliftRequired] = useState(false)
   const [shippingSpecNotes, setShippingSpecNotes] = useState("")
   const [quickListResult, setQuickListResult] = useState<QuickListAiResponse | null>(null)
+  const [pendingSpecLookup, setPendingSpecLookup] = useState<CaterBotSpecLookupResponse | null>(null)
   const [quickListApplied, setQuickListApplied] = useState(false)
   const [publishError, setPublishError] = useState("")
+  const [overageRequired, setOverageRequired] = useState(false)
+  const [isOverageLoading, setIsOverageLoading] = useState(false)
+  const [paymentNotice, setPaymentNotice] = useState("")
   const [listingInfoConfirmed, setListingInfoConfirmed] = useState(false)
+  const [ownershipConfirmed, setOwnershipConfirmed] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
   const [authChecked, setAuthChecked] = useState(false)
   const [isPublishing, startPublishing] = useTransition()
   const imagePreview = imagePreviews[0] || ""
+  const caterBotSearching = aiLoading || manualLinkChecking
+
+  useEffect(() => {
+    let kickoffTimer: number | undefined
+
+    if (!caterBotSearching) {
+      kickoffTimer = window.setTimeout(() => setCaterBotProgress(0), 0)
+      return () => {
+        if (kickoffTimer) window.clearTimeout(kickoffTimer)
+      }
+    }
+
+    kickoffTimer = window.setTimeout(() => setCaterBotProgress(12), 0)
+    const timer = window.setInterval(() => {
+      setCaterBotProgress((current) => {
+        if (current >= 92) return 92
+        return Math.min(92, current + 8)
+      })
+    }, 450)
+
+    return () => {
+      if (kickoffTimer) window.clearTimeout(kickoffTimer)
+      window.clearInterval(timer)
+    }
+  }, [caterBotSearching])
 
   function prefillSellerDetails(profile: SellerProfileDetails | null | undefined) {
     if (!profile) return
@@ -499,14 +837,22 @@ export default function PostListingPage() {
     async function loadUser() {
       const supabase = createClient()
       const user = await getCurrentUser(supabase)
-      const realUser = user?.id === "local-beta" ? null : user
+      const isLocalBetaUser = user?.id === "local-beta"
+      const realUser = user && !isLocalBetaUser ? user : null
 
-      setUserId(realUser?.id || null)
+      setUserId(user?.id || null)
       setAuthChecked(true)
-      if (!realUser) {
+      if (!user) {
         router.replace(`/login?next=${encodeURIComponent("/post-listing")}`)
         return
       }
+
+      if (isLocalBetaUser) {
+        prefillSellerDetails(readLocalSellerProfile(user.id))
+        return
+      }
+
+      if (!realUser) return
 
       prefillSellerDetails(readLocalSellerProfile(realUser.id))
 
@@ -525,6 +871,37 @@ export default function PostListingPage() {
   }, [router])
 
   useEffect(() => {
+    let isMounted = true
+
+    async function loadPaymentMode() {
+      try {
+        const response = await fetch("/api/payment-settings")
+        if (!response.ok) return
+        const payload = (await response.json()) as {
+          settings?: {
+            payments_enabled?: boolean
+            free_listing_mode?: boolean
+          }
+        }
+        if (!isMounted) return
+        if (!payload.settings?.payments_enabled) {
+          setPaymentNotice(PAYMENTS_DISABLED_MESSAGE)
+        } else if (payload.settings.free_listing_mode) {
+          setPaymentNotice("Free listing mode is active until your launch allowance is used.")
+        }
+      } catch (error) {
+        console.warn("Payment settings notice unavailable:", error)
+      }
+    }
+
+    loadPaymentMode()
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  useEffect(() => {
     const subcategories = subcategoriesForCategory(category)
     const nextSubcategory =
       subcategories.length > 0 && !subcategories.includes(subcategory)
@@ -541,6 +918,22 @@ export default function PostListingPage() {
 
     return () => window.clearTimeout(timer)
   }, [category, subcategory])
+
+  useEffect(() => {
+    fetch("/api/payment-settings")
+      .then((r) => r.json())
+      .then((data: { settings?: Record<string, unknown> }) => {
+        const s = data?.settings
+        if (s) {
+          setBoostSettings({
+            featured_boosts_enabled: Boolean(s.featured_boosts_enabled),
+            featured_price_7d: Number(s.featured_price_7d) || 4.99,
+            featured_price_30d: Number(s.featured_price_30d) || 14.99,
+          })
+        }
+      })
+      .catch(() => {})
+  }, [])
 
   function requireLogin() {
     router.push(`/login?next=${encodeURIComponent("/post-listing")}`)
@@ -610,6 +1003,7 @@ export default function PostListingPage() {
 
   function clearQuickListResult() {
     setQuickListResult(null)
+    setPendingSpecLookup(null)
     setQuickListApplied(false)
   }
 
@@ -629,6 +1023,9 @@ export default function PostListingPage() {
     clearQuickListResult()
     setImagePreviews(await buildImagePreviews(newFiles))
     e.target.value = ""
+    if (specPlateFile && userId) {
+      void lookupSpecsWithCaterBot({ autoApplyEmpty: true, imageFiles: newFiles })
+    }
   }
 
   async function removeSelectedImage(index: number) {
@@ -670,6 +1067,12 @@ export default function PostListingPage() {
 
       setQuickListResult(suggestion)
       applySuggestionToShippingSpecs(suggestion)
+      const seoTitle = buildSeoListingTitle(suggestion, normaliseCondition(suggestion.condition))
+      if (seoTitle) {
+        setTitle((currentTitle) => currentTitle || seoTitle)
+      }
+      const aiShortDescription = buildCaterBotShortDescription(suggestion, normaliseCondition(suggestion.condition))
+      setDescription((currentDescription) => currentDescription.trim() ? currentDescription : aiShortDescription)
       setAiNotice("Spec plate read. Check brand, model and shipping specs.")
     } catch (error) {
       console.warn("Spec plate OCR preview failed:", error)
@@ -685,22 +1088,6 @@ export default function PostListingPage() {
     )
     if (!file) return
 
-    try {
-      const { width, height } = await inspectImage(file)
-      if (Math.max(width, height) < 700 || Math.min(width, height) < 300) {
-        setAiError("Use a clearer spec plate photo so the brand and model can be read.")
-        e.target.value = ""
-        return
-      }
-      setSpecPlateValidation(
-        height > width * 1.35
-          ? "Spec plate added. Rotate or crop if the text is sideways."
-          : "Spec plate added."
-      )
-    } catch {
-      setSpecPlateValidation("Spec plate added.")
-    }
-
     setSpecPlateFile(file)
     setAiError("")
     clearQuickListResult()
@@ -711,8 +1098,25 @@ export default function PostListingPage() {
       setSpecPlatePreview(await fileToDataUrl(file))
     }
 
+    try {
+      const { width, height } = await inspectImage(file)
+      const smallImage = Math.max(width, height) < 700 || Math.min(width, height) < 240
+      setSpecPlateValidation(
+        smallImage
+          ? "Spec plate added. A clearer close-up may improve CaterBot results."
+          : height > width * 1.35
+          ? "Spec plate added. Rotate or crop if the text is sideways."
+          : "Spec plate added."
+      )
+    } catch {
+      setSpecPlateValidation("Spec plate added.")
+    }
+
     e.target.value = ""
     void runSpecPlateOcrPreview(file)
+    if (imageFiles.length > 0 && userId) {
+      void lookupSpecsWithCaterBot({ autoApplyEmpty: true, specPlateFile: file })
+    }
   }
 
   function removeSpecPlate() {
@@ -740,6 +1144,22 @@ export default function PostListingPage() {
     const match = dataUrl.match(/^data:([^;,]+)[;,]/)
     if (match?.[1]) return match[1]
     return fallback || "image/jpeg"
+  }
+
+  async function buildCaterBotImageInputs(files = imageFiles) {
+    return Promise.all(
+      files.map(async (file, index) => {
+        const dataUrl =
+          index === 0
+            ? imagePreviews[index] || (await resizeListingImage(file))
+            : await resizeSpecPlateForAi(file)
+        return {
+          imageBase64: getBase64Payload(dataUrl),
+          fileType: getDataUrlFileType(dataUrl, file.type),
+          fileName: file.name,
+        }
+      })
+    )
   }
 
   function normaliseCondition(value?: string) {
@@ -789,6 +1209,7 @@ export default function PostListingPage() {
 
   function applySuggestionToShippingSpecs(suggestion: QuickListAiResponse) {
     const parsedDimensions = parseDimensionsToCm(suggestion.dimensions)
+    const suggestedWeightKg = extractSuggestionWeightKg(suggestion)
 
     setShippingSpecBrand(suggestion.brand || shippingSpecBrand)
     setShippingSpecModel(suggestion.model || suggestion.gc_number || shippingSpecModel)
@@ -809,7 +1230,7 @@ export default function PostListingPage() {
       setShippingSpecDepth(parsedDimensions[1])
       setShippingSpecHeight(parsedDimensions[2])
     }
-    setShippingSpecWeight(extractConfirmedNumber(suggestion.estimated_weight_kg ?? suggestion.weight) || shippingSpecWeight)
+    setShippingSpecWeight(suggestedWeightKg || shippingSpecWeight)
     setShippingSpecForkliftRequired(aiBoolean(suggestion.tail_lift_required, shippingSpecForkliftRequired))
     setShippingSpecNotes(suggestion.delivery_notes || shippingSpecNotes)
   }
@@ -826,6 +1247,67 @@ export default function PostListingPage() {
     return extractNumber(text)
   }
 
+  function formatMeasurementNumber(value: number) {
+    const rounded = Math.round(value * 10) / 10
+    return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1).replace(/\.0$/, "")
+  }
+
+  function normaliseCmValue(value: unknown, options: { allowBareNumber?: boolean } = {}) {
+    if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+      return formatMeasurementNumber(value)
+    }
+
+    const text = typeof value === "string" ? value.trim() : ""
+    if (!text || /needs seller (?:check|confirmation)|not confirmed|unknown|estimate/i.test(text)) return ""
+
+    const measurement = text.match(/(\d+(?:[.,]\d+)?)\s*(mm|cm|m|metres?|meters?)\b/i)
+    if (measurement?.[1]) {
+      const numberValue = Number(measurement[1].replace(",", "."))
+      if (!Number.isFinite(numberValue) || numberValue <= 0) return ""
+      const unit = (measurement[2] || "cm").toLowerCase()
+      if (unit === "mm") return formatMeasurementNumber(numberValue / 10)
+      if (unit === "m" || unit.startsWith("met")) return formatMeasurementNumber(numberValue * 100)
+      return formatMeasurementNumber(numberValue)
+    }
+
+    if (options.allowBareNumber && /^\d+(?:[.,]\d+)?$/.test(text)) {
+      return formatMeasurementNumber(Number(text.replace(",", ".")))
+    }
+
+    return ""
+  }
+
+  function extractConfirmedWeightKg(value: unknown, options: { allowBareNumber?: boolean } = {}) {
+    if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+      return options.allowBareNumber ? formatMeasurementNumber(value) : ""
+    }
+
+    const text = typeof value === "string" ? value.trim() : ""
+    if (!text || /needs seller (?:check|confirmation)|not confirmed|unknown|estimate/i.test(text)) return ""
+
+    const kgMatch = text.match(/(\d+(?:[.,]\d+)?)\s*kg\b/i)
+    if (kgMatch?.[1]) return formatMeasurementNumber(Number(kgMatch[1].replace(",", ".")))
+
+    const gramMatch = text.match(/(\d+(?:[.,]\d+)?)\s*g\b/i)
+    if (gramMatch?.[1]) {
+      const grams = Number(gramMatch[1].replace(",", "."))
+      if (Number.isFinite(grams) && grams > 0) return formatMeasurementNumber(grams / 1000)
+    }
+
+    if (options.allowBareNumber && /^\d+(?:[.,]\d+)?$/.test(text)) {
+      return formatMeasurementNumber(Number(text.replace(",", ".")))
+    }
+
+    return ""
+  }
+
+  function extractSuggestionWeightKg(suggestion: QuickListAiResponse) {
+    return (
+      extractConfirmedWeightKg(suggestion.estimated_weight_kg, { allowBareNumber: true }) ||
+      extractConfirmedWeightKg(suggestion.weight)
+    )
+  }
+
   function aiBoolean(value: unknown, fallback = false) {
     if (typeof value === "boolean") return value
     if (typeof value !== "string") return fallback
@@ -834,27 +1316,93 @@ export default function PostListingPage() {
     return fallback
   }
 
-  function parseDimensionsToCm(value: string) {
-    const match = value.match(/(\d+(?:\.\d+)?)\D+(\d+(?:\.\d+)?)\D+(\d+(?:\.\d+)?)/)
+  function parseDeliveryDimensionsToCm(value: unknown) {
+    const text = typeof value === "string" ? value.trim() : ""
+    if (!text || /needs seller (?:check|confirmation)|not confirmed|unknown/i.test(text)) return null
+
+    const normalised = text.replace(/[×✕]/g, " x ").replace(/\bby\b/gi, " x ")
+    const labelledValues: Partial<Record<"length" | "width" | "depth" | "height", string>> = {}
+
+    for (const match of normalised.matchAll(/\b(length|len|l|width|w|depth|d|height|h)\s*[:=]?\s*(\d+(?:[.,]\d+)?)\s*(mm|cm|m|metres?|meters?)?\b/gi)) {
+      const label = match[1].toLowerCase()
+      const numberText = match[2]
+      const unit = match[3] || (/\bmm\b/i.test(normalised) ? "mm" : /\bcm\b/i.test(normalised) ? "cm" : "")
+      const cmValue = normaliseCmValue(`${numberText}${unit ? ` ${unit}` : ""}`, { allowBareNumber: true })
+      if (!cmValue) continue
+      if (label === "length" || label === "len" || label === "l") labelledValues.length = cmValue
+      if (label === "width" || label === "w") labelledValues.width = cmValue
+      if (label === "depth" || label === "d") labelledValues.depth = cmValue
+      if (label === "height" || label === "h") labelledValues.height = cmValue
+    }
+
+    for (const match of normalised.matchAll(/\b(\d+(?:[.,]\d+)?)\s*(mm|cm|m|metres?|meters?)?\s*(?:\(\s*)?(length|len|l|width|w|depth|d|height|h)\b(?:\s*\))?/gi)) {
+      const unit = match[2] || (/\bmm\b/i.test(normalised) ? "mm" : /\bcm\b/i.test(normalised) ? "cm" : "")
+      const label = match[3].toLowerCase()
+      const cmValue = normaliseCmValue(`${match[1]}${unit ? ` ${unit}` : ""}`, { allowBareNumber: true })
+      if (!cmValue) continue
+      if (label === "length" || label === "len" || label === "l") labelledValues.length = cmValue
+      if (label === "width" || label === "w") labelledValues.width = cmValue
+      if (label === "depth" || label === "d") labelledValues.depth = cmValue
+      if (label === "height" || label === "h") labelledValues.height = cmValue
+    }
+
+    if ((labelledValues.length || labelledValues.depth) && labelledValues.width && labelledValues.height) {
+      return {
+        lengthCm: labelledValues.length || labelledValues.depth || "",
+        widthCm: labelledValues.width,
+        heightCm: labelledValues.height,
+      }
+    }
+
+    const match = normalised.match(
+      /(\d+(?:[.,]\d+)?)\s*(mm|cm|m|metres?|meters?)?\s*x\s*(\d+(?:[.,]\d+)?)\s*(mm|cm|m|metres?|meters?)?\s*x\s*(\d+(?:[.,]\d+)?)\s*(mm|cm|m|metres?|meters?)?/i
+    )
     if (!match) return null
 
-    const unitLooksLikeMm = /mm/i.test(value)
-    const numbers = [Number(match[1]), Number(match[2]), Number(match[3])]
-    const shouldConvertFromMm = unitLooksLikeMm || numbers.some((numberValue) => numberValue > 300)
+    const rawNumbers = [Number(match[1].replace(",", ".")), Number(match[3].replace(",", ".")), Number(match[5].replace(",", "."))]
+    const inheritedUnit =
+      match[2] || match[4] || match[6] || (/\bmm\b/i.test(normalised) ? "mm" : /\bcm\b/i.test(normalised) ? "cm" : "")
+    const shouldTreatAsMm = inheritedUnit.toLowerCase() === "mm" || (!inheritedUnit && rawNumbers.some((numberValue) => numberValue > 300))
+    const values = [
+      normaliseCmValue(`${match[1]} ${match[2] || inheritedUnit || (shouldTreatAsMm ? "mm" : "cm")}`),
+      normaliseCmValue(`${match[3]} ${match[4] || inheritedUnit || (shouldTreatAsMm ? "mm" : "cm")}`),
+      normaliseCmValue(`${match[5]} ${match[6] || inheritedUnit || (shouldTreatAsMm ? "mm" : "cm")}`),
+    ]
 
-    return numbers.map((numberValue) => {
-      const cmValue = shouldConvertFromMm ? numberValue / 10 : numberValue
-      return Number.isFinite(cmValue) && cmValue > 0 ? String(Math.round(cmValue)) : ""
-    })
+    if (!values.every(Boolean)) return null
+
+    const lower = normalised.toLowerCase()
+    if (/\b(?:w|width)\b.*\b(?:d|depth)\b.*\b(?:h|height)\b/.test(lower)) {
+      return { lengthCm: values[1], widthCm: values[0], heightCm: values[2] }
+    }
+    if (/\b(?:h|height)\b.*\b(?:w|width)\b.*\b(?:d|depth|l|length)\b/.test(lower)) {
+      return { lengthCm: values[2], widthCm: values[1], heightCm: values[0] }
+    }
+
+    return { lengthCm: values[0], widthCm: values[1], heightCm: values[2] }
+  }
+
+  function parseDimensionsToCm(value: string) {
+    const parsed = parseDeliveryDimensionsToCm(value)
+    if (!parsed) return null
+    return [parsed.widthCm, parsed.lengthCm, parsed.heightCm]
+  }
+
+  function suggestionDeliveryDimensions(suggestion: QuickListAiResponse) {
+    const parsedDimensions = parseDeliveryDimensionsToCm(suggestion.dimensions)
+    return {
+      lengthCm: parsedDimensions?.lengthCm || normaliseCmValue(suggestion.pallet_length_cm, { allowBareNumber: true }) || "",
+      widthCm: parsedDimensions?.widthCm || normaliseCmValue(suggestion.pallet_width_cm, { allowBareNumber: true }) || "",
+      heightCm: parsedDimensions?.heightCm || normaliseCmValue(suggestion.pallet_height_cm, { allowBareNumber: true }) || "",
+    }
   }
 
   function deliveryOptionFromShippingClass(value: string) {
     const lower = value.toLowerCase()
-    if (lower.includes("courier")) return "Courier delivery available"
-    if (lower.includes("pallet")) return "Pallet delivery available"
-    if (lower.includes("local")) return "Local delivery available"
-    if (lower.includes("specialist") || lower.includes("quote")) return "Delivery quote required"
-    return "Delivery quote required"
+    if (lower.includes("pallet") || lower.includes("large") || lower.includes("freight")) {
+      return "CaterBids Pallet Delivery"
+    }
+    return "Collection only"
   }
 
   function formatConfidence(value: number) {
@@ -947,8 +1495,11 @@ export default function PostListingPage() {
       return
     }
 
-    if (imageFiles.length === 0 && !specPlateFile) {
-      setAiError("Upload item photos or a spec plate first.")
+    const activeImageFiles = [...imageFiles]
+    const activeSpecPlateFile = specPlateFile
+
+    if (activeImageFiles.length === 0 && !activeSpecPlateFile) {
+      setAiError("Upload an item photo or spec plate first so CaterBot can scan it.")
       return
     }
 
@@ -959,7 +1510,7 @@ export default function PostListingPage() {
 
     try {
       const itemImages = await Promise.all(
-        imageFiles.map(async (file, index) => {
+        activeImageFiles.map(async (file, index) => {
           const dataUrl = imagePreviews[index] || (await fileToDataUrl(file))
           return {
             imageBase64: getBase64Payload(dataUrl),
@@ -968,12 +1519,12 @@ export default function PostListingPage() {
           }
         })
       )
-      const specPlateDataUrl = specPlateFile ? await resizeSpecPlateForAi(specPlateFile) : ""
-      const specPlate = specPlateFile
+      const specPlateDataUrl = activeSpecPlateFile ? await resizeSpecPlateForAi(activeSpecPlateFile) : ""
+      const specPlate = activeSpecPlateFile
         ? {
             imageBase64: getBase64Payload(specPlateDataUrl),
-            fileType: getDataUrlFileType(specPlateDataUrl, specPlateFile.type),
-            fileName: specPlateFile.name,
+            fileType: getDataUrlFileType(specPlateDataUrl, activeSpecPlateFile.type),
+            fileName: activeSpecPlateFile.name,
           }
         : null
       const controller = new AbortController()
@@ -997,6 +1548,12 @@ export default function PostListingPage() {
 
       setQuickListResult(suggestion)
       applySuggestionToVisibleForm(suggestion)
+      await lookupSpecsWithCaterBot({
+        suggestion,
+        autoApplyEmpty: true,
+        imageFiles: activeImageFiles,
+        specPlateFile: activeSpecPlateFile || undefined,
+      })
 
       if (suggestion.description?.includes("CaterBot vision is not configured")) {
         setAiError("CaterBot needs clearer photos. You can still enter the details manually.")
@@ -1024,24 +1581,25 @@ export default function PostListingPage() {
         ? suggestion.subcategory
         : subcategories[0] || ""
     const nextDeliveryOption = deliveryOptionFromShippingClass(suggestion.shipping_class)
-    const parsedDimensions = parseDimensionsToCm(suggestion.dimensions)
-    const aiWeight = extractConfirmedNumber(suggestion.estimated_weight_kg ?? suggestion.weight)
-    const aiPalletLength = extractConfirmedNumber(suggestion.pallet_length_cm)
-    const aiPalletWidth = extractConfirmedNumber(suggestion.pallet_width_cm)
-    const aiPalletHeight = extractConfirmedNumber(suggestion.pallet_height_cm)
+    const deliveryDimensions = suggestionDeliveryDimensions(suggestion)
+    const aiWeight = extractSuggestionWeightKg(suggestion)
+    const aiPalletLength = deliveryDimensions.lengthCm
+    const aiPalletWidth = deliveryDimensions.widthCm
+    const aiPalletHeight = deliveryDimensions.heightCm
     const aiPalletCount = extractConfirmedNumber(suggestion.pallet_count)
     const preferredSourceUrl = preferredManualSourceUrl(suggestion)
+    const seoTitle = buildSeoListingTitle(suggestion, normaliseCondition(suggestion.condition))
+    const aiShortDescription = buildCaterBotShortDescription(suggestion, normaliseCondition(suggestion.condition))
 
-    setTitle(suggestion.suggested_title || suggestion.title || title)
+    setTitle(seoTitle || suggestion.suggested_title || suggestion.title || title)
     setCategory(nextCategory)
     setSubcategory(nextSubcategory)
     setCondition(normaliseCondition(suggestion.condition))
-    setDescription(suggestion.description || description)
+    setDescription((current) => (current.trim() ? current : aiShortDescription))
     applySuggestionToShippingSpecs(suggestion)
     setPowerType(normalisePowerType(suggestion.power_type || suggestion.gas_or_electric || ""))
     setDimensions(suggestion.dimensions)
-    setDeliveryOption(nextDeliveryOption)
-    setDeliveryMethod(/courier|pallet|delivery/i.test(nextDeliveryOption) ? "caterbids_delivery" : "buyer_courier")
+    if (/pallet/i.test(nextDeliveryOption)) setPalletEnabled(true)
     const validatedSource = Boolean(suggestion.manual_source_validated)
     setManualsAvailable(validatedSource)
     setManualSourceUrl(validatedSource ? preferredSourceUrl : "")
@@ -1075,15 +1633,12 @@ export default function PostListingPage() {
       setDeliverySizeUnknown(false)
     }
 
-    if (aiPalletLength && aiPalletWidth && aiPalletHeight) {
+    const palletDimsPlausible =
+      Number(aiPalletLength) >= 10 && Number(aiPalletWidth) >= 10 && Number(aiPalletHeight) >= 10
+    if (aiPalletLength && aiPalletWidth && aiPalletHeight && palletDimsPlausible) {
       setLengthCm(aiPalletLength)
       setWidthCm(aiPalletWidth)
       setHeightCm(aiPalletHeight)
-      setDeliverySizeUnknown(false)
-    } else if (parsedDimensions) {
-      setLengthCm(parsedDimensions[0])
-      setWidthCm(parsedDimensions[1])
-      setHeightCm(parsedDimensions[2])
       setDeliverySizeUnknown(false)
     }
 
@@ -1187,7 +1742,12 @@ export default function PostListingPage() {
       setShippingSpecGasType(source.extractedSpecs.gasType)
     }
 
-    if (shipping?.deliveryType) setDeliveryOption(shipping.deliveryType)
+    if (shipping?.deliveryType) {
+      const nextDelivery = /pallet|large|freight/i.test(shipping.deliveryType)
+        ? "CaterBids Pallet Delivery"
+        : "Collection only"
+      if (nextDelivery === "CaterBids Pallet Delivery") setPalletEnabled(true)
+    }
     if (shipping?.deliveryNotes) setDeliveryNotes(shipping.deliveryNotes)
     if (shipping?.palletDeliveryRecommended) setPalletReady(true)
     if (shipping?.tailLiftRequired) setTailLiftRequired(true)
@@ -1207,6 +1767,334 @@ export default function PostListingPage() {
     setManualLinkPanelOpen(false)
     setManualLinkError("")
     setAiNotice("Verified source found. Confirm it matches your item before publishing.")
+  }
+
+  function shouldFillValue(current: string, replace: boolean, defaults: string[] = []) {
+    const normalised = current.trim().toLowerCase()
+    return replace || !normalised || defaults.some((item) => item.toLowerCase() === normalised)
+  }
+
+  function setTextFromCaterBot(
+    setter: Dispatch<SetStateAction<string>>,
+    value: unknown,
+    replace: boolean,
+    defaults: string[] = []
+  ) {
+    const next = typeof value === "number" && Number.isFinite(value) ? String(value) : typeof value === "string" ? value.trim() : ""
+    if (!next || /needs seller check|not confirmed/i.test(next)) return
+    setter((current) => (shouldFillValue(current, replace, defaults) ? next : current))
+  }
+
+  function setSelectFromCaterBot(
+    setter: Dispatch<SetStateAction<string>>,
+    value: unknown,
+    replace: boolean,
+    defaults: string[] = []
+  ) {
+    setTextFromCaterBot(setter, value, replace, defaults)
+  }
+
+  function valueForInput(value: unknown) {
+    if (typeof value === "number" && Number.isFinite(value) && value > 0) return String(value)
+    if (typeof value === "string") {
+      const trimmed = value.trim()
+      if (!trimmed || /needs seller check|not confirmed|unknown/i.test(trimmed)) return ""
+      return trimmed
+    }
+    return ""
+  }
+
+  function applyCaterBotDeliveryMeasurements(result: CaterBotSpecLookupResponse, replace: boolean) {
+    const specs = result.specs
+    const weight = valueForInput(specs?.gross_weight_kg || specs?.net_weight_kg || specs?.weight_kg)
+    const length = valueForInput(specs?.depth_cm)
+    const width = valueForInput(specs?.width_cm)
+    const height = valueForInput(specs?.height_cm)
+
+    if (weight) setWeightKg((current) => (replace || !current.trim() ? weight : current))
+    if (length) setLengthCm((current) => (replace || !current.trim() ? length : current))
+    if (width) setWidthCm((current) => (replace || !current.trim() ? width : current))
+    if (height) setHeightCm((current) => (replace || !current.trim() ? height : current))
+
+    if (weight) setShippingSpecWeight((current) => (replace || !current.trim() ? weight : current))
+    if (length) setShippingSpecDepth((current) => (replace || !current.trim() ? length : current))
+    if (width) setShippingSpecWidth((current) => (replace || !current.trim() ? width : current))
+    if (height) setShippingSpecHeight((current) => (replace || !current.trim() ? height : current))
+
+    if (weight && length && width && height) {
+      setDeliverySizeUnknown(false)
+    }
+
+    return { weight, length, width, height }
+  }
+
+  function applySpecLookupResult(
+    result: CaterBotSpecLookupResponse,
+    options: { replace?: boolean; keepPanel?: boolean } = {}
+  ) {
+    const replace = Boolean(options.replace)
+    const specs = result.specs
+    const extracted = result.extracted
+    const source = result.source
+    const visual = result.image_analysis?.main_image
+
+    setTextFromCaterBot(setTitle, specs?.title, replace)
+    setSelectFromCaterBot(setCategory, specs?.category, replace, ["Catering Equipment"])
+    if (specs?.category) {
+      const nextSubcategories = subcategoriesForCategory(specs.category)
+      if (nextSubcategories.length > 0 && !nextSubcategories.includes(subcategory)) {
+        setSubcategory(nextSubcategories[0])
+      }
+    }
+    setSelectFromCaterBot(setSubcategory, specs?.type || visual?.visual_category, replace, ["Cooking Equipment"])
+    setSelectFromCaterBot(setCondition, specs?.condition, replace, ["Used"])
+    setTextFromCaterBot(
+      setDescription,
+      specs?.short_description ||
+        buildCaterBotShortDescription(
+        {
+          suggested_title: specs?.title || title,
+          description: "",
+          short_description: "",
+          category: specs?.category || category,
+          subcategory: specs?.type || visual?.equipment_type || subcategory,
+          brand: specs?.brand || extracted?.brand || "",
+          model: specs?.model || extracted?.model || "",
+          serial_number: extracted?.serial || "",
+          gc_number: "",
+          dimensions: "",
+          weight: "",
+          power_type: specs?.power_type || "",
+          gas_type: specs?.gas_type || extracted?.gas_type || "",
+          voltage: specs?.voltage || "",
+          amps: specs?.amps ? `${specs.amps}A` : "",
+          kw_rating: specs?.heat_input_kw ? `${specs.heat_input_kw}kW` : "",
+          electrical_phase: specs?.phase || "",
+          manual_url: "",
+          shipping_class: specs?.suggested_pallet_size || "",
+          delivery_warning: "",
+          confidence_score: result.confidence_score || 0,
+          condition: ((specs?.condition as QuickListAiResponse["condition"]) ||
+            (normaliseCondition(condition) as QuickListAiResponse["condition"])),
+        },
+        condition
+        ),
+      replace
+    )
+
+    setTextFromCaterBot(setShippingSpecBrand, specs?.brand || extracted?.brand || visual?.visible_brand, replace)
+    setTextFromCaterBot(setShippingSpecModel, specs?.model || extracted?.model || visual?.visible_model, replace)
+    setTextFromCaterBot(setShippingSpecSerial, extracted?.serial, replace)
+    if (extracted?.equipment_type || visual?.equipment_type || specs?.type) {
+      setShippingSpecCategory(shippingCategoryFrom(extracted?.equipment_type || visual?.equipment_type || specs?.type))
+    }
+    if (extracted?.power || specs?.power_details || specs?.safety_note) {
+      const notes = [
+        specs?.power_details ? `Power details: ${specs.power_details}.` : "",
+        specs?.safety_note || "",
+        extracted?.power ? `Plate details: ${extracted.power}.` : "",
+      ].filter(Boolean).join(" ")
+      setShippingSpecNotes((current) => (replace || !current ? notes : current))
+    }
+
+    if (specs?.width_cm && specs.depth_cm && specs.height_cm) {
+      setTextFromCaterBot(setShippingSpecWidth, specs.width_cm, replace)
+      setTextFromCaterBot(setShippingSpecDepth, specs.depth_cm, replace)
+      setTextFromCaterBot(setShippingSpecHeight, specs.height_cm, replace)
+      setTextFromCaterBot(setLengthCm, specs.depth_cm, replace)
+      setTextFromCaterBot(setWidthCm, specs.width_cm, replace)
+      setTextFromCaterBot(setHeightCm, specs.height_cm, replace)
+      setDeliverySizeUnknown(false)
+    }
+
+    const sourceWeight = specs?.gross_weight_kg || specs?.net_weight_kg || specs?.weight_kg
+    if (sourceWeight) {
+      setTextFromCaterBot(setShippingSpecWeight, sourceWeight, replace)
+      setTextFromCaterBot(setWeightKg, sourceWeight, replace)
+      setDeliverySizeUnknown(false)
+    }
+    const appliedMeasurements = applyCaterBotDeliveryMeasurements(result, replace)
+
+    const inferred = inferPalletSizeFromSpecs(
+      positiveNumber(appliedMeasurements.height),
+      positiveNumber(appliedMeasurements.weight)
+    )
+    if (inferred && 'tooBig' in inferred) {
+      setPalletTooBig(true)
+      setPalletEnabled(false)
+      setPalletSizeNote("")
+    } else if (inferred && (replace || !palletSizeManuallySet)) {
+      setPalletTooBig(false)
+      setPalletSize(inferred.slug)
+      const hM = (positiveNumber(appliedMeasurements.height) / 100).toFixed(1)
+      const wKg = Math.round(positiveNumber(appliedMeasurements.weight))
+      setPalletSizeNote(
+        `CaterBot suggests ${inferred.label} based on ~${hM}m height and ~${wKg}kg — please check before publishing.`
+      )
+    } else {
+      setPalletTooBig(false)
+    }
+
+    if (specs?.voltage) setTextFromCaterBot(setShippingSpecVoltage, specs.voltage, replace)
+    if (specs?.phase) setSelectFromCaterBot(setShippingSpecPhase, /3|three/i.test(specs.phase) ? "3" : "1", replace)
+    if (specs?.amps) setTextFromCaterBot(setShippingSpecCurrent, specs.amps, replace)
+    if (specs?.power_type) setShippingSpecPowerType(shippingPowerTypeFrom(specs.power_type))
+    if (specs?.gas_type || extracted?.gas_type) {
+      setTextFromCaterBot(setShippingSpecGasType, specs?.gas_type || extracted?.gas_type, replace)
+    }
+    if (specs?.gas_connection || extracted?.gas_connection) {
+      setTextFromCaterBot(setShippingSpecGasConnection, specs?.gas_connection || extracted?.gas_connection, replace)
+    }
+    if (
+      specs?.refrigerant ||
+      specs?.capacity_litres ||
+      specs?.suggested_pallet_size ||
+      specs?.delivery_notes ||
+      specs?.power_details ||
+      specs?.safety_note
+    ) {
+      const notes = [
+        specs.capacity_litres ? `Capacity: ${specs.capacity_litres} litres.` : "",
+        specs.refrigerant ? `Refrigerant: ${specs.refrigerant}${specs.refrigerant_mass ? ` ${specs.refrigerant_mass}` : ""}.` : "",
+        specs.heat_input_kw ? `Heat input: ${specs.heat_input_kw}kW.` : "",
+        specs.power_details ? `Power details: ${specs.power_details}.` : "",
+        specs.safety_note || "",
+        specs.gas_connection ? `Gas connection: ${specs.gas_connection}.` : "",
+        specs.suggested_pallet_size ? `CaterBot delivery suggestion: ${specs.suggested_pallet_size}.` : "",
+        specs.delivery_notes || "",
+      ].filter(Boolean)
+      setDeliveryNotes((current) => (replace || !current.trim() ? notes.join(" ") : current))
+    }
+    if (specs?.pallet_required) setPalletReady(true)
+
+    if (source?.url) {
+      setManualSourceUrl(source.url)
+      setSpecSourceUrl(source.url)
+      setManualSourceName(source.sourceName || "Verified manual/spec source")
+      setManualSourceType(source.sourceType || "Verified source")
+      setManualSourceValidated(true)
+      setManualSourceLastCheckedAt(source.checkedAt || result.checkedAt || new Date().toISOString())
+      setManualSourceMatchNotes(source.matchNotes || "CaterBot verified the source against this item's plate details.")
+      setManualSourceUsefulDetails(Array.isArray(source.usefulDetails) ? source.usefulDetails : [])
+      setSpecConfidence(source.confidence || "medium")
+      setSpecsVerifiedBySeller(false)
+      setSourceRejectedBySeller(false)
+    }
+
+    if (!options.keepPanel) setPendingSpecLookup(null)
+    const measurementText =
+      appliedMeasurements.weight && appliedMeasurements.length && appliedMeasurements.width && appliedMeasurements.height
+        ? ` CaterBot applied ${appliedMeasurements.weight}kg, ${appliedMeasurements.length}L x ${appliedMeasurements.width}W x ${appliedMeasurements.height}H cm.`
+        : ""
+    setAiNotice(`CaterBot specs applied.${measurementText} Please check the measurements before publishing.`)
+  }
+
+  async function lookupSpecsWithCaterBot(
+    options: { suggestion?: QuickListAiResponse; autoApplyEmpty?: boolean; specPlateFile?: File; imageFiles?: File[] } = {}
+  ) {
+    if (!userId) {
+      requireLogin()
+      return
+    }
+
+    const { brand, model } = productMatchIdentity()
+    const activeSpecPlateFile = options.specPlateFile || specPlateFile
+    const activeImageFiles = options.imageFiles || imageFiles
+    if (activeImageFiles.length === 0 && !activeSpecPlateFile && !model && !options.suggestion?.model) {
+      const uploadMessage = "Upload an item photo or spec plate first so CaterBot can find the correct specs."
+      setManualLinkError(uploadMessage)
+      setAiError(uploadMessage)
+      return
+    }
+
+    setManualLinkChecking(true)
+    setManualLinkError("")
+    setAiNotice("CaterBot is scanning the item photo, reading the spec plate and checking trusted sources...")
+
+    try {
+      const itemImages = await buildCaterBotImageInputs(activeImageFiles)
+      const mainImageFile = activeImageFiles[0]
+      const mainImageDataUrl = itemImages[0]
+        ? `data:${itemImages[0].fileType};base64,${itemImages[0].imageBase64}`
+        : ""
+      const specPlateDataUrl = activeSpecPlateFile ? await resizeSpecPlateForAi(activeSpecPlateFile) : ""
+      const shouldAutoApply = options.autoApplyEmpty ?? true
+      const res = await fetch("/api/caterbot/spec-lookup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          brandHint: brand || options.suggestion?.brand,
+          modelHint: model || options.suggestion?.model || options.suggestion?.gc_number,
+          titleHint: title || options.suggestion?.suggested_title || options.suggestion?.title,
+          categoryHint: category,
+          conditionHint: condition,
+          equipment_type: shippingSpecCategory || subcategory || category,
+          fuel_type: shippingSpecPowerType || powerType,
+          manualText: options.suggestion
+            ? [
+                options.suggestion.brand,
+                options.suggestion.model,
+                options.suggestion.gc_number,
+                options.suggestion.suggested_title,
+                options.suggestion.description,
+                options.suggestion.power_type,
+                options.suggestion.gas_type,
+                options.suggestion.voltage,
+                options.suggestion.kw_rating,
+              ].filter(Boolean).join(" ")
+            : undefined,
+          dimensionHint: extractDimensionHint(options.suggestion),
+          mainImageBase64: mainImageDataUrl ? getBase64Payload(mainImageDataUrl) : undefined,
+          mainImageFileType: mainImageDataUrl ? getDataUrlFileType(mainImageDataUrl, mainImageFile?.type || "image/jpeg") : undefined,
+          specPlateImageBase64: specPlateDataUrl ? getBase64Payload(specPlateDataUrl) : undefined,
+          specPlateFileType: specPlateDataUrl ? getDataUrlFileType(specPlateDataUrl, activeSpecPlateFile?.type || "image/jpeg") : undefined,
+          imageInputs: itemImages,
+        }),
+      })
+      const data = (await res.json()) as CaterBotSpecLookupResponse
+      const checkedAt = data.source?.checkedAt || data.checkedAt || new Date().toISOString()
+      setManualSourceLastCheckedAt(checkedAt)
+
+      if (data.extracted?.brand && !shippingSpecBrand) setShippingSpecBrand(data.extracted.brand)
+      if (data.extracted?.model && !shippingSpecModel) setShippingSpecModel(data.extracted.model)
+
+      if (!res.ok || data.success === false) {
+        const message = data.error || data.warnings?.[0] || "CaterBot could not complete the spec lookup."
+        setManualSourceMatchNotes(message)
+        setManualSourceValidated(false)
+        setSpecConfidence("low")
+        setManualLinkError(message)
+        setAiNotice("")
+        return
+      }
+
+      setPendingSpecLookup(data)
+      setSpecConfidence(data.source?.confidence || "low")
+      if (shouldAutoApply && data.source?.url) {
+        applySpecLookupResult(data, { replace: false, keepPanel: true })
+      }
+
+      if (data.source?.url) {
+        setManualSourceMatchNotes(data.source.matchNotes || "CaterBot found a possible product source.")
+        setAiNotice(
+          shouldAutoApply
+            ? "CaterBot found specs and filled the empty fields. Please check the measurements before publishing."
+            : "CaterBot found possible equipment specs. Review them before applying."
+        )
+      } else {
+        const message = "CaterBot couldn't confirm a matching source — please check the model number and details yourself."
+        setManualSourceMatchNotes(message)
+        setManualSourceValidated(false)
+        setAiNotice(message)
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "CaterBot could not complete the spec lookup."
+      setManualLinkError(message)
+      setManualSourceMatchNotes(message)
+      setAiNotice("")
+    } finally {
+      setManualLinkChecking(false)
+    }
   }
 
   async function validateManualSourceUrl(sourceUrl?: string) {
@@ -1276,6 +2164,24 @@ export default function PostListingPage() {
     }
   }
 
+  function openManualSource() {
+    const rawUrl =
+      manualSourceUrl ||
+      specSourceUrl ||
+      pendingSpecLookup?.source?.url ||
+      pendingSpecLookup?.sources?.find((source) => source.url)?.url ||
+      ""
+    const sourceUrl = rawUrl.trim()
+
+    if (!/^https?:\/\//i.test(sourceUrl)) {
+      setManualLinkError("CaterBot has not saved a usable source URL yet. Search again or add the source manually.")
+      return
+    }
+
+    setManualLinkError("")
+    window.open(sourceUrl, "_blank", "noopener,noreferrer")
+  }
+
   function handlePublish(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setPublishError("")
@@ -1291,9 +2197,8 @@ export default function PostListingPage() {
     const requiredLocation = ((formData.get("location") as string) || "").trim()
     const requiredCity = ((formData.get("city") as string) || "").trim()
     const sizeUnknown = formData.get("delivery_size_unknown") === "on"
-    const selectedDeliveryMethod = (formData.get("delivery_method") as string) || "collection_only"
-    const usesCaterBidsDelivery = selectedDeliveryMethod === "caterbids_delivery"
-    const usesAnyDelivery = selectedDeliveryMethod !== "collection_only"
+    const usesPalletDelivery = palletEnabled
+    const anyDeliveryEnabled = palletEnabled || collectionEnabled || buyerArrangesEnabled
     const hasRequiredDeliverySize =
       hasPositiveNumber(formData.get("weight_kg")) &&
       hasPositiveNumber(formData.get("length_cm")) &&
@@ -1316,39 +2221,50 @@ export default function PostListingPage() {
       return
     }
 
-    if (usesCaterBidsDelivery && !hasRequiredDeliverySize) {
+    if (!anyDeliveryEnabled) {
+      setPublishError("Choose at least one delivery option.")
+      return
+    }
+
+    if (usesPalletDelivery && !hasRequiredDeliverySize) {
       setPublishError("Add kg and cm to enable delivery quotes.")
       return
     }
 
-    if (usesCaterBidsDelivery && !((formData.get("collection_postcode") as string) || "").trim()) {
-      setPublishError("Add collection postcode.")
-      return
-    }
+    if (usesPalletDelivery) {
+      const requiredPalletFields = [
+        ["collection_full_address", "Add collection full address."],
+        ["collection_postcode", "Add collection postcode."],
+        ["collection_city", "Add collection city."],
+        ["seller_contact_name", "Add seller contact name."],
+        ["seller_phone", "Add seller phone number."],
+        ["pallet_size", "Choose pallet size."],
+        ["pallet_count", "Add number of pallets."],
+        ["insurance_value", "Add insurance value."],
+      ] as const
 
-    if (usesCaterBidsDelivery && !((formData.get("seller_phone") as string) || "").trim()) {
-      setPublishError("Add seller phone number.")
-      return
-    }
+      for (const [fieldName, message] of requiredPalletFields) {
+        const value = ((formData.get(fieldName) as string) || "").trim()
+        if (!value || ((fieldName === "pallet_count" || fieldName === "insurance_value") && !hasPositiveNumber(formData.get(fieldName)))) {
+          setPublishError(message)
+          return
+        }
+      }
 
-    if (usesCaterBidsDelivery && !((formData.get("preferred_collection_date") as string) || "").trim()) {
-      setPublishError("Add preferred collection date.")
-      return
-    }
+      if (!palletSizeNote && formData.get("pallet_size_confirmed") !== "on") {
+        setPublishError("Confirm this item fits the chosen pallet size.")
+        return
+      }
 
-    if (usesCaterBidsDelivery && !hasPositiveNumber(formData.get("pallet_count"))) {
-      setPublishError("Add number of pallets.")
-      return
-    }
+      if (formData.get("pallet_preparation_confirmed") !== "on") {
+        setPublishError("Read and confirm the pallet preparation guide.")
+        return
+      }
 
-    if (usesAnyDelivery && formData.get("delivery_details_confirmed") !== "on") {
-      setPublishError("Confirm delivery details.")
-      return
-    }
-
-    if (selectedDeliveryMethod === "collection_only" && !((formData.get("collection_postcode") as string) || "").trim()) {
-      setPublishError("Add collection postcode.")
-      return
+      if (formData.get("delivery_details_confirmed") !== "on") {
+        setPublishError("Confirm delivery details.")
+        return
+      }
     }
 
     if (manualSourceHasVerifiedUrl && formData.get("specs_verified_by_seller") !== "on") {
@@ -1356,11 +2272,30 @@ export default function PostListingPage() {
       return
     }
 
-    if (sizeUnknown && !usesCaterBidsDelivery) {
+    if (sizeUnknown && !usesPalletDelivery) {
       formData.set("weight_kg", "")
       formData.set("length_cm", "")
       formData.set("width_cm", "")
       formData.set("height_cm", "")
+    }
+
+    // Set legacy delivery_method summary string (read by actions.ts for backward compat)
+    const legacyDeliveryMethod = palletEnabled ? "pallet_delivery" : buyerArrangesEnabled ? "buyer_arranges" : "collection_only"
+    formData.set("delivery_method", legacyDeliveryMethod)
+    formData.set("delivery_option", buildDeliveryOptionSummary(palletEnabled, collectionEnabled, buyerArrangesEnabled))
+    formData.set("collection_enabled", collectionEnabled ? "on" : "")
+    formData.set("buyer_arranges_enabled", buyerArrangesEnabled ? "on" : "")
+
+    if (!usesPalletDelivery) {
+      formData.set("delivery_available", "")
+      formData.set("caterbids_delivery_available", "")
+      formData.set("collection_full_address", "")
+      formData.set("seller_contact_name", "")
+      formData.set("seller_phone", "")
+      formData.set("pallet_size", "")
+      formData.set("pallet_count", "1")
+      formData.set("pallet_preparation_confirmed", "")
+      formData.set("delivery_details_confirmed", "")
     }
 
     formData.set("price", formatPrice(requiredPrice))
@@ -1398,8 +2333,52 @@ export default function PostListingPage() {
       const result = await createListing(formData)
       if (!result) return
 
+      if (result.success) {
+        if (featureBoostDays) {
+          try {
+            const featRes = await fetch("/api/stripe/create-featured-checkout-session", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ listingId: result.listingId, durationDays: featureBoostDays }),
+            })
+            const featData = (await featRes.json()) as { url?: string }
+            if (featData?.url) {
+              window.location.assign(featData.url)
+              return
+            }
+          } catch {
+            // Stripe call failed — fall through to success page; boost upsell available there
+          }
+        }
+        router.push(result.redirectTo)
+        return
+      }
+
+      if (result.redirectTo) {
+        router.push(result.redirectTo)
+        return
+      }
+
+      if (result.code === 'OVERAGE_REQUIRED') {
+        setOverageRequired(true)
+      }
       setPublishError(result.error)
     })
+  }
+
+  async function handleOverageCheckout() {
+    setOverageRequired(false)
+    setPublishError("")
+    setIsOverageLoading(true)
+    try {
+      const res = await fetch("/api/stripe/create-overage-checkout-session", { method: "POST" })
+      const data = (await res.json()) as { url?: string; error?: string }
+      if (!res.ok || !data.url) throw new Error(data.error || "Could not start checkout.")
+      window.location.assign(data.url)
+    } catch (err) {
+      setPublishError(err instanceof Error ? err.message : "Could not open checkout.")
+      setIsOverageLoading(false)
+    }
   }
 
   async function checkInterparcelPreview() {
@@ -1494,68 +2473,115 @@ export default function PostListingPage() {
           : "No reliable match"
   const showCaterBotProductMatch =
     Boolean(quickListResult) || manualSourceHasVerifiedUrl || Boolean(manualSourceMatchNotes) || sourceRejectedBySeller
-  const trustedSearchLinks = trustedSourceSearchLinks({
-    brand: productMatch.brand,
-    model: productMatch.model,
-    title: title || quickListResult?.suggested_title || quickListResult?.title || "",
-    equipmentType: [shippingSpecCategory, subcategory, category, shippingSpecPowerType, shippingSpecGasType]
-      .filter(Boolean)
-      .join(" "),
-  })
   const deliveryMeasurementsReady = Boolean(weightKg && lengthCm && widthCm && heightCm)
   const showGasFields = shippingSpecPowerType === "Gas" || shippingSpecPowerType === "Both"
   const showElectricFields = shippingSpecPowerType === "Electric" || shippingSpecPowerType === "Both"
   const itemDimensionsValue =
     dimensions || (deliveryMeasurementsReady ? `${lengthCm} x ${widthCm} x ${heightCm} cm` : "")
   const reviewLocation = city || location || collectionCity || "Not added"
-  const reviewDeliveryOption = deliveryOptionForDeliveryMethod(deliveryMethod)
+  const reviewDeliveryOption = buildDeliveryOptionSummary(palletEnabled, collectionEnabled, buyerArrangesEnabled)
 
   return (
-    <main className="app-bg min-h-screen px-4 py-6 text-white">
+    <main className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(0,46,93,0.95),rgba(0,18,40,1)_48%,rgba(0,10,25,1)_100%)] px-4 py-5 text-white sm:px-6 lg:px-8">
+      {showOverageSuccess && (
+        <div className="-mx-4 -mt-5 mb-5 sm:-mx-6 lg:-mx-8 bg-gradient-to-r from-[#FF6B00] to-amber-500 px-4 py-5 shadow-[0_4px_28px_rgba(255,107,0,0.45)] sm:px-6 lg:px-8">
+          <div className="mx-auto flex max-w-6xl items-center gap-4">
+            <CheckCircle2 className="h-7 w-7 shrink-0 text-white" strokeWidth={2} />
+            <div className="flex-1 min-w-0">
+              <p className="text-xl font-black text-white">Payment successful — extra listing added</p>
+              <p className="mt-0.5 text-sm font-bold text-white/85">You now have an additional listing slot. Fill in your listing below and publish when ready.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setShowOverageSuccess(false)
+                router.replace("/post-listing", { scroll: false })
+              }}
+              className="shrink-0 rounded-xl p-1.5 text-white/80 hover:text-white"
+              aria-label="Dismiss"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+      )}
       {!authChecked ? (
         <div className="flex min-h-[70vh] items-center justify-center text-white/60">
           Checking your free account...
         </div>
       ) : (
-      <div className="mx-auto max-w-md">
-      
-      {/* BACK BUTTON */}
-      <button
-        onClick={() => router.back()}
-        className="soft-button mb-4 rounded-2xl px-3 py-2 text-sm"
-      >
-        ← Back
-      </button>
+      <div className="mx-auto max-w-6xl">
+        <button
+          type="button"
+          onClick={() => router.push("/account")}
+          className="fixed right-4 top-4 z-40 rounded-full border border-white/18 bg-[#062747]/95 px-4 py-2 text-sm font-black text-white shadow-[0_16px_48px_rgba(0,0,0,0.35)] backdrop-blur transition hover:border-[#FF6B00]/70 hover:bg-[#0A345C] focus:outline-none focus:ring-4 focus:ring-[#FF6B00]/25 sm:right-6 sm:top-6"
+          aria-label="Exit list item page and go to account"
+        >
+          Exit to account
+        </button>
 
-      <h1 className="text-2xl font-bold text-center">
-        Cater<span className="text-[#FF6B00]">Bids</span>.UK
-      </h1>
+        <header className="relative pb-5 text-center">
+          <button
+            type="button"
+            onClick={() => router.push("/account")}
+            className="absolute left-0 top-0 flex h-12 items-center justify-center gap-2 rounded-2xl border border-white/18 bg-white/7 px-3 text-sm font-black text-white shadow-[0_18px_55px_rgba(0,0,0,0.2)] transition hover:border-[#FF6B00]/60 hover:bg-white/12 focus:outline-none focus:ring-4 focus:ring-[#FF6B00]/25 sm:h-14 sm:px-4"
+            aria-label="Back to account"
+          >
+            <span className="text-2xl font-light leading-none">‹</span>
+            <span className="hidden sm:inline">Account</span>
+          </button>
 
-      <p className="text-center text-[#FF6B00] text-sm mb-6">
-        BUY • SELL • SAVE
-      </p>
+          <SiteLogo size="lg" priority />
+          <h1 className="mt-5 text-4xl font-black tracking-[-0.055em] text-white sm:text-5xl">List your item</h1>
+          <p className="mt-2 text-base font-semibold text-white/72 sm:text-lg">Upload photos, add details, and publish.</p>
+        </header>
 
-      <div className="premium-card mb-4 rounded-3xl p-4">
-        <h2 className="text-xl font-black text-white">Sell your item</h2>
-        <p className="mt-1 text-sm text-white/60">Upload photos, check the details, publish.</p>
-      </div>
+        <nav
+          aria-label="Listing progress"
+          className="mb-5 grid grid-cols-4 gap-2 rounded-[1.4rem] border border-white/12 bg-white/[0.04] p-2 text-center text-[11px] font-black text-white/58 shadow-[0_20px_70px_rgba(0,0,0,0.2)] sm:text-sm"
+        >
+          {[
+            ["Photos", "#photos-step"],
+            ["Details", "#item-details-step"],
+            ["Delivery", "#delivery-step"],
+            ["Review", "#review-step"],
+          ].map(([step, href], index) => (
+            <a
+              key={step}
+              href={href}
+              className={`rounded-2xl px-2 py-2 transition focus:outline-none focus:ring-4 focus:ring-[#FF6B00]/25 ${
+                index === 0 ? "bg-[#FF6B00] text-white shadow-[0_12px_30px_rgba(255,107,0,0.25)]" : "hover:bg-white/8 hover:text-white"
+              }`}
+            >
+              <span className={`mx-auto mb-1 flex h-7 w-7 items-center justify-center rounded-full border ${
+                index === 0 ? "border-white/45 bg-white/16" : "border-white/20 bg-white/5 text-white/80"
+              }`}>
+                {index + 1}
+              </span>
+              {step}
+            </a>
+          ))}
+        </nav>
 
-      <div className="premium-card mb-4 rounded-3xl p-4">
-        <div className="flex items-start gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#FF6B00]/18 text-[#FF6B00]">
-            <ImagePlus size={22} aria-hidden="true" />
+        {paymentNotice && (
+          <div className="mb-5 rounded-[1.4rem] border border-[#FF6B00]/30 bg-[#FF6B00]/12 px-4 py-3 text-sm font-black text-orange-50 shadow-[0_16px_50px_rgba(0,0,0,0.22)]">
+            {paymentNotice}{" "}
+            <a href="/pricing" className="underline decoration-[#FF6B00] decoration-2 underline-offset-4">
+              View seller pricing
+            </a>
           </div>
-          <div>
-            <p className="text-xs font-black uppercase tracking-[0.16em] text-[#FF6B00]">Add photos</p>
-            <h2 className="text-xl font-extrabold text-white">Photos</h2>
-            <p className="mt-1 text-sm leading-relaxed text-slate-300">Add item photos and the spec plate if you have it.</p>
-          </div>
-        </div>
+        )}
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <label className="flex cursor-pointer items-center justify-center gap-2 rounded-2xl border border-[#FF6B00]/50 bg-[#FF6B00]/12 px-4 py-3 text-sm font-extrabold text-white transition hover:bg-[#FF6B00]/18">
-            <ImagePlus size={18} aria-hidden="true" />
-            Upload item photos
+        <section id="photos-step" className="mb-5 rounded-[1.6rem] border border-white/14 bg-[#061f3d]/86 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.28)] backdrop-blur sm:p-6">
+          <h2 className="text-2xl font-black tracking-[-0.035em] text-white">1. Photos</h2>
+          <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_360px]">
+            <div className="space-y-4">
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="flex min-h-36 cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-[#FF6B00]/70 bg-[#FF6B00]/10 px-4 py-5 text-center text-sm font-extrabold text-white transition hover:bg-[#FF6B00]/18 focus-within:ring-4 focus-within:ring-[#FF6B00]/25">
+            <ImagePlus size={34} aria-hidden="true" />
+            <span className="text-base">Upload item photos</span>
+            <span className="text-xs font-semibold text-white/68">Add up to 6 photos</span>
             <input
               type="file"
               accept="image/jpeg,image/jpg,image/png,image/webp"
@@ -1565,9 +2591,10 @@ export default function PostListingPage() {
             />
           </label>
 
-          <label className="flex cursor-pointer items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/8 px-4 py-3 text-sm font-extrabold text-white transition hover:bg-white/12">
-            <UploadCloud size={18} aria-hidden="true" />
-            Upload spec plate
+          <label className="flex min-h-36 cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-white/28 bg-white/7 px-4 py-5 text-center text-sm font-extrabold text-white transition hover:bg-white/12 focus-within:ring-4 focus-within:ring-white/15">
+            <UploadCloud size={34} aria-hidden="true" />
+            <span className="text-base">Upload spec plate</span>
+            <span className="text-xs font-semibold text-white/68">JPG or PNG</span>
             <input
               type="file"
               accept="image/jpeg,image/jpg,image/png,image/webp"
@@ -1586,8 +2613,14 @@ export default function PostListingPage() {
           </span>
         </div>
 
+        {specPlateValidation && (
+          <p className="mt-3 rounded-2xl border border-emerald-400/25 bg-emerald-500/10 px-4 py-3 text-sm font-bold text-emerald-100">
+            {specPlateValidation}
+          </p>
+        )}
+
         {(imagePreviews.length > 0 || specPlatePreview) && (
-          <div className="mt-4 grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {imagePreviews.map((src, index) => (
               <div
                 key={`${src}-${index}`}
@@ -1645,17 +2678,66 @@ export default function PostListingPage() {
           </div>
         )}
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <button
-            type="button"
-            onClick={scanQuickListAi}
-            disabled={aiLoading || (imageFiles.length === 0 && !specPlateFile)}
-            className="premium-button flex items-center justify-center gap-2 rounded-2xl py-3 font-bold disabled:cursor-not-allowed disabled:opacity-60 sm:col-span-2"
-          >
-            <ScanSearch size={18} aria-hidden="true" />
-            {aiLoading ? "CaterBot checking..." : "CaterBot check & auto-fill"}
-          </button>
+        <p className="flex items-center gap-2 text-sm font-semibold text-white/64">
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/10 text-xs">i</span>
+          Clear photos help buyers trust your listing and sell faster.
+        </p>
         </div>
+
+        <aside className="rounded-[1.35rem] border border-white/12 bg-white/[0.055] p-4 shadow-[0_18px_60px_rgba(0,0,0,0.18)]">
+        <div className="flex items-start gap-3">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#FF6B00]/18 text-[#FF6B00]">
+            <ScanSearch size={23} aria-hidden="true" />
+          </div>
+          <div>
+            <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-[#FF6B00]">
+              CaterBot
+              <span className="rounded-full bg-[#FF6B00] px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-white">BETA</span>
+            </p>
+            <h3 className="text-xl font-extrabold text-white">Check & auto-fill</h3>
+            <p className="mt-1 text-sm leading-relaxed text-slate-300">Scan photos, read the spec plate and find trusted details.</p>
+          </div>
+        </div>
+
+        {!pendingSpecLookup && (
+          <div className="mt-5 grid gap-3">
+            <button
+              type="button"
+              onClick={scanQuickListAi}
+              disabled={caterBotSearching}
+              className="flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[#FF6B00] px-5 py-3 text-base font-black text-white shadow-[0_18px_45px_rgba(255,107,0,0.28)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {caterBotSearching
+                ? <Loader2 className="h-[18px] w-[18px] animate-spin" aria-hidden="true" />
+                : <ScanSearch size={18} aria-hidden="true" />}
+              {caterBotSearching ? "CaterBot checking..." : "CaterBot check & auto-fill"}
+            </button>
+            <button
+              type="button"
+              onClick={() => lookupSpecsWithCaterBot({ autoApplyEmpty: false, suggestion: quickListResult ?? undefined })}
+              disabled={caterBotSearching}
+              className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-white/18 bg-white/7 px-5 py-3 text-sm font-black text-white transition hover:border-[#FF6B00]/60 hover:bg-white/11 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <ScanSearch size={17} aria-hidden="true" />
+              Find specs
+            </button>
+          </div>
+        )}
+
+        {imageFiles.length === 0 && !specPlateFile && !aiError && (
+          <p className="mt-3 rounded-2xl border border-[#FF6B00]/30 bg-[#FF6B00]/10 px-4 py-3 text-sm font-bold text-orange-100">
+            Add a clear item photo or spec plate first. CaterBot must use images before it can auto-fill.
+          </p>
+        )}
+
+        {caterBotSearching && (
+          <div className="mt-3">
+            <CaterBotSearchBar
+              label={specPlateFile ? "Scanning item photo, reading spec plate and checking sources" : "Scanning item photo and checking sources"}
+              progress={caterBotProgress}
+            />
+          </div>
+        )}
 
         {aiError && (
           <p className="mt-3 rounded-2xl border border-orange-400/30 bg-orange-500/10 px-4 py-3 text-sm font-bold text-orange-200">
@@ -1663,26 +2745,191 @@ export default function PostListingPage() {
           </p>
         )}
 
-        {aiNotice && !aiError && (
-          <p className="mt-3 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm font-bold text-emerald-100">
-            {aiNotice}
-          </p>
-        )}
+        {pendingSpecLookup ? (
+          <div className="mt-4 rounded-2xl border border-white/10 bg-white p-4 text-[#002E5D] shadow-sm">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-sm font-black text-[#FF6B00]">CaterBot found item details [BETA]</p>
+                <h3 className="mt-1 text-lg font-black">Check the details before publishing.</h3>
+                {!manualSourceHasVerifiedUrl && (
+                  <p className="mt-1 text-xs font-bold text-amber-700">Please check the model number and details yourself.</p>
+                )}
+              </div>
+              {manualSourceHasVerifiedUrl && (
+                <div className="flex flex-col items-end gap-1">
+                  <span className="w-fit rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-800">
+                    ✓ Verified
+                  </span>
+                  <p className="text-right text-[10px] font-semibold text-emerald-700">Specs filled from a confirmed source.</p>
+                </div>
+              )}
+            </div>
 
-        {quickListApplied && !aiError && (
-          <p className="mt-3 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm font-bold text-emerald-100">
-            Filled by CaterBot. Please check before publishing.
-          </p>
+            <div className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
+              {[
+                ["Product", pendingSpecLookup!.specs?.title || pendingSpecLookup!.extracted?.product_name || title || "Needs seller check"],
+                ["Brand", pendingSpecLookup!.specs?.brand || pendingSpecLookup!.extracted?.brand || shippingSpecBrand || "Needs seller check"],
+                ["Model", pendingSpecLookup!.specs?.model || pendingSpecLookup!.extracted?.model || shippingSpecModel || "Needs seller check"],
+                ["Type", pendingSpecLookup!.specs?.type || pendingSpecLookup!.image_analysis?.main_image?.equipment_type || shippingSpecCategory || "Needs seller check"],
+                ["Dimensions", caterBotDimensionsSummary(pendingSpecLookup!.specs)],
+                ["Weight", caterBotWeightSummary(pendingSpecLookup!.specs)],
+                ["Power", caterBotPowerSummary(pendingSpecLookup!.specs, pendingSpecLookup!.extracted)],
+                ["Delivery", pendingSpecLookup!.specs?.suggested_pallet_size || deliveryRecommendation.recommendation || "Needs seller check"],
+                ["Source status", manualSourceHasVerifiedUrl ? "Product source found" : "Manual/spec source not verified yet"],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-2xl bg-slate-50 px-3 py-2">
+                  <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">{label}</p>
+                  <p className="mt-1 font-bold text-[#002E5D]">{value}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-4 grid gap-2 sm:grid-cols-4">
+              <button
+                type="button"
+                onClick={() => applySpecLookupResult(pendingSpecLookup!, { replace: false })}
+                className="rounded-xl bg-[#FF6B00] px-4 py-3 text-sm font-black text-white"
+              >
+                Apply Empty Fields
+              </button>
+              <button
+                type="button"
+                onClick={() => applySpecLookupResult(pendingSpecLookup!, { replace: true })}
+                className="rounded-xl border border-[#FF6B00]/35 bg-[#FF6B00]/10 px-4 py-3 text-sm font-black text-[#B34700]"
+              >
+                Replace All Details
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  document.getElementById("item-details-step")?.scrollIntoView({ behavior: "smooth", block: "start" })
+                }}
+                className="rounded-xl border border-[#002E5D]/15 bg-white px-4 py-3 text-sm font-black text-[#002E5D]"
+              >
+                Edit Manually
+              </button>
+              <button
+                type="button"
+                onClick={scanQuickListAi}
+                disabled={caterBotSearching}
+                className="rounded-xl border border-[#002E5D]/15 bg-white px-4 py-3 text-sm font-black text-[#002E5D] disabled:cursor-wait disabled:opacity-60"
+              >
+                Search Again
+              </button>
+            </div>
+
+            <div className={`mt-4 rounded-2xl border px-4 py-3 text-sm font-bold ${
+              manualSourceHasVerifiedUrl
+                ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                : "border-orange-200 bg-orange-50 text-[#8A3A00]"
+            }`}>
+              <p>
+                {manualSourceHasVerifiedUrl
+                  ? "CaterBot found a product source. Please check it matches your item."
+                  : "Manual/spec source not verified yet. You can still list using your own checks."}
+              </p>
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                {manualSourceHasVerifiedUrl ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={openManualSource}
+                      className="inline-flex flex-1 items-center justify-center rounded-xl bg-[#FF6B00] px-4 py-3 text-sm font-black text-white"
+                    >
+                      Open Source
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSpecsVerifiedBySeller(true)}
+                      className="inline-flex flex-1 items-center justify-center rounded-xl border border-emerald-200 bg-white px-4 py-3 text-sm font-black text-emerald-800"
+                    >
+                      {specsVerifiedBySeller ? "Source Confirmed" : "Confirm Source"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={rejectCaterBotSource}
+                      className="inline-flex flex-1 items-center justify-center rounded-xl border border-red-200 bg-white px-4 py-3 text-sm font-black text-red-700"
+                    >
+                      Reject
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setManualLinkPanelOpen((current) => !current)
+                      setManualLinkError("")
+                    }}
+                    className="inline-flex items-center justify-center rounded-xl border border-[#002E5D]/15 bg-white px-4 py-3 text-sm font-black text-[#002E5D]"
+                  >
+                    Add Source Manually
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {manualLinkPanelOpen && (
+              <div className="mt-3 rounded-2xl border border-[#002E5D]/10 bg-white p-3">
+                <label className="mb-1 block text-sm font-black">Manual/spec URL</label>
+                <input
+                  value={manualLinkInput}
+                  onChange={(event) => setManualLinkInput(event.target.value)}
+                  placeholder="https://manufacturer.co.uk/model-spec-sheet"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                />
+                <button
+                  type="button"
+                  onClick={() => validateManualSourceUrl(manualLinkInput)}
+                  disabled={manualLinkChecking || !manualLinkInput.trim()}
+                  className="mt-2 w-full rounded-xl bg-[#FF6B00] px-4 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {manualLinkChecking ? "Validating..." : "Validate source link"}
+                </button>
+              </div>
+            )}
+
+            {manualLinkError && (
+              <p className="mt-3 rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-bold text-orange-800">
+                {manualLinkError}
+              </p>
+            )}
+
+            {process.env.NODE_ENV === "development" && (
+              <details className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
+                <summary className="cursor-pointer font-black text-[#002E5D]">Advanced CaterBot details</summary>
+                <div className="mt-2 space-y-2 break-words">
+                  <p><span className="font-black">OCR text:</span> {(pendingSpecLookup!.debug?.raw_text || pendingSpecLookup!.extracted?.raw_text || "None").slice(0, 700)}</p>
+                  <p><span className="font-black">Queries:</span> {(pendingSpecLookup!.search_queries || []).slice(0, 10).join(" | ") || "None"}</p>
+                  <p><span className="font-black">Selected source:</span> {pendingSpecLookup!.debug?.selected_source || pendingSpecLookup!.source?.url || "None"}</p>
+                  {pendingSpecLookup!.warnings?.length ? <p><span className="font-black">Warnings:</span> {pendingSpecLookup!.warnings?.join(" | ")}</p> : null}
+                </div>
+              </details>
+            )}
+          </div>
+        ) : (
+          <>
+            {aiNotice && !aiError && (
+              <p className="mt-3 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm font-bold text-emerald-100">
+                {aiNotice}
+              </p>
+            )}
+            {quickListApplied && !aiError && (
+              <p className="mt-3 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm font-bold text-emerald-100">
+                Filled by CaterBot. Please check before publishing.
+              </p>
+            )}
+          </>
         )}
+        </aside>
       </div>
+      </section>
 
       {/* FORM */}
-      <form onSubmit={handlePublish} className="space-y-4">
-        <section className="rounded-3xl bg-white p-5 text-[#002E5D] shadow-sm">
+      <form onSubmit={handlePublish} className="space-y-5">
+        <section id="item-details-step" className="rounded-[1.6rem] border border-slate-200 bg-white p-4 text-[#002E5D] shadow-[0_24px_80px_rgba(0,0,0,0.22)] sm:p-6">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.16em] text-[#FF6B00]">Check item details</p>
-              <h2 className="mt-1 text-xl font-black">Item details</h2>
+              <h2 className="text-2xl font-black tracking-[-0.035em]">2. Item details</h2>
             </div>
             {quickListApplied && (
               <span className="rounded-full bg-[#FF6B00]/10 px-3 py-1 text-xs font-black text-[#FF6B00]">
@@ -1693,19 +2940,19 @@ export default function PostListingPage() {
 
           <div className="mt-4 space-y-3">
             <label className="block">
-              <span className="mb-1 block text-sm font-black">Listing title</span>
+              <span className="mb-1 block text-sm font-black">Listing title <span className="text-[#FF6B00]">*</span></span>
               <input
                 name="title"
-                placeholder="e.g. Lincat electric griddle"
+                placeholder="e.g. Rational iCombi Pro 6-1/1"
                 className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
               />
             </label>
 
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-3 lg:grid-cols-2">
               <label className="block">
-                <span className="mb-1 block text-sm font-black">Category</span>
+                <span className="mb-1 block text-sm font-black">Category <span className="text-[#FF6B00]">*</span></span>
                 <select
                   name="category"
                   className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
@@ -1724,7 +2971,7 @@ export default function PostListingPage() {
 
               {subcategoriesForCategory(category).length > 0 && (
                 <label className="block">
-                  <span className="mb-1 block text-sm font-black">Type</span>
+                  <span className="mb-1 block text-sm font-black">Type <span className="text-[#FF6B00]">*</span></span>
                   <select
                     name="subcategory"
                     className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
@@ -1739,9 +2986,9 @@ export default function PostListingPage() {
               )}
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-3 lg:grid-cols-3">
               <label className="block">
-                <span className="mb-1 block text-sm font-black">Condition</span>
+                <span className="mb-1 block text-sm font-black">Condition <span className="text-[#FF6B00]">*</span></span>
                 <select
                   name="condition"
                   className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
@@ -1755,10 +3002,10 @@ export default function PostListingPage() {
               </label>
 
               <label className="block">
-                <span className="mb-1 block text-sm font-black">Price</span>
+                <span className="mb-1 block text-sm font-black">Price <span className="text-[#FF6B00]">*</span></span>
                 <input
                   name="price"
-                  placeholder="e.g. 250"
+                  placeholder="£ 0.00"
                   className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
                   value={price}
                   onChange={(e) => setPrice(e.target.value)}
@@ -1766,14 +3013,14 @@ export default function PostListingPage() {
               </label>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-3 lg:grid-cols-3">
               <label className="block">
                 <span className="mb-1 block text-sm font-black">Brand</span>
                 <input
                   name="spec_brand"
                   value={shippingSpecBrand}
                   onChange={(event) => setShippingSpecBrand(event.target.value)}
-                  placeholder="Optional"
+                  placeholder="e.g. Rational"
                   className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
                 />
               </label>
@@ -1784,39 +3031,41 @@ export default function PostListingPage() {
                   name="spec_model"
                   value={shippingSpecModel}
                   onChange={(event) => setShippingSpecModel(event.target.value)}
-                  placeholder="Optional"
+                  placeholder="e.g. iCombi Pro 6-1/1"
                   className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-1 block text-sm font-black">Town or city <span className="text-[#FF6B00]">*</span></span>
+                <input
+                  name="city"
+                  placeholder="e.g. Manchester"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                  value={city}
+                  onChange={(e) => {
+                    setCity(e.target.value)
+                    setLocation(e.target.value)
+                  }}
                 />
               </label>
             </div>
 
             <label className="block">
-              <span className="mb-1 block text-sm font-black">Town or city</span>
-              <input
-                name="city"
-                placeholder="e.g. Birmingham"
-                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
-                value={city}
-                onChange={(e) => {
-                  setCity(e.target.value)
-                  setLocation(e.target.value)
-                }}
-              />
-            </label>
-
-            <label className="block">
-              <span className="mb-1 block text-sm font-black">Short description</span>
+              <span className="mb-1 block text-sm font-black">Short description <span className="text-[#FF6B00]">*</span></span>
               <textarea
                 name="description"
-                placeholder="Briefly describe condition, use and what is included."
+                placeholder="Describe the item, key features, age, and any notes for buyers..."
+                maxLength={1000}
                 className="min-h-28 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
               />
+              <span className="mt-1 block text-right text-xs font-bold text-slate-400">{description.length} / 1000</span>
             </label>
           </div>
 
-          {showCaterBotProductMatch && (
+          {false && pendingSpecLookup && showCaterBotProductMatch && (
             <div className="mt-4 rounded-2xl border border-[#FF6B00]/20 bg-[#FF6B00]/10 p-3">
               <p className="text-sm font-black">
                 {manualSourceHasVerifiedUrl ? "CaterBot found a product source." : "Manual/spec source not verified yet."}
@@ -1856,11 +3105,11 @@ export default function PostListingPage() {
                   <>
                     <button
                       type="button"
-                      onClick={() => validateManualSourceUrl()}
+                      onClick={() => lookupSpecsWithCaterBot({ autoApplyEmpty: true, suggestion: quickListResult ?? undefined })}
                       disabled={manualLinkChecking}
                       className="inline-flex flex-1 items-center justify-center rounded-2xl bg-[#FF6B00] px-4 py-3 text-sm font-black text-white disabled:cursor-wait disabled:opacity-60"
                     >
-                      {manualLinkChecking ? "Searching sources..." : "Try again"}
+                      {manualLinkChecking ? "Searching sources..." : "Use CaterBot to Find Specs"}
                     </button>
                     <button
                       type="button"
@@ -1876,22 +3125,13 @@ export default function PostListingPage() {
                 )}
               </div>
 
-              {!manualSourceHasVerifiedUrl && trustedSearchLinks.length > 0 && (
-                <div className="mt-3 rounded-2xl border border-[#002E5D]/10 bg-white p-3">
-                  <p className="text-sm font-black">Search trusted sources</p>
-                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                    {trustedSearchLinks.map((link) => (
-                      <a
-                        key={link.label}
-                        href={link.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center justify-center rounded-xl border border-[#002E5D]/15 bg-slate-50 px-3 py-2 text-xs font-black text-[#002E5D]"
-                      >
-                        {link.label}
-                      </a>
-                    ))}
-                  </div>
+              {manualLinkChecking && (
+                <div className="mt-3">
+                  <CaterBotSearchBar
+                    label="Searching trusted manual/spec sources"
+                    progress={caterBotProgress}
+                    tone="light"
+                  />
                 </div>
               )}
 
@@ -1920,24 +3160,150 @@ export default function PostListingPage() {
                   {manualLinkError}
                 </p>
               )}
+
+              {pendingSpecLookup && (
+                <div className="mt-3 rounded-2xl border border-[#002E5D]/10 bg-white p-3">
+                  <p className="text-sm font-black text-[#002E5D]">CaterBot found possible equipment specs</p>
+                  <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
+                    {[
+                      ["Brand", pendingSpecLookup!.extracted?.brand || "Needs seller check"],
+                      ["Model", pendingSpecLookup!.extracted?.model || "Needs seller check"],
+                      ["Product", pendingSpecLookup!.specs?.title || pendingSpecLookup!.extracted?.product_name || "Needs seller check"],
+                      ["Type", pendingSpecLookup!.extracted?.equipment_type || pendingSpecLookup!.image_analysis?.main_image?.equipment_type || shippingSpecCategory || "Needs seller check"],
+                      [
+                      "Dimensions",
+                      caterBotDimensionsSummary(pendingSpecLookup!.specs),
+                      ],
+                      [
+                        "Weight",
+                        pendingSpecLookup!.specs?.gross_weight_kg || pendingSpecLookup!.specs?.net_weight_kg
+                          ? `${pendingSpecLookup!.specs?.gross_weight_kg || pendingSpecLookup!.specs?.net_weight_kg} kg`
+                          : "Needs seller check",
+                      ],
+                      [
+                        "Capacity",
+                        pendingSpecLookup!.specs?.capacity_litres ? `${pendingSpecLookup!.specs?.capacity_litres} litres` : "Needs seller check",
+                      ],
+                      [
+                        "Power",
+                        [
+                          pendingSpecLookup!.specs?.power_type,
+                          pendingSpecLookup!.specs?.gas_type,
+                          pendingSpecLookup!.specs?.voltage,
+                          pendingSpecLookup!.specs?.phase,
+                          pendingSpecLookup!.specs?.frequency,
+                          pendingSpecLookup!.specs?.amps ? `${pendingSpecLookup!.specs?.amps}A` : "",
+                          pendingSpecLookup!.specs?.watts ? `${pendingSpecLookup!.specs?.watts}W` : "",
+                          pendingSpecLookup!.specs?.heat_input_kw ? `${pendingSpecLookup!.specs?.heat_input_kw}kW` : "",
+                        ].filter(Boolean).join(" · ") || "Needs seller check",
+                      ],
+                      ["Delivery", pendingSpecLookup!.specs?.suggested_pallet_size || "Needs seller check"],
+                    ].map(([label, value]) => (
+                      <div key={label} className="rounded-xl bg-slate-50 px-3 py-2">
+                        <p className="font-black uppercase tracking-[0.1em] text-slate-400">{label}</p>
+                        <p className="mt-1 font-bold text-[#002E5D]">{value}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {pendingSpecLookup!.source?.url && (
+                    <a
+                      href={pendingSpecLookup!.source?.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-3 inline-flex w-full items-center justify-center rounded-xl border border-[#FF6B00]/30 bg-[#FF6B00]/10 px-4 py-3 text-sm font-black text-[#B34700]"
+                    >
+                      Open source
+                    </a>
+                  )}
+                  <p className="mt-3 text-xs font-semibold leading-relaxed text-[#002E5D]/65">
+                    Specs are for guidance only. Check the measurements and source before publishing.
+                  </p>
+                  {process.env.NODE_ENV === "development" && (
+                    <details className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
+                      <summary className="cursor-pointer font-black text-[#002E5D]">CaterBot debug details</summary>
+                      <div className="mt-2 space-y-2 break-words">
+                        <p>
+                          <span className="font-black">OCR text:</span>{" "}
+                          {(pendingSpecLookup!.debug?.raw_text || pendingSpecLookup!.extracted?.raw_text || "None").slice(0, 700)}
+                        </p>
+                        <p>
+                          <span className="font-black">Model candidates:</span>{" "}
+                          {(pendingSpecLookup!.debug?.model_candidates || []).join(", ") || pendingSpecLookup!.extracted?.model || "None"}
+                        </p>
+                        <p>
+                          <span className="font-black">Selected source:</span>{" "}
+                          {pendingSpecLookup!.debug?.selected_source || pendingSpecLookup!.source?.url || "None"}
+                        </p>
+                        <p>
+                          <span className="font-black">Queries:</span>{" "}
+                          {(pendingSpecLookup!.search_queries || []).slice(0, 10).join(" | ") || "None"}
+                        </p>
+                        {pendingSpecLookup!.warnings?.length ? (
+                          <p>
+                            <span className="font-black">Warnings:</span> {pendingSpecLookup!.warnings?.join(" | ")}
+                          </p>
+                        ) : null}
+                      </div>
+                    </details>
+                  )}
+                  <div className="mt-3 grid gap-2 sm:grid-cols-4">
+                    <button
+                      type="button"
+                      onClick={() => applySpecLookupResult(pendingSpecLookup!, { replace: false })}
+                      className="rounded-xl bg-[#FF6B00] px-4 py-3 text-sm font-black text-white"
+                    >
+                      Apply All Empty Fields
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applySpecLookupResult(pendingSpecLookup!, { replace: true })}
+                      className="rounded-xl border border-[#FF6B00]/35 bg-[#FF6B00]/10 px-4 py-3 text-sm font-black text-[#B34700]"
+                    >
+                      Replace All With CaterBot Specs
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => lookupSpecsWithCaterBot({ autoApplyEmpty: true, suggestion: quickListResult ?? undefined })}
+                      className="rounded-xl border border-[#002E5D]/15 bg-white px-4 py-3 text-sm font-black text-[#002E5D]"
+                    >
+                      Search Again
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPendingSpecLookup(null)}
+                      className="rounded-xl border border-[#002E5D]/15 bg-white px-4 py-3 text-sm font-black text-[#002E5D]"
+                    >
+                      Edit Manually
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </section>
 
-        <section className="rounded-3xl bg-white p-5 text-[#002E5D] shadow-sm">
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-[#FF6B00]">Power & safety</p>
-          <h2 className="mt-1 text-xl font-black">Power and safety</h2>
+        <section id="power-step" className="rounded-[1.6rem] border border-slate-200 bg-white p-4 text-[#002E5D] shadow-[0_24px_80px_rgba(0,0,0,0.2)] sm:p-6">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-2xl font-black tracking-[-0.035em]">3. Power & safety</h2>
+            </div>
+            {quickListApplied && (
+              <span className="rounded-full bg-[#FF6B00]/10 px-3 py-1 text-xs font-black text-[#FF6B00]">
+                Filled by CaterBot — please check
+              </span>
+            )}
+          </div>
 
           <div className="mt-4">
-            <p className="mb-2 text-sm font-black">Power/fuel type</p>
+            <p className="mb-2 text-sm font-black">Power type <span className="text-[#FF6B00]">*</span></p>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {SHIPPING_POWER_TYPES.map((option) => (
                 <label
                   key={option}
-                  className={`flex items-center justify-center rounded-2xl border px-3 py-3 text-sm font-black ${
+                  className={`flex items-center justify-center rounded-2xl border px-3 py-3 text-sm font-black transition ${
                     shippingSpecPowerType === option
-                      ? "border-[#FF6B00] bg-[#FF6B00] text-white"
-                      : "border-slate-200 bg-white text-[#002E5D]"
+                      ? "border-[#FF6B00] bg-[#FF6B00]/10 text-[#B34700]"
+                      : "border-slate-200 bg-white text-[#002E5D] hover:border-[#FF6B00]/45"
                   }`}
                 >
                   <input
@@ -1954,32 +3320,15 @@ export default function PostListingPage() {
             </div>
           </div>
 
-          {showGasFields && (
-            <label className="mt-4 block">
-              <span className="mb-1 block text-sm font-black">Gas type</span>
-              <select
-                name="spec_gas_type"
-                value={shippingSpecGasType}
-                onChange={(event) => setShippingSpecGasType(event.target.value)}
-                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
-              >
-                <option value="">Not sure</option>
-                <option value="Natural Gas">Natural Gas</option>
-                <option value="LPG">LPG</option>
-                <option value="Propane">LPG / Propane</option>
-              </select>
-            </label>
-          )}
-
           {showElectricFields && (
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div className="mt-4 grid gap-3 lg:grid-cols-3">
               <label className="block">
-                <span className="mb-1 block text-sm font-black">Voltage</span>
+                <span className="mb-1 block text-sm font-black">Voltage (V)</span>
                 <input
                   name="spec_voltage"
                   value={shippingSpecVoltage}
                   onChange={(event) => setShippingSpecVoltage(event.target.value)}
-                  placeholder="Seller to confirm"
+                  placeholder="e.g. 400"
                   className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
                 />
               </label>
@@ -1996,11 +3345,50 @@ export default function PostListingPage() {
                   <option value="3">3 phase</option>
                 </select>
               </label>
+              <label className="block">
+                <span className="mb-1 block text-sm font-black">Amperage/current</span>
+                <input
+                  name="spec_current_a"
+                  value={shippingSpecCurrent}
+                  onChange={(event) => setShippingSpecCurrent(event.target.value)}
+                  placeholder="e.g. 13A"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                />
+              </label>
+            </div>
+          )}
+
+          {showGasFields && (
+            <div className="mt-4 grid gap-3 lg:grid-cols-2">
+              <label className="block">
+                <span className="mb-1 block text-sm font-black">Gas type</span>
+                <select
+                  name="spec_gas_type"
+                  value={shippingSpecGasType}
+                  onChange={(event) => setShippingSpecGasType(event.target.value)}
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                >
+                  <option value="">Not sure</option>
+                  <option value="Natural Gas">Natural Gas</option>
+                  <option value="LPG">LPG</option>
+                  <option value="Propane">LPG / Propane</option>
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-sm font-black">Gas connection</span>
+                <input
+                  name="spec_gas_connection"
+                  value={shippingSpecGasConnection}
+                  onChange={(event) => setShippingSpecGasConnection(event.target.value)}
+                  placeholder="e.g. 1/2 inch BSP"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                />
+              </label>
             </div>
           )}
 
           <label className="mt-4 block">
-            <span className="mb-1 block text-sm font-black">Safety note / install note</span>
+            <span className="mb-1 block text-sm font-black">Safety/install note</span>
             <textarea
               name="service_history"
               value={shippingSpecNotes}
@@ -2011,43 +3399,74 @@ export default function PostListingPage() {
           </label>
         </section>
 
-        <section className="rounded-3xl bg-white p-5 text-[#002E5D] shadow-sm">
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-[#FF6B00]">Delivery setup</p>
-          <h2 className="mt-1 text-xl font-black">Delivery setup</h2>
+        <section id="delivery-step" className="rounded-[1.6rem] border border-slate-200 bg-white p-4 text-[#002E5D] shadow-[0_24px_80px_rgba(0,0,0,0.2)] sm:p-6">
+          <h2 className="text-2xl font-black tracking-[-0.035em]">4. Delivery Options</h2>
+          <p className="mt-1 text-sm font-semibold text-[#002E5D]/65">
+            Choose all that apply — you must enable at least one.
+          </p>
 
-          <label className="mt-4 block">
-            <span className="mb-1 block text-sm font-black">Delivery option</span>
-            <select
-              name="delivery_method"
-              value={deliveryMethod}
-              onChange={(event) => {
-                const nextMethod = event.target.value
-                setDeliveryMethod(nextMethod)
-                setDeliveryOption(deliveryOptionForDeliveryMethod(nextMethod))
-              }}
-              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
-            >
-              <option value="collection_only">Collection only</option>
-              <option value="caterbids_delivery">Delivery available through CaterBids</option>
-              <option value="buyer_courier">Seller arranged delivery</option>
-            </select>
-          </label>
-
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <label className="block">
-              <span className="mb-1 block text-sm font-black">Collection postcode</span>
+          <div className="mt-4 space-y-2">
+            <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 transition hover:border-slate-300 has-[:checked]:border-[#FF6B00]/40 has-[:checked]:bg-[#FF6B00]/5">
               <input
-                name="collection_postcode"
-                value={collectionPostcode}
-                onChange={(event) => setCollectionPostcode(event.target.value.toUpperCase())}
-                placeholder="e.g. B12 0AB"
-                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                type="checkbox"
+                checked={collectionEnabled}
+                onChange={(e) => setCollectionEnabled(e.target.checked)}
+                className="mt-0.5 h-4 w-4 shrink-0 accent-[#FF6B00]"
               />
+              <div>
+                <p className="text-sm font-black text-[#002E5D]">Collection</p>
+                <p className="mt-0.5 text-xs font-semibold text-[#002E5D]/60">Buyer collects in person from your location.</p>
+              </div>
+            </label>
+
+            <label className={`flex items-start gap-3 rounded-2xl border px-4 py-3 transition ${palletTooBig ? "cursor-not-allowed border-red-200 bg-red-50 opacity-60" : "cursor-pointer border-slate-200 bg-slate-50 hover:border-slate-300 has-[:checked]:border-[#FF6B00]/40 has-[:checked]:bg-[#FF6B00]/5"}`}>
+              <input
+                type="checkbox"
+                checked={palletEnabled}
+                disabled={palletTooBig}
+                onChange={(e) => setPalletEnabled(e.target.checked)}
+                className="mt-0.5 h-4 w-4 shrink-0 accent-[#FF6B00] disabled:cursor-not-allowed"
+              />
+              <div>
+                <p className="text-sm font-black text-[#002E5D]">CaterBids Pallet Delivery</p>
+                {palletTooBig
+                  ? <p className="mt-0.5 text-xs font-bold text-red-700">This item is too large for pallet delivery — choose Collection or Buyer-arranged instead.</p>
+                  : <p className="mt-0.5 text-xs font-semibold text-[#002E5D]/60">Interparcel pallet courier — requires pallet size and collection details below.</p>
+                }
+              </div>
+            </label>
+
+            <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 transition hover:border-slate-300 has-[:checked]:border-[#FF6B00]/40 has-[:checked]:bg-[#FF6B00]/5">
+              <input
+                type="checkbox"
+                checked={buyerArrangesEnabled}
+                onChange={(e) => setBuyerArrangesEnabled(e.target.checked)}
+                className="mt-0.5 h-4 w-4 shrink-0 accent-[#FF6B00]"
+              />
+              <div>
+                <p className="text-sm font-black text-[#002E5D]">Buyer Arranges Delivery</p>
+                <p className="mt-0.5 text-xs font-semibold text-[#002E5D]/60">Buyer books their own courier or transport.</p>
+              </div>
             </label>
           </div>
 
-          {deliveryMethod === "caterbids_delivery" && (
+          {palletEnabled && (
             <div className="mt-4 space-y-3">
+              <div className="rounded-2xl border border-[#FF6B00]/25 bg-[#FF6B00]/10 p-4">
+                <h3 className="text-lg font-black text-[#002E5D]">Need help preparing your item for pallet collection?</h3>
+                <p className="mt-2 text-sm font-semibold leading-relaxed text-[#002E5D]/75">
+                  Pallet delivery only works if the item is clean, safely disconnected, securely strapped and shrink-wrapped on a pallet before the driver arrives.
+                </p>
+                <a
+                  href="/pallet-delivery-guide"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-3 inline-flex rounded-xl bg-[#FF6B00] px-4 py-2.5 text-sm font-black text-white shadow-lg shadow-[#FF6B00]/20"
+                >
+                  View pallet preparation guide
+                </a>
+              </div>
+
               {!deliveryMeasurementsReady && (
                 <p className="rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-bold text-[#8A3A00]">
                   Add kg and cm to enable delivery quotes.
@@ -2055,61 +3474,207 @@ export default function PostListingPage() {
               )}
               {deliveryMeasurementsReady && quickListApplied && (
                 <p className="rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-bold text-green-800">
-                  Please check these measurements.
+                  CaterBot estimate — seller must confirm.
                 </p>
               )}
 
+              <div className="grid gap-3 lg:grid-cols-2">
+            <label className="block">
+              <span className="mb-1 block text-sm font-black">Collection postcode <span className="text-[#FF6B00]">*</span></span>
+              <input
+                name="collection_postcode"
+                value={collectionPostcode}
+                onChange={(event) => setCollectionPostcode(event.target.value.toUpperCase())}
+                placeholder="e.g. M1 1AA"
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-sm font-black">Collection city <span className="text-[#FF6B00]">*</span></span>
+              <input
+                name="collection_city"
+                value={collectionCity}
+                onChange={(event) => setCollectionCity(event.target.value)}
+                placeholder="e.g. Manchester"
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-sm font-black">Preferred collection date</span>
+              <input
+                name="preferred_collection_date"
+                value={preferredCollectionDate}
+                onChange={(event) => setPreferredCollectionDate(event.target.value)}
+                type="date"
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+              />
+            </label>
+          </div>
+
               <label className="block">
-                <span className="mb-1 block text-sm font-black">Collection full address</span>
+                <span className="mb-1 block text-sm font-black">Collection address <span className="text-[#FF6B00]">*</span></span>
                 <textarea
                   name="collection_full_address"
                   value={collectionFullAddress}
                   onChange={(event) => setCollectionFullAddress(event.target.value)}
-                  placeholder="Exact pickup address"
+                  placeholder="Start typing your address"
                   className="min-h-24 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
                 />
               </label>
 
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-3 lg:grid-cols-2">
                 <label className="block">
-                  <span className="mb-1 block text-sm font-black">Collection contact name</span>
+                  <span className="mb-1 block text-sm font-black">Contact name <span className="text-[#FF6B00]">*</span></span>
                   <input
                     name="seller_contact_name"
                     value={sellerContactName}
                     onChange={(event) => setSellerContactName(event.target.value)}
-                    placeholder="Seller to confirm"
+                    placeholder="Your full name"
                     className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
                   />
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-sm font-black">Collection phone number</span>
+                  <span className="mb-1 block text-sm font-black">Phone number <span className="text-[#FF6B00]">*</span></span>
                   <input
                     name="seller_phone"
                     value={sellerPhone}
                     onChange={(event) => setSellerPhone(event.target.value)}
-                    placeholder="Seller to confirm"
+                    placeholder="07 1234 567890"
                     className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
                   />
                 </label>
               </div>
 
-              <label className="block">
-                <span className="mb-1 block text-sm font-black">Preferred collection date</span>
-                <input
-                  name="preferred_collection_date"
-                  value={preferredCollectionDate}
-                  onChange={(event) => setPreferredCollectionDate(event.target.value)}
-                  type="date"
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
-                />
-              </label>
+              <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold text-[#002E5D]/70">
+                All standard pallets sit on the <strong className="text-[#002E5D]">SAME 1.2m &times; 1m base</strong> — you&apos;re choosing by how <strong className="text-[#002E5D]">TALL</strong> and <strong className="text-[#002E5D]">HEAVY</strong> your item is, not the floor size. Measure after wrapping, round up, and if between two sizes pick the bigger one to avoid surcharges.
+              </p>
 
-              <div className="grid gap-3 sm:grid-cols-4">
+              {/* Pallet size visual picker */}
+              <div>
+                <p className="mb-3 text-sm font-black text-[#002E5D]">
+                  Pallet size <span className="text-[#FF6B00]">*</span>
+                </p>
+                {/* Big card — always the currently selected pallet */}
+                {(() => {
+                  const card = PALLET_CARDS.find((c) => c.slug === palletSize) ?? PALLET_CARDS[PALLET_CARDS.length - 1]
+                  const imgFailed = palletImgErrors.has(card.slug)
+                  return (
+                    <div className="relative overflow-hidden rounded-2xl border-2 border-[#FF6B00] bg-white shadow-[0_0_0_4px_rgba(255,107,0,0.12)] shadow-sm">
+                      {Boolean(palletSizeNote) && (
+                        <span className="absolute left-1.5 top-1.5 z-10 inline-flex items-center gap-0.5 rounded-full bg-[#FF6B00] px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-white">
+                          ✓ CaterBot
+                        </span>
+                      )}
+                      <div className="relative aspect-[4/3] bg-white">
+                        {card.image && !imgFailed ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={card.image}
+                            alt={card.name}
+                            className="absolute inset-0 h-full w-full object-contain"
+                            onError={() =>
+                              setPalletImgErrors((prev) => new Set([...prev, card.slug]))
+                            }
+                          />
+                        ) : (
+                          <div className="flex h-full items-center justify-center bg-slate-50">
+                            <PackageCheck className="h-10 w-10 text-slate-300" strokeWidth={1.2} />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })()}
+                {/* Small cards — the other 4; tapping promotes to big slot */}
+                <div className="mt-3 grid grid-cols-2 gap-3">
+                  {PALLET_CARDS.filter((c) => c.slug !== palletSize).map((card) => {
+                    const imgFailed = palletImgErrors.has(card.slug)
+                    return (
+                      <button
+                        key={card.slug}
+                        type="button"
+                        onClick={() => {
+                          setPalletSize(card.slug)
+                          setPalletSizeManuallySet(true)
+                          setPalletSizeNote("")
+                        }}
+                        className="relative overflow-hidden rounded-2xl border-2 border-slate-200 bg-white shadow-sm transition hover:border-slate-300 hover:shadow-md"
+                      >
+                        <div className="relative aspect-[4/3] bg-white">
+                          {card.image && !imgFailed ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={card.image}
+                              alt={card.name}
+                              className="absolute inset-0 h-full w-full object-contain"
+                              onError={() =>
+                                setPalletImgErrors((prev) => new Set([...prev, card.slug]))
+                              }
+                            />
+                          ) : (
+                            <div className="flex h-full items-center justify-center bg-slate-50">
+                              <PackageCheck className="h-10 w-10 text-slate-300" strokeWidth={1.2} />
+                            </div>
+                          )}
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+                <input type="hidden" name="pallet_size" value={palletSize} readOnly />
+                {palletSizeNote && (
+                  <p className="mt-2 text-xs font-semibold text-[#FF6B00]/90">{palletSizeNote}</p>
+                )}
+                <p className="mt-2 text-xs font-semibold text-[#002E5D]/40">
+                  Custom pallet sizes coming soon — for oversized items, choose Collection Only or Buyer Arranges Delivery above.
+                </p>
+                {!palletSizeNote && (
+                  <label className="mt-3 flex cursor-pointer items-start gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3">
+                    <input
+                      type="checkbox"
+                      name="pallet_size_confirmed"
+                      className="mt-0.5 h-4 w-4 shrink-0 accent-amber-600"
+                    />
+                    <span className="text-sm font-bold text-amber-900">
+                      I confirm this item fits this pallet size.
+                    </span>
+                  </label>
+                )}
+              </div>
+
+              {/* Number of pallets + insurance value */}
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block">
+                  <span className="mb-1 block text-sm font-black">Number of pallets <span className="text-[#FF6B00]">*</span></span>
+                  <input
+                    name="pallet_count"
+                    value={palletCount}
+                    onChange={(event) => setPalletCount(event.target.value)}
+                    type="number"
+                    min="1"
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-sm font-black">Insurance value <span className="text-[#FF6B00]">*</span></span>
+                  <input
+                    name="insurance_value"
+                    value={insuranceValue}
+                    onChange={(event) => setInsuranceValue(event.target.value)}
+                    type="number"
+                    min="0"
+                    placeholder="e.g. 500"
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                  />
+                </label>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 {[
-                  { label: "Weight kg", name: "weight_kg", value: weightKg, setValue: setWeightKg },
-                  { label: "Length cm", name: "length_cm", value: lengthCm, setValue: setLengthCm },
-                  { label: "Width cm", name: "width_cm", value: widthCm, setValue: setWidthCm },
-                  { label: "Height cm", name: "height_cm", value: heightCm, setValue: setHeightCm },
+                  { label: "Pallet weight kg", name: "weight_kg", value: weightKg, setValue: setWeightKg },
+                  { label: "Pallet length cm", name: "length_cm", value: lengthCm, setValue: setLengthCm },
+                  { label: "Pallet width cm", name: "width_cm", value: widthCm, setValue: setWidthCm },
+                  { label: "Pallet height cm", name: "height_cm", value: heightCm, setValue: setHeightCm },
                 ].map((field) => (
                   <label key={field.name} className="block">
                     <span className="mb-1 block text-sm font-black">{field.label}</span>
@@ -2130,8 +3695,8 @@ export default function PostListingPage() {
                 {[
                   { name: "tail_lift_required", checked: tailLiftRequired, setChecked: setTailLiftRequired, label: "Tail-lift required" },
                   { name: "forklift_available", checked: forkliftAvailable, setChecked: setForkliftAvailable, label: "Forklift available" },
-                  { name: "ground_floor_collection", checked: groundFloorCollection, setChecked: setGroundFloorCollection, label: "Ground-floor collection" },
                   { name: "commercial_premises", checked: commercialPremises, setChecked: setCommercialPremises, label: "Commercial premises" },
+                  { name: "ground_floor_collection", checked: groundFloorCollection, setChecked: setGroundFloorCollection, label: "Ground-floor collection" },
                   { name: "pallet_ready", checked: palletReady, setChecked: setPalletReady, label: "Pallet ready" },
                 ].map((field) => (
                   <label key={field.name} className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold">
@@ -2147,6 +3712,27 @@ export default function PostListingPage() {
                 ))}
               </div>
 
+              <label className="flex items-start gap-3 rounded-2xl border border-[#FF6B00]/25 bg-[#FF6B00]/10 px-4 py-3 text-sm font-bold text-[#8A3A00]">
+                <input
+                  name="pallet_preparation_confirmed"
+                  type="checkbox"
+                  checked={palletPreparationConfirmed}
+                  onChange={(event) => setPalletPreparationConfirmed(event.target.checked)}
+                  className="mt-0.5 h-4 w-4 accent-[#FF6B00]"
+                />
+                I have read the pallet preparation guide and confirm this item will be cleaned, safely disconnected, palletised, strapped and shrink-wrapped before collection.
+              </label>
+
+              <label className="block">
+                <span className="mb-1 block text-sm font-black">Access restrictions</span>
+                <textarea
+                  name="access_restrictions"
+                  value={accessRestrictions}
+                  onChange={(event) => setAccessRestrictions(event.target.value)}
+                  placeholder="Narrow access, loading bay, opening hours, parking, stairs or height limits."
+                  className="min-h-20 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                />
+              </label>
               <label className="block">
                 <span className="mb-1 block text-sm font-black">Delivery notes</span>
                 <textarea
@@ -2159,23 +3745,11 @@ export default function PostListingPage() {
               </label>
             </div>
           )}
-
-          {deliveryMethod === "buyer_courier" && (
-            <label className="mt-4 block">
-              <span className="mb-1 block text-sm font-black">Delivery notes</span>
-              <textarea
-                name="delivery_notes"
-                value={deliveryNotes}
-                onChange={(event) => setDeliveryNotes(event.target.value)}
-                placeholder="Tell buyers how you can deliver."
-                className="min-h-20 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
-              />
-            </label>
-          )}
         </section>
 
+        {process.env.NODE_ENV === "development" && (
         <details className="rounded-3xl bg-white p-5 text-[#002E5D] shadow-sm">
-          <summary className="cursor-pointer list-none text-lg font-black">CaterBot details</summary>
+          <summary className="cursor-pointer list-none text-lg font-black">Advanced CaterBot details</summary>
           <div className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
             {[
               ["Brand found", productMatch.brand || "Not found"],
@@ -2201,45 +3775,82 @@ export default function PostListingPage() {
               </p>
             </div>
           )}
+          {quickListResult?._diag && (
+            <div className="mt-3 rounded-xl border border-red-300 bg-red-50 p-3 font-mono text-xs text-red-900">
+              <p className="mb-2 font-black text-red-600">TEMP DIAGNOSTIC — remove later</p>
+              <p><span className="font-bold">ai_dimensions:</span> {quickListResult._diag.ai_dimensions || "(empty)"}</p>
+              <p><span className="font-bold">source_valid:</span> {String(quickListResult._diag.source_valid)}</p>
+              <p><span className="font-bold">source_url:</span> {quickListResult._diag.source_url || "(none)"}</p>
+              <p><span className="font-bold">source_found_dimensions:</span> {quickListResult._diag.source_found_dimensions || "(empty)"}</p>
+              <p><span className="font-bold">final_dimensions:</span> {quickListResult._diag.final_dimensions || "(empty)"}</p>
+            </div>
+          )}
         </details>
+        )}
 
-        <section className="rounded-3xl bg-white p-5 text-[#002E5D] shadow-sm">
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-[#FF6B00]">Review listing</p>
-          <h2 className="mt-1 text-xl font-black">Review and publish</h2>
+        <section id="review-step" className="rounded-[1.6rem] border border-slate-200 bg-white p-4 text-[#002E5D] shadow-[0_24px_80px_rgba(0,0,0,0.22)] sm:p-6">
+          <h2 className="text-2xl font-black tracking-[-0.035em]">5. Review & publish</h2>
 
-          <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
-            {imagePreview && (
-              <NextImage
-                src={imagePreview}
-                alt="Main listing preview"
-                width={640}
-                height={360}
-                unoptimized
-                className="h-44 w-full object-cover"
-              />
-            )}
-            <div className="space-y-2 p-4 text-sm font-bold">
-              <div className="flex justify-between gap-3">
-                <span className="text-slate-500">Item</span>
-                <span className="text-right">{title || "Not added"}</span>
-              </div>
-              <div className="flex justify-between gap-3">
-                <span className="text-slate-500">Price</span>
-                <span>{price ? formatPrice(price) : "Not added"}</span>
-              </div>
-              <div className="flex justify-between gap-3">
-                <span className="text-slate-500">Location</span>
-                <span>{reviewLocation}</span>
-              </div>
-              <div className="flex justify-between gap-3">
-                <span className="text-slate-500">Delivery</span>
-                <span className="text-right">{reviewDeliveryOption}</span>
+          <div className="mt-4 grid gap-5 lg:grid-cols-[1.2fr_0.9fr]">
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+              <div className="grid gap-4 p-3 sm:grid-cols-[150px_1fr]">
+                <div className="overflow-hidden rounded-xl bg-slate-200">
+                  {imagePreview ? (
+                    <NextImage
+                      src={imagePreview}
+                      alt="Main listing preview"
+                      width={300}
+                      height={220}
+                      unoptimized
+                      className="h-36 w-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-36 items-center justify-center text-sm font-black text-slate-400">
+                      No photo yet
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-2 text-sm font-bold">
+                  <h3 className="text-lg font-black leading-tight">{title || "Listing title not added"}</h3>
+                  <p className="text-slate-500">{subcategory || category} • {condition}</p>
+                  <p className="text-slate-500">{reviewLocation}</p>
+                  <p className="text-slate-500">{shippingSpecPowerType !== "Not sure" ? shippingSpecPowerType : "Power not confirmed"}</p>
+                  <div className="flex flex-wrap items-center gap-2 pt-2">
+                    <span className="text-2xl font-black text-[#FF6B00]">{price ? formatPrice(price) : "Price not added"}</span>
+                    <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-black text-[#002E5D]">{condition}</span>
+                  </div>
+                  <p className="text-xs font-semibold text-slate-500">{reviewDeliveryOption}</p>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="mt-4 space-y-3">
-            {deliveryMethod !== "collection_only" && (
+          <div className="space-y-3">
+            {(() => {
+              const allRoutineConfirmed =
+                listingInfoConfirmed &&
+                ownershipConfirmed &&
+                (!palletEnabled || deliveryDetailsConfirmed) &&
+                (!manualSourceHasVerifiedUrl || specsVerifiedBySeller)
+              return (
+                <label className="flex cursor-pointer items-center gap-3 rounded-2xl border border-[#FF6B00]/30 bg-[#FF6B00]/5 px-4 py-3 text-sm font-black text-[#FF6B00]">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-[#FF6B00]"
+                    checked={allRoutineConfirmed}
+                    onChange={(e) => {
+                      const v = e.target.checked
+                      setDeliveryDetailsConfirmed(v)
+                      setSpecsVerifiedBySeller(v)
+                      setListingInfoConfirmed(v)
+                      setOwnershipConfirmed(v)
+                    }}
+                  />
+                  Confirm all
+                </label>
+              )
+            })()}
+
+            {palletEnabled && (
               <label className="flex items-start gap-3 rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-bold text-green-800">
                 <input
                   name="delivery_details_confirmed"
@@ -2275,12 +3886,104 @@ export default function PostListingPage() {
               />
               I confirm this listing information is accurate.
             </label>
+            <label className="flex items-start gap-3 rounded-2xl border border-[#002E5D]/15 bg-slate-50 px-4 py-3 text-sm font-bold">
+              <input
+                name="seller_owns_item_confirmed"
+                type="checkbox"
+                required
+                checked={ownershipConfirmed}
+                onChange={(e) => setOwnershipConfirmed(e.target.checked)}
+                className="mt-0.5 h-4 w-4 accent-[#FF6B00]"
+              />
+              I own the item and have the right to sell it.
+            </label>
+            <label className="flex items-start gap-3 rounded-2xl border border-[#002E5D]/15 bg-slate-50 px-4 py-3 text-sm font-bold">
+              <input
+                name="terms_confirmed"
+                type="checkbox"
+                required
+                className="mt-0.5 h-4 w-4 accent-[#FF6B00]"
+              />
+              <span>
+                I agree to the CaterBidsUK{" "}
+                <a href="/terms" className="text-[#FF6B00] underline">Terms & Conditions</a>.
+              </span>
+            </label>
           </div>
+          </div>
+
+          {boostSettings?.featured_boosts_enabled && (
+            <div className="mt-6 rounded-2xl border border-[#FF6B00]/20 bg-[#0a2a4a] p-4">
+              <div className="mb-2 flex items-center gap-2">
+                <Bell className="h-4 w-4 text-[#FF6B00]" />
+                <p className="text-sm font-black text-white">
+                  Feature this listing?{" "}
+                  <span className="font-semibold text-white/45">(optional add-on)</span>
+                </p>
+              </div>
+              <p className="mb-4 text-xs font-semibold text-white/55">
+                Appear on the homepage &amp; top of search results. Your listing publishes free — payment is taken after.
+              </p>
+              <div className="grid grid-cols-3 gap-2">
+                {([null, 7, 30] as const).map((days) => {
+                  const selected = featureBoostDays === days
+                  const priceLabel =
+                    days === 7
+                      ? `£${boostSettings.featured_price_7d.toFixed(2)}`
+                      : days === 30
+                        ? `£${boostSettings.featured_price_30d.toFixed(2)}`
+                        : null
+                  return (
+                    <button
+                      key={String(days)}
+                      type="button"
+                      onClick={() => setFeatureBoostDays(days)}
+                      className={`rounded-xl border px-3 py-3 text-center transition ${
+                        selected
+                          ? days === null
+                            ? "border-white/35 bg-white/10 text-white"
+                            : "border-[#FF6B00] bg-[#FF6B00]/15 text-white"
+                          : "border-white/12 bg-white/5 text-white/45 hover:border-white/25 hover:text-white/70"
+                      }`}
+                    >
+                      <p className="text-[11px] font-black">
+                        {days === null ? "No thanks" : `${days} days`}
+                      </p>
+                      <p
+                        className={`text-[10px] font-semibold ${selected && days !== null ? "text-[#FF6B00]" : "text-white/40"}`}
+                      >
+                        {priceLabel ?? "Free"}
+                      </p>
+                      {days === 30 && (
+                        <p className="text-[9px] font-black text-[#FF6B00]/70">Best value</p>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+              {featureBoostDays && (
+                <p className="mt-3 text-center text-[10px] font-semibold text-white/40">
+                  Listing goes live either way — payment is only for the feature.
+                </p>
+              )}
+            </div>
+          )}
 
           {publishError && (
             <p className="mt-4 rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-bold text-orange-800">
               {publishError}
             </p>
+          )}
+
+          {overageRequired && (
+            <button
+              type="button"
+              disabled={isOverageLoading}
+              onClick={handleOverageCheckout}
+              className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-amber-400/40 bg-amber-400/12 px-4 py-3 text-sm font-black text-amber-200 transition hover:bg-amber-400/20 disabled:opacity-60"
+            >
+              {isOverageLoading ? "Opening checkout…" : "Add extra listing →"}
+            </button>
           )}
 
           <button
@@ -2290,6 +3993,9 @@ export default function PostListingPage() {
           >
             {isPublishing ? "Publishing..." : "Publish listing"}
           </button>
+          <p className="mt-3 text-center text-sm font-semibold text-slate-500">
+            Your listing will be published to buyers once submitted successfully.
+          </p>
         </section>
 
         <input type="hidden" name="location" value={location || city} />
@@ -2298,8 +4004,9 @@ export default function PostListingPage() {
         <input type="hidden" name="warranty_type" value="No warranty" />
         <input type="hidden" name="tested_status" value="Untested" />
         <input type="hidden" name="delivery_option" value={reviewDeliveryOption} />
+        <input type="hidden" name="delivery_provider" value={palletEnabled ? "Interparcel" : ""} />
         <input type="hidden" name="manuals_available" value={manualSourceHasVerifiedUrl ? "on" : ""} />
-        <input type="hidden" name="delivery_available" value={deliveryMethod === "caterbids_delivery" ? "on" : ""} />
+        <input type="hidden" name="delivery_available" value={palletEnabled ? "on" : ""} />
         <input type="hidden" name="collection_city" value={collectionCity || city || location} />
         <input type="hidden" name="delivery_size_unknown" value="" />
         <input type="hidden" name="pallet_count" value={palletCount || "1"} />
@@ -2310,16 +4017,22 @@ export default function PostListingPage() {
         <input
           type="hidden"
           name="shipping_class"
-          value={deliveryRecommendation.palletRecommended ? "Large item" : deliveryRecommendation.specialistRecommended ? "Specialist item" : weightKg ? "Medium item" : ""}
+          value={
+            deliveryRecommendation.palletRecommended
+              ? "Pallet delivery"
+              : weightKg
+                ? "Collection only"
+                : ""
+          }
         />
         <input
           type="hidden"
           name="shipping_confidence"
-          value={deliveryRecommendation.label === "Source-based delivery estimate" ? "High" : weightKg || (lengthCm && widthCm && heightCm) ? "Medium" : "Low"}
+          value={deliveryRecommendation.label === "CaterBot estimate" ? "High" : weightKg || (lengthCm && widthCm && heightCm) ? "Medium" : "Low"}
         />
         <input type="hidden" name="shipping_details_confirmed_by_seller" value={deliveryDetailsConfirmed ? "true" : "false"} />
         <input type="hidden" name="pallet_delivery_recommended" value={deliveryRecommendation.palletRecommended ? "true" : "false"} />
-        <input type="hidden" name="specialist_delivery_recommended" value={deliveryRecommendation.specialistRecommended ? "true" : "false"} />
+        <input type="hidden" name="specialist_delivery_recommended" value="false" />
         <input type="hidden" name="spec_plate_image_url" value={specPlatePreview} />
         <input type="hidden" name="spec_serial_number" value={shippingSpecSerial} />
         <input type="hidden" name="spec_gc_number" value={shippingSpecGcNumber} />
@@ -2352,6 +4065,9 @@ export default function PostListingPage() {
         <input type="hidden" name="image" value={imagePreview} />
         <input type="hidden" name="images" value={JSON.stringify(imagePreviews)} />
       </form>
+      <p className="mt-4 pb-4 text-center text-sm font-semibold text-white/58">
+        We protect your data and link to our privacy policy before sharing any personal details publicly.
+      </p>
       </div>
       )}
     </main>

@@ -1,12 +1,14 @@
 "use client"
 
 import Link from "next/link"
-import type { ReactNode } from "react"
+import SiteLogo from "@/components/SiteLogo"
+import { useActionState, useState, useTransition, type ReactNode } from "react"
 import {
   Activity,
   BadgeCheck,
   BarChart3,
   Bell,
+  Bot,
   CheckCircle2,
   ClipboardList,
   FileText,
@@ -36,12 +38,15 @@ import {
   Users,
 } from "lucide-react"
 import {
+  deleteBlogPost,
+  setPhoneVerificationStatus,
   setUserVerificationFlag,
   setUserVerified,
   toggleListingFeatured,
   toggleListingUrgent,
   updateListingStatus,
   updatePaymentSettings,
+  updateSellerPlan,
   updateSiteSetting,
   updateUserRole,
 } from "./actions"
@@ -84,13 +89,19 @@ export type AdminUser = {
   name?: string | null
   full_name?: string | null
   business?: string | null
+  phone?: string | null
+  phone_number?: string | null
   role?: string | null
   verified?: boolean | null
   email_verified?: boolean | null
   is_email_verified?: boolean | null
   phone_verified?: boolean | null
   is_phone_verified?: boolean | null
+  phone_verified_at?: string | null
+  phone_verification_method?: string | null
+  phone_verification_status?: string | null
   verified_user_badge?: boolean | null
+  verified_dealer?: boolean | null
   created_at?: string | null
   active_listings_count?: number
 }
@@ -138,6 +149,14 @@ export type AdminSiteSetting = {
 export type AdminPaymentSettings = PaymentSettings
 export type AdminSellerPlan = SellerPlan
 
+export type AdminFoundingMember = {
+  id: string
+  seller_id?: string | null
+  stripe_session_id?: string | null
+  created_at?: string | null
+  email?: string | null
+}
+
 export type AdminAuditLog = {
   id: string
   admin_user_id?: string | null
@@ -180,6 +199,9 @@ type AdminDashboardProps = {
   paymentSettings: AdminPaymentSettings
   sellerPlans: AdminSellerPlan[]
   auditLogs: AdminAuditLog[]
+  foundingMemberSold: number
+  foundingMemberCap: number
+  foundingMembers: AdminFoundingMember[]
   messagesTotal: number
   reportsTotal: number
   marketplaceLive: boolean
@@ -194,7 +216,7 @@ type AdminDashboardProps = {
   }
 }
 
-const USER_ROLES = ["buyer", "seller", "admin", "owner", "super_admin"]
+const USER_ROLES = ["user", "seller", "dealer", "admin", "super_admin"]
 const PROTECTED_SUPER_ADMIN_EMAIL = "caterbidsuk@gmail.com"
 const ADMIN_ACTION_BUTTON =
   "inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/8 px-3 py-2 text-sm font-black text-white transition hover:border-[#FF6B00]/45 hover:bg-[#FF6B00]/12"
@@ -389,6 +411,9 @@ export default function AdminDashboard({
   paymentSettings,
   sellerPlans,
   auditLogs,
+  foundingMemberSold,
+  foundingMemberCap,
+  foundingMembers,
   messagesTotal,
   reportsTotal,
   marketplaceLive,
@@ -413,12 +438,8 @@ export default function AdminDashboard({
       <div className="grid min-h-screen lg:grid-cols-[280px_1fr]">
         <aside className="hidden border-r border-white/10 bg-[#001A35]/90 p-5 lg:flex lg:flex-col lg:justify-between">
           <div>
-            <Link href="/admin" className="flex items-center gap-3">
-              <img src="/brand/caterbids-logo.png" alt="CaterBidsUK" className="h-14 w-14 rounded-2xl object-contain" />
-              <div>
-                <p className="text-xl font-black leading-none">Cater<span className="text-[#FF6B00]">Bids</span>UK</p>
-                <p className="mt-1 text-[10px] font-black tracking-[0.32em] text-[#FF6B00]">BUY • SELL • SAVE</p>
-              </div>
+            <Link href="/admin">
+              <SiteLogo size="sm" />
             </Link>
             <p className="mt-8 text-xs font-black uppercase tracking-[0.2em] text-white/45">Admin</p>
             <nav className="mt-3 space-y-1">
@@ -439,6 +460,10 @@ export default function AdminDashboard({
               <Link href="/admin/trust" className="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-black text-white/72 hover:bg-white/8 hover:text-white">
                 <ShieldCheck className="h-4 w-4" />
                 Trust Admin
+              </Link>
+              <Link href="/admin/caterbot-review" className="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-black text-white/72 hover:bg-white/8 hover:text-white">
+                <Bot className="h-4 w-4" />
+                CaterBot Review
               </Link>
             </nav>
           </div>
@@ -467,12 +492,8 @@ export default function AdminDashboard({
               <button className="grid h-11 w-11 place-items-center rounded-2xl border border-white/12 bg-white/8 lg:hidden" aria-label="Open admin menu">
                 <Menu className="h-5 w-5" />
               </button>
-              <Link href="/admin" className="flex items-center gap-2 lg:hidden">
-                <img src="/brand/caterbids-logo.png" alt="CaterBidsUK" className="h-10 w-10 rounded-xl object-contain" />
-                <div>
-                  <p className="text-base font-black leading-none">Cater<span className="text-[#FF6B00]">Bids</span>UK</p>
-                  <p className="mt-1 text-[9px] font-black tracking-[0.24em] text-[#FF6B00]">BUY • SELL • SAVE</p>
-                </div>
+              <Link href="/admin" className="lg:hidden">
+                <SiteLogo size="sm" />
               </Link>
               <form action="/admin" className="ml-auto hidden max-w-xl flex-1 lg:block">
                 <label className="relative block">
@@ -603,6 +624,7 @@ export default function AdminDashboard({
         )}
         {selectedTab === "settings" && (
           <section className="grid gap-5">
+            <FoundingMembersPanel sold={foundingMemberSold} cap={foundingMemberCap} members={foundingMembers} />
             <PaymentSettingsPanel settings={paymentSettings} sellerPlans={sellerPlans} adminRole={adminRole} adminEmail={adminEmail} />
             <SettingsPanel settings={settings} />
           </section>
@@ -1016,6 +1038,11 @@ function UsersPanel({ users, adminEmail, adminId, compact = false }: { users: Ad
 function UserCard({ user, adminEmail, adminId, compact = false }: { user: AdminUser; adminEmail: string; adminId: string; compact?: boolean }) {
   const verified = isUserVerified(user)
   const protectedSuperAdmin = isProtectedSuperAdmin(user, adminEmail, adminId)
+  const phoneNumber = user.phone_number || user.phone || "Not added"
+  const phoneVerificationStatus =
+    user.phone_verified || user.is_phone_verified
+      ? "verified"
+      : user.phone_verification_status || (user.phone_number || user.phone ? "pending" : "pending")
 
   return (
     <article id={`user-${user.id}`} className="rounded-3xl border border-white/10 bg-[#002E5D]/45 p-4">
@@ -1024,15 +1051,17 @@ function UserCard({ user, adminEmail, adminId, compact = false }: { user: AdminU
           <p className="truncate font-black">{userName(user)}</p>
           <p className="mt-1 truncate text-sm text-white/55">{user.email || user.id}</p>
           <div className="mt-2 flex flex-wrap gap-2">
-            <Badge label={user.role || "buyer"} />
+            <Badge label={user.role || "user"} />
             {verified ? <Badge label="Verified" orange /> : <Badge label="Not verified" />}
+            {user.verified_dealer && <Badge label="Verified dealer" orange />}
             {user.email_verified || user.is_email_verified ? <Badge label="Email verified" orange /> : <Badge label="Email pending" />}
-            {user.phone_verified || user.is_phone_verified ? <Badge label="Phone verified" orange /> : <Badge label="Phone pending" />}
+            {user.phone_verified || user.is_phone_verified ? <Badge label="Phone verified" orange /> : <Badge label={phoneVerificationStatus === "rejected" ? "Phone rejected" : "Phone pending"} />}
             {protectedSuperAdmin && <Badge label="Protected super admin" orange />}
           </div>
         </div>
         <div className="grid grid-cols-2 gap-2 text-xs font-bold text-white/58 md:min-w-[260px]">
           <Info label="Business" value={user.business || "Not added"} />
+          <Info label="Phone" value={phoneNumber} />
           <Info label="Created" value={formatDate(user.created_at)} />
           <Info label="Active listings" value={String(user.active_listings_count || 0)} />
           <Info label="User ID" value={user.id.slice(0, 8)} />
@@ -1045,7 +1074,7 @@ function UserCard({ user, adminEmail, adminId, compact = false }: { user: AdminU
             <input type="hidden" name="user_id" value={user.id} />
             <select
               name="role"
-              defaultValue={user.role || "buyer"}
+              defaultValue={user.role || "user"}
               disabled={protectedSuperAdmin}
               className="rounded-2xl border border-white/10 bg-[#001633] px-3 py-2 text-sm font-bold text-white disabled:opacity-45"
             >
@@ -1059,7 +1088,9 @@ function UserCard({ user, adminEmail, adminId, compact = false }: { user: AdminU
           </form>
           <ToggleUserButton userId={user.id} verified={verified} label={verified ? "Mark unverified" : "Mark verified"} />
           <ToggleVerificationButton userId={user.id} field="email_verified" verified={Boolean(user.email_verified || user.is_email_verified)} label={user.email_verified || user.is_email_verified ? "Email unverified" : "Email verified"} icon={<MailCheck className="h-4 w-4" />} />
-          <ToggleVerificationButton userId={user.id} field="phone_verified" verified={Boolean(user.phone_verified || user.is_phone_verified)} label={user.phone_verified || user.is_phone_verified ? "Phone unverified" : "Phone verified"} icon={<PhoneCall className="h-4 w-4" />} />
+          <SetPhoneStatusButton userId={user.id} status="verified" label="Mark phone verified" icon={<PhoneCall className="h-4 w-4" />} />
+          <SetPhoneStatusButton userId={user.id} status="rejected" label="Mark phone rejected" icon={<PhoneCall className="h-4 w-4" />} />
+          <ToggleVerificationButton userId={user.id} field="verified_dealer" verified={Boolean(user.verified_dealer)} label={user.verified_dealer ? "Remove dealer badge" : "Mark verified dealer"} icon={<BadgeCheck className="h-4 w-4" />} />
           <Link href={`/admin?tab=listings&user=${encodeURIComponent(user.id)}`} className={ADMIN_ACTION_LINK}>
             <ListChecks className="h-4 w-4" />
             View user listings
@@ -1071,8 +1102,11 @@ function UserCard({ user, adminEmail, adminId, compact = false }: { user: AdminU
             </summary>
             <div className="mt-3 grid gap-2 md:grid-cols-2">
               <Info label="Profile ID" value={user.id} />
+              <Info label="Phone" value={phoneNumber} />
+              <Info label="Phone status" value={phoneVerificationStatus} />
               <Info label="Email verified" value={user.email_verified || user.is_email_verified ? "Yes" : "No"} />
               <Info label="Phone verified" value={user.phone_verified || user.is_phone_verified ? "Yes" : "No"} />
+              <Info label="Verified dealer" value={user.verified_dealer ? "Yes" : "No"} />
               <Info label="Overall verified" value={isUserVerified(user) ? "Yes" : "No"} />
             </div>
           </details>
@@ -1101,6 +1135,29 @@ function ToggleVerificationButton({ userId, field, verified, label, icon }: { us
       <input type="hidden" name="user_id" value={userId} />
       <input type="hidden" name="field" value={field} />
       <input type="hidden" name="verified" value={verified ? "false" : "true"} />
+      <button className={ADMIN_ACTION_BUTTON}>
+        {icon}
+        {label}
+      </button>
+    </form>
+  )
+}
+
+function SetPhoneStatusButton({
+  userId,
+  status,
+  label,
+  icon,
+}: {
+  userId: string
+  status: "pending" | "verified" | "rejected"
+  label: string
+  icon: ReactNode
+}) {
+  return (
+    <form action={setPhoneVerificationStatus}>
+      <input type="hidden" name="user_id" value={userId} />
+      <input type="hidden" name="status" value={status} />
       <button className={ADMIN_ACTION_BUTTON}>
         {icon}
         {label}
@@ -1147,11 +1204,30 @@ function OrdersPanel({ orders }: { orders: AdminOrder[] }) {
 }
 
 function BlogPostsPanel({ posts }: { posts: AdminBlogPost[] }) {
-  const sortedPosts = [...posts].sort((left, right) => {
-    const leftDate = new Date(left.published_at || left.created_at || 0).getTime()
-    const rightDate = new Date(right.published_at || right.created_at || 0).getTime()
-    return rightDate - leftDate
-  })
+  const [isPending, startTransition] = useTransition()
+  const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set())
+
+  const sortedPosts = [...posts]
+    .filter((p) => !deletedIds.has(p.id))
+    .sort((left, right) => {
+      const leftDate = new Date(left.published_at || left.created_at || 0).getTime()
+      const rightDate = new Date(right.published_at || right.created_at || 0).getTime()
+      return rightDate - leftDate
+    })
+
+  function handleDelete(post: AdminBlogPost) {
+    if (!confirm(`Delete "${post.title || "this post"}"? This cannot be undone.`)) return
+    setDeletedIds((prev) => new Set([...prev, post.id]))
+    const fd = new FormData()
+    fd.append("post_id", post.id)
+    startTransition(async () => {
+      try {
+        await deleteBlogPost(fd)
+      } catch {
+        setDeletedIds((prev) => { const next = new Set(prev); next.delete(post.id); return next })
+      }
+    })
+  }
 
   return (
     <Panel title="Blog management" icon={<FileText className="h-5 w-5" />}>
@@ -1191,6 +1267,14 @@ function BlogPostsPanel({ posts }: { posts: AdminBlogPost[] }) {
                       Open post
                     </Link>
                   )}
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(post)}
+                    disabled={isPending}
+                    className="rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-xs font-black text-red-300 transition hover:bg-red-500/25 disabled:opacity-50"
+                  >
+                    Delete
+                  </button>
                 </div>
               </div>
             </article>
@@ -1298,6 +1382,176 @@ function PaymentSwitch({
   )
 }
 
+function FoundingMembersPanel({
+  sold,
+  cap,
+  members,
+}: {
+  sold: number
+  cap: number
+  members: AdminFoundingMember[]
+}) {
+  const remaining = Math.max(0, cap - sold)
+  return (
+    <Panel title="Founding Trade Members" icon={<ShieldCheck className="h-5 w-5" />}>
+      <div className="mb-5 flex flex-wrap gap-3">
+        <div className="rounded-2xl border border-[#FF6B00]/25 bg-[#FF6B00]/10 px-5 py-3 text-center">
+          <p className="text-3xl font-black text-[#FF6B00]">{sold}</p>
+          <p className="mt-1 text-xs font-black text-white/60">of {cap} sold</p>
+        </div>
+        <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-3 text-center">
+          <p className="text-3xl font-black">{remaining}</p>
+          <p className="mt-1 text-xs font-black text-white/60">spots remaining</p>
+        </div>
+        {remaining === 0 && (
+          <p className="self-center rounded-2xl border border-red-400/25 bg-red-500/10 px-4 py-3 text-sm font-black text-red-300">
+            Sold out — cap reached
+          </p>
+        )}
+      </div>
+      {members.length > 0 ? (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-white/10 text-left text-xs font-black text-white/50">
+                <th className="pb-2 pr-4">#</th>
+                <th className="pb-2 pr-4">Member</th>
+                <th className="pb-2">Joined</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {members.map((member, index) => (
+                <tr key={member.id}>
+                  <td className="py-2 pr-4 font-black text-[#FFB15A]">{index + 1}</td>
+                  <td className="py-2 pr-4 font-bold">{member.email || member.seller_id || "—"}</td>
+                  <td className="py-2 text-white/60">{formatDate(member.created_at)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="text-sm font-bold text-white/50">No founding members yet.</p>
+      )}
+    </Panel>
+  )
+}
+
+function SellerPlanEditForm({
+  plan,
+  isSuperAdmin,
+}: {
+  plan: AdminSellerPlan
+  isSuperAdmin: boolean
+}) {
+  const [state, formAction, isPending] = useActionState(updateSellerPlan, null)
+
+  if (!plan.id) {
+    return (
+      <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-3 text-sm font-bold text-white/50">
+        {plan.name} — not in database yet (run migration to enable editing)
+      </div>
+    )
+  }
+
+  return (
+    <form action={formAction} className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+      <input type="hidden" name="plan_id" value={plan.id} />
+      <p className="text-sm font-black">{plan.name}</p>
+      <div className="grid gap-2 sm:grid-cols-3">
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-black text-white/60">Price (£)</span>
+          <input
+            name="price"
+            type="number"
+            step="0.01"
+            min="0.01"
+            defaultValue={plan.price}
+            disabled={!isSuperAdmin || isPending}
+            className="rounded-xl border border-white/10 bg-[#001633] px-3 py-2 text-sm font-bold text-white disabled:opacity-50"
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-black text-white/60">Listings</span>
+          <input
+            name="listing_count"
+            type="number"
+            step="1"
+            min="1"
+            defaultValue={plan.listing_count}
+            disabled={!isSuperAdmin || isPending}
+            className="rounded-xl border border-white/10 bg-[#001633] px-3 py-2 text-sm font-bold text-white disabled:opacity-50"
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-black text-white/60">Duration (days)</span>
+          <input
+            name="duration_days"
+            type="number"
+            step="1"
+            min="1"
+            defaultValue={plan.duration_days ?? 30}
+            disabled={!isSuperAdmin || isPending}
+            className="rounded-xl border border-white/10 bg-[#001633] px-3 py-2 text-sm font-bold text-white disabled:opacity-50"
+          />
+        </label>
+      </div>
+      <label className="flex flex-col gap-1">
+        <span className="text-xs font-black text-white/60">Features (one per line)</span>
+        <textarea
+          name="features"
+          rows={3}
+          defaultValue={Array.isArray(plan.features) ? plan.features.join("\n") : ""}
+          disabled={!isSuperAdmin || isPending}
+          className="rounded-xl border border-white/10 bg-[#001633] px-3 py-2 text-sm font-bold text-white disabled:opacity-50"
+        />
+      </label>
+      <label className="flex flex-col gap-1">
+        <span className="text-xs font-black text-white/60">Overage price (£) — leave blank if no overage</span>
+        <input
+          name="overage_price"
+          type="number"
+          step="0.01"
+          min="0"
+          defaultValue={plan.overage_price ?? ""}
+          disabled={!isSuperAdmin || isPending}
+          className="rounded-xl border border-white/10 bg-[#001633] px-3 py-2 text-sm font-bold text-white disabled:opacity-50"
+        />
+      </label>
+      <label className="flex items-center gap-3">
+        <input
+          name="active"
+          type="checkbox"
+          defaultChecked={plan.active}
+          disabled={!isSuperAdmin || isPending}
+          className="h-4 w-4 rounded"
+        />
+        <span className="text-sm font-bold">Plan active (visible to sellers)</span>
+      </label>
+      {!isSuperAdmin && (
+        <p className="text-xs font-bold text-amber-200/70">Only the super admin can edit plans.</p>
+      )}
+      {state?.error && (
+        <p className="rounded-xl border border-red-400/25 bg-red-500/10 px-3 py-2 text-sm font-bold text-red-300">
+          {state.error}
+        </p>
+      )}
+      {state?.success && (
+        <p className="rounded-xl border border-green-400/25 bg-green-500/10 px-3 py-2 text-sm font-bold text-green-300">
+          Saved ✓
+        </p>
+      )}
+      <button
+        disabled={!isSuperAdmin || isPending}
+        className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#FF6B00] px-4 py-3 text-sm font-black text-white shadow-lg shadow-[#FF6B00]/20 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        <Save className="h-4 w-4" />
+        {isPending ? "Saving…" : "Save changes"}
+      </button>
+    </form>
+  )
+}
+
 function PaymentSettingsPanel({
   settings,
   sellerPlans,
@@ -1394,6 +1648,28 @@ function PaymentSettingsPanel({
                 <option value="GBP">GBP</option>
               </select>
             </label>
+            <label className="rounded-3xl border border-white/10 bg-[#002E5D]/45 p-4">
+              <span className="block text-sm font-black">Featured boost — 7 days (£)</span>
+              <input
+                name="featured_price_7d"
+                type="number"
+                step="0.01"
+                min="0"
+                defaultValue={settings.featured_price_7d}
+                className="mt-2 w-full rounded-2xl border border-white/10 bg-[#001633] px-3 py-3 text-sm font-bold text-white"
+              />
+            </label>
+            <label className="rounded-3xl border border-white/10 bg-[#002E5D]/45 p-4">
+              <span className="block text-sm font-black">Featured boost — 30 days (£)</span>
+              <input
+                name="featured_price_30d"
+                type="number"
+                step="0.01"
+                min="0"
+                defaultValue={settings.featured_price_30d}
+                className="mt-2 w-full rounded-2xl border border-white/10 bg-[#001633] px-3 py-3 text-sm font-bold text-white"
+              />
+            </label>
           </div>
         </fieldset>
 
@@ -1415,23 +1691,17 @@ function PaymentSettingsPanel({
       <div className="mt-5 grid gap-3 lg:grid-cols-2">
         <div className="rounded-3xl border border-white/10 bg-[#002E5D]/45 p-4">
           <p className="font-black">One-off listing packs</p>
-          <div className="mt-3 space-y-2">
+          <div className="mt-3 space-y-3">
             {packs.map((plan) => (
-              <div key={plan.name} className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2 text-sm font-bold">
-                <span>{plan.name}</span>
-                <span className="text-[#FFB15A]">{formatPlanPrice(plan)}</span>
-              </div>
+              <SellerPlanEditForm key={plan.name} plan={plan} isSuperAdmin={isSuperAdmin} />
             ))}
           </div>
         </div>
         <div className="rounded-3xl border border-white/10 bg-[#002E5D]/45 p-4">
           <p className="font-black">Monthly plans</p>
-          <div className="mt-3 space-y-2">
+          <div className="mt-3 space-y-3">
             {subscriptions.map((plan) => (
-              <div key={plan.name} className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2 text-sm font-bold">
-                <span>{plan.name}</span>
-                <span className="text-[#FFB15A]">{formatPlanPrice(plan)}</span>
-              </div>
+              <SellerPlanEditForm key={plan.name} plan={plan} isSuperAdmin={isSuperAdmin} />
             ))}
           </div>
         </div>

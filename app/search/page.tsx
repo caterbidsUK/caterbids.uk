@@ -1,7 +1,10 @@
 "use client"
 
+import SiteFooter from "@/components/SiteFooter"
+import SiteLogo from "@/components/SiteLogo"
 import { createClient } from '@/lib/supabase/client'
 import { getCurrentUser } from '@/lib/supabase/auth'
+import Image from "next/image"
 import Link from "next/link"
 import { useSearchParams, useRouter } from "next/navigation"
 import { useEffect, useState, Suspense } from "react"
@@ -11,7 +14,6 @@ import {
   Search,
   MapPin,
   Tag,
-  ExternalLink,
   Loader2,
   SlidersHorizontal,
   AlertCircle,
@@ -19,34 +21,23 @@ import {
   Users,
   Heart,
   Home,
+  Menu,
   Plus,
+  X,
   UserCircle,
+  Bell,
 } from "lucide-react"
 
 import type { Database } from '@/types/supabase'
-import { buildMarketplaceSearchQuery, type SearchAnalysis } from '@/lib/search-intelligence'
 import { trustBadgesForListing } from '@/lib/listing-trust'
 import { CATERING_CATEGORIES, MARKETPLACE_CATEGORIES, categoryBySlug, categoryFromParam } from "@/lib/categories"
+import { applyFeaturedFirst, isFeaturedAndActive } from "@/lib/featured"
 
 type Listing = Database['public']['Tables']['listings']['Row']
-type EbayItem = {
-  itemId: string
-  title: string
-  image?: { imageUrl?: string }
-  price?: { value: string; currency: string }
-  itemWebUrl?: string
-  condition?: string
-  city?: string
-  location?: string
-  itemLocation?: {
-    city?: string
-    country?: string
-    postalCode?: string
-  }
-}
 type ConditionFilter = "all" | "new" | "used"
-type PlatformTab = "caterbids" | "ebay" | "facebook" | "gumtree"
+type PlatformTab = "caterbids" | "facebook" | "gumtree"
 type CategoryFilter = "all" | string
+type SortMode = "best" | "newest" | "price_low" | "price_high"
 type SavedFavourite = {
   id: string
   user_id?: string
@@ -67,29 +58,6 @@ type SavedSearch = {
   condition: string
   savedAt: string
 }
-type SupplierResult = {
-  id: string
-  title: string
-  snippet: string
-  link: string
-  source: string
-  domain: string
-  image?: string | null
-  imageType?: "product" | "supplier-logo" | "fallback"
-  badge?: "Used supplier" | "Supplier search shortcut"
-  fallback?: boolean
-}
-
-const SUPPLIER_FALLBACK_IMAGES = {
-  sink: "/supplier-placeholders/sink.jpg",
-  fryer: "/supplier-placeholders/fryer.jpg",
-  oven: "/supplier-placeholders/oven.jpg",
-  fridge: "/supplier-placeholders/fridge.jpg",
-  glasswasher: "/supplier-placeholders/glasswasher.jpg",
-  kebab: "/supplier-placeholders/kebab-machine.jpg",
-  prepTable: "/supplier-placeholders/prep-table.jpg",
-  default: "/supplier-placeholders/catering-equipment.jpg",
-}
 
 const FAVOURITES_KEY = "caterbids_favourites"
 const SAVED_SEARCHES_KEY = "caterbids_saved_searches"
@@ -97,6 +65,7 @@ const LOCAL_LISTINGS_KEY = "caterbids_listings"
 const LOCAL_CURRENT_LISTING_KEY = "caterbids_current_listing"
 const LOCAL_PUBLIC_LISTINGS_KEY = "caterbids_public_listings"
 const GENERIC_MARKETPLACE_TERMS = new Set([
+  "all",
   "commercial",
   "catering",
   "equipment",
@@ -154,14 +123,6 @@ function noConditionResultsText(conditionFilter: ConditionFilter) {
   if (conditionFilter === "new") return "No new results found."
   if (conditionFilter === "used") return "No used results found."
   return "No results found."
-}
-
-function noEbayResultsText(conditionFilter: ConditionFilter, activeFilter: CategoryFilter) {
-  if (activeFilter !== "all") {
-    return "No strong catering equipment results found. Try a related item name, brand or subcategory."
-  }
-
-  return noConditionResultsText(conditionFilter)
 }
 
 function initialCategoryFilter(categoryParam: string): CategoryFilter {
@@ -269,23 +230,34 @@ function listingMatchesSearch(item: Listing, searchQuery: string) {
   return words.some((word) => allText.includes(word))
 }
 
-function supplierFallbackImage(title = "", snippet = "") {
-  const value = `${title} ${snippet}`.toLowerCase()
-
-  if (/(sink|bowl|wash basin|washbasin)/.test(value)) return SUPPLIER_FALLBACK_IMAGES.sink
-  if (/(fryer|chip fryer)/.test(value)) return SUPPLIER_FALLBACK_IMAGES.fryer
-  if (/(oven|combi|rational)/.test(value)) return SUPPLIER_FALLBACK_IMAGES.oven
-  if (/(fridge|freezer|refrigeration|chiller|chilled)/.test(value)) return SUPPLIER_FALLBACK_IMAGES.fridge
-  if (/(glasswasher|dishwasher|warewasher|warewashing)/.test(value)) return SUPPLIER_FALLBACK_IMAGES.glasswasher
-  if (/(kebab|doner|gyro|gyros)/.test(value)) return SUPPLIER_FALLBACK_IMAGES.kebab
-  if (/(stainless|table|prep|preparation)/.test(value)) return SUPPLIER_FALLBACK_IMAGES.prepTable
-
-  return SUPPLIER_FALLBACK_IMAGES.default
+function priceNumber(value?: string | number | null) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0
+  const cleaned = String(value || "").replace(/[^0-9.]/g, "")
+  const parsed = Number.parseFloat(cleaned)
+  return Number.isFinite(parsed) ? parsed : 0
 }
 
-function ebayPrice(item: EbayItem) {
-  const currency = item.price?.currency === "GBP" ? "£" : item.price?.currency || "£"
-  return item.price?.value ? `${currency}${item.price.value}` : ""
+function displayPrice(value?: string | number | null) {
+  if (value === null || value === undefined || value === "") return "Price on request"
+  if (typeof value === "number") return `£${value.toLocaleString("en-GB")}`
+  const text = String(value)
+  return text.includes("£") ? text : `£${text}`
+}
+
+function sortListings<T extends { created_at?: string | null; price?: string | number | null }>(
+  items: T[],
+  mode: SortMode
+) {
+  if (mode === "best") return items
+
+  return [...items].sort((a, b) => {
+    if (mode === "newest") {
+      return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+    }
+    if (mode === "price_low") return priceNumber(a.price) - priceNumber(b.price)
+    if (mode === "price_high") return priceNumber(b.price) - priceNumber(a.price)
+    return 0
+  })
 }
 
 function SearchContent() {
@@ -299,14 +271,6 @@ function SearchContent() {
   const initialCondition = (params.get("condition") || "all") as ConditionFilter
 
   const [listings, setListings] = useState<Listing[]>([])
-  const [ebayResults, setEbayResults] = useState<EbayItem[]>([])
-  const [supplierResults, setSupplierResults] = useState<SupplierResult[]>([])
-  const [loadingEbay, setLoadingEbay] = useState(false)
-  const [loadingSuppliers, setLoadingSuppliers] = useState(false)
-  const [ebayError, setEbayError] = useState<string | null>(null)
-  const [supplierError, setSupplierError] = useState<string | null>(null)
-  const [supplierWarning, setSupplierWarning] = useState<string | null>(null)
-  const [searchAnalysis, setSearchAnalysis] = useState<SearchAnalysis | null>(null)
   const [activeFilter, setActiveFilter] = useState<CategoryFilter>(
     initialCategoryFilter(categoryParam)
   )
@@ -319,44 +283,81 @@ function SearchContent() {
   const [notice, setNotice] = useState("")
   const [savingSearch, setSavingSearch] = useState(false)
   const [activePlatformTab, setActivePlatformTab] = useState<PlatformTab>("caterbids")
-
-  useEffect(() => {
-    if (!userId) {
-      setSavedFavouriteIds(new Set())
-      return
-    }
-
-    setSavedFavouriteIds(
-      new Set(
-        readSavedFavourites()
-          .filter((item) => String(item.user_id ?? "") === userId)
-          .map((item) => item.id)
-      )
-    )
-  }, [userId])
+  const [sortMode, setSortMode] = useState<SortMode>("best")
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
 
   useEffect(() => {
     async function loadUser() {
       const supabase = createClient()
       const user = await getCurrentUser(supabase)
+      const nextUserId = user?.id || null
 
-      setUserId(user?.id || null)
+      setUserId(nextUserId)
+      setSavedFavouriteIds(
+        nextUserId
+          ? new Set(
+              readSavedFavourites()
+                .filter((item) => String(item.user_id ?? "") === nextUserId)
+                .map((item) => item.id)
+            )
+          : new Set()
+      )
     }
 
     loadUser()
   }, [])
 
-  useEffect(() => {
-    setCity(initialCity)
-  }, [initialCity])
-
-  useEffect(() => {
-    setConditionFilter(["all", "new", "used"].includes(initialCondition) ? initialCondition : "all")
-  }, [initialCondition])
-
   function loginRedirect(message: string) {
     const currentPage = `/search${params.toString() ? `?${params.toString()}` : ""}`
     router.push(`/login?next=${encodeURIComponent(currentPage)}&message=${encodeURIComponent(message)}`)
+  }
+
+  function searchUrl({
+    nextQuery = query,
+    nextCity = city,
+    nextCategory = activeFilter,
+    nextCondition = conditionFilter,
+  }: {
+    nextQuery?: string
+    nextCity?: string
+    nextCategory?: CategoryFilter
+    nextCondition?: ConditionFilter
+  } = {}) {
+    const searchParams = new URLSearchParams()
+    const activeCategory = categoryBySlug(nextCategory)
+    const cleanQuery = nextQuery.trim()
+    const cleanCity = nextCity.trim()
+
+    searchParams.set("q", cleanQuery || "all")
+    searchParams.set("category", activeCategory?.title || "All Categories")
+    searchParams.set("location", cleanCity || locationParam || "All UK")
+
+    if (nextCondition !== "all") {
+      searchParams.set("condition", nextCondition)
+    }
+    if (cleanCity) {
+      searchParams.set("city", cleanCity)
+    }
+
+    return `/search?${searchParams.toString()}`
+  }
+
+  function submitSearchForm(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const formData = new FormData(event.currentTarget)
+    const nextQuery = String(formData.get("q") || "").trim()
+    const nextCity = String(formData.get("city") || "").trim()
+
+    setCity(nextCity)
+    router.push(searchUrl({ nextQuery, nextCity }))
+  }
+
+  function clearAllFilters() {
+    setActiveFilter("all")
+    setConditionFilter("all")
+    setCity("")
+    router.push("/search?q=all&category=All%20Categories&location=All%20UK")
   }
 
   async function toggleFavourite(item: SavedFavourite) {
@@ -427,18 +428,7 @@ function SearchContent() {
   }
 
   function applyCityFilter(nextCity = city) {
-    const searchParams = new URLSearchParams()
-    searchParams.set("q", query || "all")
-    const activeCategory = categoryBySlug(activeFilter)
-    searchParams.set("category", activeCategory?.title || "All Categories")
-    searchParams.set("location", locationParam)
-    if (conditionFilter !== "all") {
-      searchParams.set("condition", conditionFilter)
-    }
-    if (nextCity.trim()) {
-      searchParams.set("city", nextCity.trim())
-    }
-    router.push(`/search?${searchParams.toString()}`)
+    router.push(searchUrl({ nextCity }))
   }
 
   function externalSearchQuery() {
@@ -467,7 +457,7 @@ function SearchContent() {
       return
     }
 
-    document.getElementById(tab === "caterbids" ? "caterbids-results" : "ebay-results")?.scrollIntoView({
+    document.getElementById("caterbids-results")?.scrollIntoView({
       behavior: "smooth",
       block: "start",
     })
@@ -610,95 +600,12 @@ function SearchContent() {
     fetchListings()
   }, [query, activeFilter, initialCity])
 
-  useEffect(() => {
-    async function fetchEbayResults() {
-      setLoadingEbay(true)
-      setEbayError(null)
-      try {
-        const ebayParams = new URLSearchParams({
-          q: query || "commercial catering equipment",
-          category: activeFilter,
-        })
-        if (conditionFilter !== "all") {
-          ebayParams.set("condition", conditionFilter)
-        }
-        if (initialCity) {
-          ebayParams.set("city", initialCity)
-        }
-        const res = await fetch(`/api/ebay-search?${ebayParams.toString()}`)
-        const data = await res.json()
-        setSearchAnalysis(data.analysis || null)
-        if (!res.ok) {
-          setEbayError(data.error || 'API Error')
-          setEbayResults([])
-          setLoadingEbay(false)
-          return
-        }
-        if (data.items && Array.isArray(data.items)) {
-          setEbayResults(data.items.slice(0, 50).map((item: EbayItem) => ({
-            ...item,
-            condition: normaliseCondition(item.condition),
-          })))
-        } else if (data.itemSummaries && Array.isArray(data.itemSummaries)) {
-          setEbayResults(data.itemSummaries.slice(0, 50).map((item: EbayItem) => ({
-            ...item,
-            condition: normaliseCondition(item.condition),
-          })))
-        } else {
-          setEbayResults([])
-        }
-      } catch (error) {
-        console.warn("EBAY ERROR:", error)
-        setEbayError('Network Error')
-        setEbayResults([])
-      }
-      setLoadingEbay(false)
-    }
-    fetchEbayResults()
-  }, [query, conditionFilter, activeFilter, initialCity])
-
-  useEffect(() => {
-    async function fetchSupplierResults() {
-      setLoadingSuppliers(true)
-      setSupplierError(null)
-      setSupplierWarning(null)
-
-      try {
-        const supplierParams = new URLSearchParams({
-          q: query || "commercial catering equipment",
-        })
-        const response = await fetch(`/api/supplier-search?${supplierParams.toString()}`)
-        const data = await response.json()
-
-        if (!response.ok) {
-          setSupplierError(data.error || "Supplier search unavailable")
-          setSupplierResults([])
-          return
-        }
-
-        setSupplierResults(Array.isArray(data.items) ? data.items : [])
-        setSupplierWarning(data.warning || null)
-      } catch (error) {
-        console.warn("SUPPLIER SEARCH ERROR:", error)
-        setSupplierError("Supplier search unavailable")
-        setSupplierResults([])
-        setSupplierWarning(null)
-      } finally {
-        setLoadingSuppliers(false)
-      }
-    }
-
-    fetchSupplierResults()
-  }, [query])
-
   const filterChips: { key: CategoryFilter; label: string }[] = [
     { key: "all", label: "All Results" },
     ...MARKETPLACE_CATEGORIES.map((category) => ({ key: category.slug, label: category.title })),
     ...CATERING_CATEGORIES.map((category) => ({ key: category.slug, label: category.title })),
   ]
-  const platformSearchQuery = searchAnalysis
-    ? buildMarketplaceSearchQuery(searchAnalysis)
-    : query || "commercial catering equipment"
+  const platformSearchQuery = query || "commercial catering equipment"
   const filterByCondition = <T extends { condition?: string | null }>(items: T[]) => {
     if (conditionFilter === "all") return items
 
@@ -713,378 +620,560 @@ function SearchContent() {
       condition: normaliseCondition(listing.condition),
     }))
   )
-  const filteredEbayResults = filterByCondition(ebayResults)
+  const sortedCaterBidsResults = applyFeaturedFirst(sortListings(filteredCaterBidsResults, sortMode) as Record<string, unknown>[]) as typeof filteredCaterBidsResults
+  const totalVisibleResults = sortedCaterBidsResults.length
+  const activeCategory = categoryBySlug(activeFilter)
+  const heading =
+    query && query !== "all"
+      ? `Search results for "${query}"`
+      : activeCategory
+        ? `${activeCategory.title} results`
+        : "Catering equipment results"
+  const activeFilterCount = [
+    activeFilter !== "all",
+    conditionFilter !== "all",
+    Boolean(city.trim() || initialCity),
+  ].filter(Boolean).length
+  const sourceFilters = [
+    { key: "caterbids" as PlatformTab, label: "CaterBids", count: sortedCaterBidsResults.length },
+    { key: "facebook" as PlatformTab, label: "Facebook", count: null },
+    { key: "gumtree" as PlatformTab, label: "Gumtree", count: null },
+  ]
+  const quickFilterChips = [
+    {
+      label: "All Results",
+      active: activeFilter === "all" && conditionFilter === "all",
+      count: totalVisibleResults,
+      onClick: () => {
+        setActiveFilter("all")
+        setConditionFilter("all")
+      },
+    },
+    {
+      label: "Catering Equipment",
+      active: activeFilter === "catering-equipment",
+      count: null,
+      onClick: () => setActiveFilter("catering-equipment"),
+    },
+    {
+      label: "Vans & Trailers",
+      active: activeFilter === "catering-vans-trailers",
+      count: null,
+      onClick: () => setActiveFilter("catering-vans-trailers"),
+    },
+    {
+      label: "Businesses",
+      active: activeFilter === "catering-businesses",
+      count: null,
+      onClick: () => setActiveFilter("catering-businesses"),
+    },
+    {
+      label: "New",
+      active: conditionFilter === "new",
+      count: null,
+      onClick: () => setConditionFilter(conditionFilter === "new" ? "all" : "new"),
+    },
+    {
+      label: "Used",
+      active: conditionFilter === "used",
+      count: null,
+      onClick: () => setConditionFilter(conditionFilter === "used" ? "all" : "used"),
+    },
+  ]
 
   return (
-    <main className="app-bg min-h-screen pb-28 text-white">
-      <div className="mx-auto max-w-3xl px-4 sm:px-6">
-        {/* Header */}
-        <div className="flex items-center gap-3 py-5">
-          <button
-            onClick={() => router.back()}
-            className="soft-button rounded-2xl p-2.5"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </button>
-
-          <div>
-            <h1 className="text-xl font-bold">
-              Cater<span className="text-[#FF6B00]">Bids</span>.UK
-            </h1>
-            <p className="text-xs font-medium tracking-wider text-[#FF6B00] uppercase">
-              Live Search Results
-            </p>
-          </div>
-        </div>
-
-        {/* Search Summary */}
-        <div className="premium-card mb-5 rounded-3xl p-5">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <div className="flex items-center gap-2 text-sm text-white/60">
-                <Search className="h-4 w-4" />
-                Results for
-              </div>
-              <div className="mt-1 flex flex-wrap items-center gap-2">
-                <h2 className="text-lg font-bold">{query || "All listings"}</h2>
-                {categoryParam !== "All Categories" && (
-                  <span className="premium-badge inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium">
-                    <Tag className="h-3 w-3" /> {categoryParam}
-                  </span>
-                )}
-                {locationParam !== "All UK" && (
-                  <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.08] px-2.5 py-0.5 text-xs font-medium text-white/70">
-                    <MapPin className="h-3 w-3" /> {locationParam}
-                  </span>
-                )}
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={saveThisSearch}
-              disabled={savingSearch}
-              className="soft-button inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl px-4 py-2 text-sm font-bold disabled:opacity-60"
-            >
-              {savingSearch ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bookmark className="h-4 w-4" />}
-              Save search
-            </button>
-          </div>
+    <main className="min-h-screen bg-[#001A35] bg-[radial-gradient(circle_at_top_left,rgba(255,107,0,0.14),transparent_28rem),linear-gradient(180deg,#001A35_0%,#002E5D_46%,#001A35_100%)] pb-28 text-white">
+      <header className="sticky top-0 z-40 border-b border-white/10 bg-[#001A35]/92 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-3 sm:px-6 lg:px-8">
+          <Link href="/" className="flex shrink-0 items-center gap-3 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6B00]">
+            <SiteLogo size="sm" priority />
+          </Link>
 
           <form
-            className="mt-4 flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3"
-            onSubmit={(event) => {
-              event.preventDefault()
-              applyCityFilter()
-            }}
+            onSubmit={submitSearchForm}
+            className="hidden min-w-0 flex-1 items-center gap-2 rounded-2xl border border-white/15 bg-white/[0.08] px-4 py-2.5 shadow-inner shadow-black/20 lg:flex"
           >
-            <MapPin className="h-4 w-4 shrink-0 text-white/50" />
+            <Search className="h-5 w-5 shrink-0 text-white/55" />
             <input
-              value={city}
-              onChange={(event) => setCity(event.target.value)}
-              placeholder="Postcode or city: Birmingham, B12, M1"
-              className="w-full bg-transparent text-sm text-white placeholder:text-white/40 outline-none"
+              name="q"
+              defaultValue={query === "all" ? "" : query}
+              placeholder="Search catering equipment, spare parts..."
+              className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-white outline-none placeholder:text-white/45"
             />
-            <button
-              type="submit"
-              className="premium-button shrink-0 rounded-xl px-3 py-1.5 text-xs font-bold text-white"
-            >
-              Apply
-            </button>
+            <input type="hidden" name="city" value={city} readOnly />
           </form>
 
-          <details className="mt-4 rounded-2xl border border-white/10 bg-white/[0.04] p-3">
-            <summary className="cursor-pointer text-xs font-black uppercase tracking-[0.18em] text-[#FF6B00]">
-              More marketplaces
-            </summary>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-              <button
-                type="button"
-                onClick={() => handlePlatformTab("ebay")}
-                className="soft-button min-h-11 rounded-2xl px-4 py-2 text-sm font-bold"
-              >
-                eBay
-              </button>
-              <a
-                href={externalPlatformUrl("facebook")}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="Opens Facebook Marketplace search in a new tab"
-                className="soft-button flex min-h-11 items-center justify-center rounded-2xl px-4 py-2 text-sm font-bold"
-              >
-                Facebook ↗
-              </a>
-              <a
-                href={externalPlatformUrl("gumtree")}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="Opens Gumtree search in a new tab"
-                className="soft-button flex min-h-11 items-center justify-center rounded-2xl px-4 py-2 text-sm font-bold"
-              >
-                Gumtree ↗
-              </a>
-            </div>
-          </details>
-        </div>
-
-        {notice && (
-          <div className="premium-card mb-5 rounded-2xl border-[#FF6B00]/25 px-4 py-3 text-sm font-semibold text-orange-100">
-            {notice}
-          </div>
-        )}
-
-        {searchAnalysis && (
-          <CaterBotCard analysis={searchAnalysis} />
-        )}
-
-        {/* Filter Chips */}
-        <div className="mb-6 flex items-center gap-2 overflow-x-auto pb-1">
-          <SlidersHorizontal className="h-4 w-4 shrink-0 text-white/40" />
-          {filterChips.map((chip) => (
-            <button
-              key={chip.key}
-              onClick={() => setActiveFilter(chip.key)}
-              className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6B00] ${
-                activeFilter === chip.key
-                  ? "premium-button text-white"
-                  : "soft-button text-white/70"
-              }`}
-            >
-              {chip.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Condition Filter */}
-        <div className="-mt-3 mb-6 flex items-center gap-2 overflow-x-auto pb-1">
-          {conditionFilters.map((filter) => (
-            <button
-              key={filter.key}
-              type="button"
-              onClick={() => setConditionFilter(filter.key)}
-              className={`shrink-0 rounded-full border px-4 py-2 text-xs font-bold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6B00] ${
-                conditionFilter === filter.key
-                  ? "border-[#FF6B00] bg-[#FF6B00] text-white shadow-lg shadow-[#FF6B00]/25"
-                  : "border-white/10 bg-[#102641]/80 text-white/70 hover:border-white/20 hover:bg-white/10"
-              }`}
-            >
-              {filter.label}
-            </button>
-          ))}
-        </div>
-
-        <PlatformTabs activeTab={activePlatformTab} onTabClick={handlePlatformTab} />
-
-        {/* CaterBids Results */}
-        <div id="caterbids-results" className="scroll-mt-24">
-          <SectionHeader title="CaterBids Results" count={filteredCaterBidsResults.length} />
-        </div>
-
-        {filteredCaterBidsResults.length === 0 && (
-          <div className="premium-card mb-8 flex flex-col items-center rounded-3xl p-8 text-center">
-            <AlertCircle className="h-10 w-10 text-white/30" />
-            <h3 className="mt-4 text-xl font-black">No CaterBids listings yet</h3>
-            <p className="mt-2 max-w-md text-sm text-white/65">
-              {conditionFilter === "all" ? "Try another search or sell your item." : noConditionResultsText(conditionFilter)}
-            </p>
-            <div className="mt-5 flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
-              <button
-                onClick={() => router.push("/post-listing")}
-                className="premium-button min-h-11 rounded-2xl px-5 py-3 text-sm font-bold text-white"
-              >
-                Sell an item
-              </button>
-              <button
-                onClick={saveThisSearch}
-                className="soft-button min-h-11 rounded-2xl px-5 py-3 text-sm font-bold"
-              >
-                Save search
-              </button>
-            </div>
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {filteredCaterBidsResults.map((item, index) => {
-            const itemId = listingId(item.id)
-            const itemImage =
-              Array.isArray(item.images) && item.images.length > 0
-                ? item.images.find((url) => typeof url === "string" && Boolean(url))
-                : item.image_url
-
-            return (
-              <ListingCard
-                key={itemId || `caterbids-${index}`}
-                item={item}
-                isSaved={savedFavouriteIds.has(`caterbids:${itemId}`)}
-                onClick={() => router.push(`/listing?id=${encodeURIComponent(itemId)}`)}
-                onToggleFavourite={() =>
-                  toggleFavourite({
-                    id: `caterbids:${itemId}`,
-                    source: "caterbids",
-                    title: item.title,
-                    price: item.price,
-                    location: item.city || item.location || "UK",
-                    category: item.category,
-                    condition: item.condition || "",
-                    imageUrl: itemImage || "",
-                    url: `/listing?id=${itemId}`,
-                    savedAt: new Date().toISOString(),
-                  })
-                }
-              />
-            )
-          })}
-        </div>
-
-        <section className="premium-card mt-8 rounded-3xl border-[#FF6B00]/25 p-5">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h3 className="text-xl font-black">Sell catering equipment</h3>
-              <p className="mt-1 text-sm text-white/65">Create a listing in minutes.</p>
-            </div>
+          <nav className="ml-auto hidden items-center gap-2 text-sm font-bold text-white/85 lg:flex">
+            <Link href="/post-listing" className="rounded-xl px-3 py-2 hover:text-[#FF6B00]">Sell</Link>
+            <Link href="/favourites" className="inline-flex items-center gap-2 rounded-xl px-3 py-2 hover:text-[#FF6B00]">
+              <Heart className="h-4 w-4" /> Saved
+            </Link>
+            <Link href="/account" className="inline-flex items-center gap-2 rounded-xl px-3 py-2 hover:text-[#FF6B00]">
+              <UserCircle className="h-4 w-4" /> Account
+            </Link>
             <Link
               href="/post-listing"
-              className="premium-button inline-flex min-h-12 items-center justify-center rounded-2xl px-5 py-3 text-sm font-black"
+              className="ml-2 rounded-2xl bg-[#FF6B00] px-5 py-3 font-black text-white shadow-lg shadow-[#FF6B00]/25 hover:bg-orange-500"
             >
-              Sell an item
+              Sell for free
             </Link>
-          </div>
-        </section>
+          </nav>
 
-        {/* Live eBay Results */}
-        <div id="ebay-results" className="mt-10 scroll-mt-24">
-          <SectionHeader title="Live eBay Results" count={filteredEbayResults.length} loading={loadingEbay} />
-          {ebayError && (
-            <div className="premium-card mb-6 rounded-3xl border-orange-400/40 p-4">
-              <AlertCircle className="h-5 w-5 text-orange-400 inline" />
-              <span className="ml-2 text-sm font-medium text-orange-200">eBay Error: {ebayError}</span>
-            </div>
-          )}
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen(true)}
+            className="ml-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-white lg:hidden"
+            aria-label="Open menu"
+          >
+            <Menu className="h-6 w-6" />
+          </button>
         </div>
+      </header>
 
-        {loadingEbay && (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <SkeletonCard />
-            <SkeletonCard />
-          </div>
-        )}
-
-        {!loadingEbay && !ebayError && filteredEbayResults.length === 0 && (
-          <div className="premium-card mb-4 flex flex-col items-center rounded-3xl p-8 text-center">
-            <AlertCircle className="h-10 w-10 text-white/30" />
-            <p className="mt-3 text-sm text-white/60">{noEbayResultsText(conditionFilter, activeFilter)}</p>
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {filteredEbayResults.map((item, index) => (
-            <div key={item.itemId} className="contents">
-              {index === 4 && (
-                <ComparePricesCard
-                  facebookUrl={externalPlatformUrl("facebook")}
-                  gumtreeUrl={externalPlatformUrl("gumtree")}
-                />
-              )}
-              <EbayCard
-                item={item}
-                isSaved={savedFavouriteIds.has(`ebay:${item.itemId}`)}
-                onToggleFavourite={() =>
-                  toggleFavourite({
-                    id: `ebay:${item.itemId}`,
-                    source: "ebay",
-                    title: item.title,
-                    price: ebayPrice(item),
-                    location: item.city || item.location || item.itemLocation?.city || item.itemLocation?.postalCode || item.itemLocation?.country || "UK",
-                    category: "eBay",
-                    condition: item.condition || "",
-                    imageUrl: item.image?.imageUrl || "",
-                    url: item.itemWebUrl || "",
-                    savedAt: new Date().toISOString(),
-                  })
-                }
-              />
+      {mobileMenuOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm lg:hidden" role="dialog" aria-modal="true">
+          <div className="ml-auto flex h-full w-[82vw] max-w-sm flex-col border-l border-white/10 bg-[#062747] p-5 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <SiteLogo size="sm" />
+              </div>
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/10"
+                aria-label="Close menu"
+              >
+                <X className="h-5 w-5" />
+              </button>
             </div>
-          ))}
+            <div className="mt-8 grid gap-3 text-base font-bold">
+              {[
+                ["Home", "/"],
+                ["Browse Equipment", "/search?q=all&category=All%20Categories&location=All%20UK"],
+                ["Sell an Item", "/post-listing"],
+                ["Saved Items", "/favourites"],
+                ["Account", "/account"],
+              ].map(([label, href]) => (
+                <Link
+                  key={href}
+                  href={href}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white hover:border-[#FF6B00]/40 hover:text-[#FF6B00]"
+                >
+                  {label}
+                </Link>
+              ))}
+            </div>
+          </div>
         </div>
+      )}
 
-        <section id="supplier-results" className="mt-10 scroll-mt-24">
-          <SectionHeader title="Supplier Results" count={supplierResults.length} loading={loadingSuppliers} />
-
-          {supplierError && (
-            <div className="premium-card mb-6 rounded-3xl border-orange-400/40 p-4">
-              <AlertCircle className="inline h-5 w-5 text-orange-400" />
-              <span className="ml-2 text-sm font-medium text-orange-200">{supplierError}</span>
+      {mobileFiltersOpen && (
+        <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-sm lg:hidden" role="dialog" aria-modal="true">
+          <div className="absolute inset-x-0 bottom-0 max-h-[86vh] overflow-y-auto rounded-t-[2rem] border border-white/10 bg-[#062747] p-5 shadow-2xl">
+            <div className="mb-5 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.22em] text-[#FF6B00]">Filters</p>
+                <h2 className="text-2xl font-black">Refine results</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMobileFiltersOpen(false)}
+                className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/10"
+                aria-label="Close filters"
+              >
+                <X className="h-5 w-5" />
+              </button>
             </div>
-          )}
 
-          {!supplierError && supplierWarning && (
-            <div className="premium-card mb-6 rounded-3xl border-[#FF6B00]/30 p-4">
-              <AlertCircle className="inline h-5 w-5 text-[#FF6B00]" />
-              <span className="ml-2 text-sm font-medium text-orange-100">{supplierWarning}</span>
+            <div className="space-y-6">
+              <FilterGroup title="Category">
+                <div className="grid gap-2">
+                  {filterChips.map((chip) => (
+                    <button
+                      key={chip.key}
+                      type="button"
+                      onClick={() => setActiveFilter(chip.key)}
+                      className={`rounded-2xl border px-3 py-2 text-left text-sm font-bold ${
+                        activeFilter === chip.key
+                          ? "border-[#FF6B00] bg-[#FF6B00] text-white"
+                          : "border-white/10 bg-white/5 text-white/75"
+                      }`}
+                    >
+                      {chip.label}
+                    </button>
+                  ))}
+                </div>
+              </FilterGroup>
+
+              <FilterGroup title="Condition">
+                <div className="grid grid-cols-3 gap-2">
+                  {conditionFilters.map((filter) => (
+                    <button
+                      key={filter.key}
+                      type="button"
+                      onClick={() => setConditionFilter(filter.key)}
+                      className={`rounded-2xl border px-3 py-2 text-sm font-bold ${
+                        conditionFilter === filter.key
+                          ? "border-[#FF6B00] bg-[#FF6B00] text-white"
+                          : "border-white/10 bg-white/5 text-white/75"
+                      }`}
+                    >
+                      {filter.label}
+                    </button>
+                  ))}
+                </div>
+              </FilterGroup>
+
+              <FilterGroup title="Location">
+                <form onSubmit={submitSearchForm} className="grid gap-3">
+                  <input type="hidden" name="q" value={query} readOnly />
+                  <input
+                    name="city"
+                    defaultValue={city}
+                    placeholder="Postcode or city"
+                    className="min-h-12 rounded-2xl border border-white/10 bg-white/[0.08] px-4 text-sm font-semibold text-white outline-none placeholder:text-white/45 focus:border-[#FF6B00]"
+                  />
+                  <button type="submit" className="rounded-2xl bg-[#FF6B00] px-4 py-3 text-sm font-black text-white">
+                    Apply location
+                  </button>
+                </form>
+              </FilterGroup>
+
+              <FilterGroup title="Sources">
+                <div className="grid grid-cols-2 gap-2">
+                  {sourceFilters.map((source) => (
+                    <button
+                      key={source.key}
+                      type="button"
+                      onClick={() => handlePlatformTab(source.key)}
+                      className={`rounded-2xl border px-3 py-2 text-left text-sm font-bold ${
+                        activePlatformTab === source.key
+                          ? "border-[#FF6B00] bg-[#FF6B00] text-white"
+                          : "border-white/10 bg-white/5 text-white/75"
+                      }`}
+                    >
+                      {source.label}
+                      {source.count !== null && <span className="block text-xs opacity-70">{source.count} shown</span>}
+                    </button>
+                  ))}
+                </div>
+              </FilterGroup>
+
+              <div className="grid grid-cols-2 gap-3">
+                <button type="button" onClick={clearAllFilters} className="rounded-2xl border border-white/15 px-4 py-3 text-sm font-black text-white">
+                  Clear all
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMobileFiltersOpen(false)}
+                  className="rounded-2xl bg-[#FF6B00] px-4 py-3 text-sm font-black text-white"
+                >
+                  Show results
+                </button>
+              </div>
             </div>
-          )}
+          </div>
+        </div>
+      )}
 
-          {loadingSuppliers && (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <SkeletonCard />
-              <SkeletonCard />
-            </div>
-          )}
-
-          {!loadingSuppliers && !supplierError && supplierResults.length === 0 && (
-            <div className="premium-card mb-4 flex flex-col items-center rounded-3xl p-8 text-center">
-              <AlertCircle className="h-10 w-10 text-white/30" />
-              <p className="mt-3 text-sm text-white/60">
-                No trusted used supplier pages found for this search yet.
+      <section className="border-b border-white/10 bg-[#002E5D]/20">
+        <div className="mx-auto max-w-7xl px-4 py-7 sm:px-6 lg:px-8 lg:py-10">
+          <div className="flex flex-col gap-6">
+            <div className="max-w-3xl">
+              <p className="text-xs font-black uppercase tracking-[0.22em] text-[#FF6B00]">Marketplace search</p>
+              <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-5xl">{heading}</h1>
+              <p className="mt-3 max-w-2xl text-base font-semibold text-[#A7B5C9]">
+                Find quality used and new catering equipment from UK sellers.
               </p>
             </div>
-          )}
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {supplierResults.map((item) => (
-              <SupplierResultCard key={item.id || item.link || item.title} item={item} />
-            ))}
+            <form onSubmit={submitSearchForm} className="grid gap-3 lg:grid-cols-[1.25fr_1fr_auto_auto]">
+              <label className="flex min-h-14 items-center gap-3 rounded-2xl border border-white/15 bg-[#082D50]/90 px-4 shadow-inner shadow-black/25">
+                <Search className="h-5 w-5 shrink-0 text-[#FF6B00]" />
+                <span className="sr-only">Search keyword</span>
+                <input
+                  name="q"
+                  defaultValue={query === "all" ? "" : query}
+                  placeholder="Catering equipment"
+                  className="min-w-0 flex-1 bg-transparent text-sm font-bold text-white outline-none placeholder:text-white/45"
+                />
+              </label>
+              <label className="flex min-h-14 items-center gap-3 rounded-2xl border border-white/15 bg-[#082D50]/90 px-4 shadow-inner shadow-black/25">
+                <MapPin className="h-5 w-5 shrink-0 text-[#FF6B00]" />
+                <span className="sr-only">Location</span>
+                <input
+                  name="city"
+                  defaultValue={city}
+                  placeholder="Postcode or city"
+                  className="min-w-0 flex-1 bg-transparent text-sm font-bold text-white outline-none placeholder:text-white/45"
+                />
+              </label>
+              <button
+                type="submit"
+                className="min-h-14 rounded-2xl bg-[#FF6B00] px-8 text-sm font-black text-white shadow-lg shadow-[#FF6B00]/25 hover:bg-orange-500"
+              >
+                Search
+              </button>
+              <button
+                type="button"
+                onClick={saveThisSearch}
+                disabled={savingSearch}
+                className="min-h-14 rounded-2xl border border-white/15 bg-[#082D50]/90 px-5 text-sm font-black text-white hover:border-[#FF6B00]/50 disabled:opacity-60"
+              >
+                {savingSearch ? "Saving..." : "Save search"}
+              </button>
+            </form>
+
+            <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0">
+              {quickFilterChips.map((chip) => (
+                <button
+                  key={chip.label}
+                  type="button"
+                  onClick={chip.onClick}
+                  className={`shrink-0 rounded-full px-4 py-2 text-xs font-black transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6B00] ${
+                    chip.active
+                      ? "bg-[#FF6B00] text-white shadow-lg shadow-[#FF6B00]/25"
+                      : "border border-white/10 bg-[#082D50] text-white/75 hover:border-[#FF6B00]/40"
+                  }`}
+                >
+                  {chip.label}
+                  {chip.count !== null && chip.count > 0 && <span className="ml-1 opacity-75">({chip.count})</span>}
+                </button>
+              ))}
+            </div>
+
+            {notice && (
+              <div className="rounded-2xl border border-[#FF6B00]/30 bg-[#FF6B00]/10 px-4 py-3 text-sm font-bold text-orange-100">
+                {notice}
+              </div>
+            )}
           </div>
+        </div>
+      </section>
+
+      <div className="mx-auto grid max-w-7xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[280px_1fr] lg:px-8">
+        <aside className="hidden lg:block">
+          <div className="sticky top-24 space-y-4 rounded-3xl border border-white/12 bg-[#062747]/92 p-5 shadow-2xl shadow-black/20">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-black">Filters</h2>
+              <button type="button" onClick={clearAllFilters} className="text-xs font-black text-[#FF6B00] hover:text-orange-300">
+                Clear all
+              </button>
+            </div>
+
+            <FilterGroup title="Category">
+              <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+                {filterChips.map((chip) => (
+                  <button
+                    key={chip.key}
+                    type="button"
+                    onClick={() => setActiveFilter(chip.key)}
+                    className={`flex w-full items-center justify-between rounded-2xl border px-3 py-2 text-left text-sm font-bold ${
+                      activeFilter === chip.key
+                        ? "border-[#FF6B00] bg-[#FF6B00]/15 text-white"
+                        : "border-white/10 bg-white/[0.04] text-white/70 hover:border-white/20"
+                    }`}
+                  >
+                    {chip.label}
+                    {activeFilter === chip.key && <span className="h-2 w-2 rounded-full bg-[#FF6B00]" />}
+                  </button>
+                ))}
+              </div>
+            </FilterGroup>
+
+            <FilterGroup title="Condition">
+              <div className="grid gap-2">
+                {conditionFilters.map((filter) => (
+                  <button
+                    key={filter.key}
+                    type="button"
+                    onClick={() => setConditionFilter(filter.key)}
+                    className={`rounded-2xl border px-3 py-2 text-left text-sm font-bold ${
+                      conditionFilter === filter.key
+                        ? "border-[#FF6B00] bg-[#FF6B00]/15 text-white"
+                        : "border-white/10 bg-white/[0.04] text-white/70 hover:border-white/20"
+                    }`}
+                  >
+                    {filter.label}
+                  </button>
+                ))}
+              </div>
+            </FilterGroup>
+
+            <FilterGroup title="Location">
+              <form onSubmit={submitSearchForm} className="grid gap-3">
+                <input type="hidden" name="q" value={query} readOnly />
+                <input
+                  name="city"
+                  defaultValue={city}
+                  placeholder="Postcode or city"
+                  className="min-h-11 rounded-2xl border border-white/10 bg-white/[0.06] px-3 text-sm font-semibold text-white outline-none placeholder:text-white/40 focus:border-[#FF6B00]"
+                />
+                <button type="submit" className="rounded-2xl bg-[#FF6B00] px-4 py-2.5 text-sm font-black text-white">
+                  Apply
+                </button>
+              </form>
+            </FilterGroup>
+
+            <FilterGroup title="Sources">
+              <div className="grid gap-2">
+                {sourceFilters.map((source) => (
+                  <button
+                    key={source.key}
+                    type="button"
+                    onClick={() => handlePlatformTab(source.key)}
+                    className={`rounded-2xl border px-3 py-2 text-left text-sm font-bold ${
+                      activePlatformTab === source.key
+                        ? "border-[#FF6B00] bg-[#FF6B00]/15 text-white"
+                        : "border-white/10 bg-white/[0.04] text-white/70 hover:border-white/20"
+                    }`}
+                  >
+                    {source.label}
+                    {source.count !== null && <span className="block text-xs text-white/45">{source.count} shown</span>}
+                  </button>
+                ))}
+              </div>
+            </FilterGroup>
+          </div>
+        </aside>
+
+        <section className="min-w-0 space-y-5">
+          <div className="flex items-center gap-3 lg:hidden">
+            <button
+              type="button"
+              onClick={() => setMobileFiltersOpen(true)}
+              className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-2xl border border-white/15 bg-[#082D50] text-sm font-black text-white"
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+              Filters {activeFilterCount > 0 && <span className="rounded-full bg-[#FF6B00] px-2 py-0.5 text-xs">{activeFilterCount}</span>}
+            </button>
+            <label className="flex min-h-12 flex-1 items-center gap-2 rounded-2xl border border-white/15 bg-[#082D50] px-3 text-sm font-black text-white">
+              Sort
+              <select
+                value={sortMode}
+                onChange={(event) => setSortMode(event.target.value as SortMode)}
+                className="min-w-0 flex-1 bg-transparent text-sm font-bold text-white outline-none"
+              >
+                <option className="bg-[#062747]" value="best">Best match</option>
+                <option className="bg-[#062747]" value="newest">Newest</option>
+                <option className="bg-[#062747]" value="price_low">Price low</option>
+                <option className="bg-[#062747]" value="price_high">Price high</option>
+              </select>
+            </label>
+          </div>
+
+          <div className="rounded-3xl border border-white/12 bg-[#062747]/90 p-4 shadow-2xl shadow-black/20">
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-black text-white">{totalVisibleResults} results found</p>
+                <p className="mt-1 text-xs font-semibold text-[#A7B5C9]">
+                  Browse CaterBids marketplace listings from UK sellers.
+                </p>
+              </div>
+              <label className="hidden items-center gap-2 text-sm font-bold text-white/75 sm:flex">
+                Sort by
+                <select
+                  value={sortMode}
+                  onChange={(event) => setSortMode(event.target.value as SortMode)}
+                  className="rounded-2xl border border-white/15 bg-[#082D50] px-4 py-2.5 text-sm font-bold text-white outline-none focus:border-[#FF6B00]"
+                >
+                  <option className="bg-[#062747]" value="best">Best match</option>
+                  <option className="bg-[#062747]" value="newest">Newest listed</option>
+                  <option className="bg-[#062747]" value="price_low">Price: low to high</option>
+                  <option className="bg-[#062747]" value="price_high">Price: high to low</option>
+                </select>
+              </label>
+            </div>
+
+            <div id="caterbids-results" className="scroll-mt-28">
+              <ResultGroupHeader title="CaterBids listings" count={sortedCaterBidsResults.length} />
+              {sortedCaterBidsResults.length === 0 ? (
+                <EmptyResults
+                  title="No matching CaterBids listings found"
+                  text={conditionFilter === "all" ? "Try adjusting your filters or search another equipment type." : noConditionResultsText(conditionFilter)}
+                  onClear={clearAllFilters}
+                />
+              ) : (
+                <div className="grid gap-3">
+                  {sortedCaterBidsResults.map((item, index) => {
+                    const itemId = listingId(item.id)
+                    const itemImage =
+                      Array.isArray(item.images) && item.images.length > 0
+                        ? item.images.find((url) => typeof url === "string" && Boolean(url))
+                        : item.image_url
+
+                    return (
+                      <ListingCard
+                        key={itemId || `caterbids-${index}`}
+                        item={item}
+                        isSaved={savedFavouriteIds.has(`caterbids:${itemId}`)}
+                        onClick={() => router.push(`/listing?id=${encodeURIComponent(itemId)}`)}
+                        onToggleFavourite={() =>
+                          toggleFavourite({
+                            id: `caterbids:${itemId}`,
+                            source: "caterbids",
+                            title: item.title,
+                            price: item.price,
+                            location: item.city || item.location || "UK",
+                            category: item.category,
+                            condition: item.condition || "",
+                            imageUrl: itemImage || "",
+                            url: `/listing?id=${itemId}`,
+                            savedAt: new Date().toISOString(),
+                          })
+                        }
+                      />
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            <section className="mt-5 rounded-3xl border border-[#FF6B00]/25 bg-[#FF6B00]/10 p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h3 className="text-lg font-black">Sell catering equipment</h3>
+                  <p className="mt-1 text-sm font-semibold text-orange-100/80">Create a CaterBids listing in minutes.</p>
+                </div>
+                <Link href="/post-listing" className="rounded-2xl bg-[#FF6B00] px-5 py-3 text-center text-sm font-black text-white">
+                  Start listing
+                </Link>
+              </div>
+            </section>
+
+          </div>
+
+          <details className="rounded-3xl border border-white/12 bg-[#062747]/80 p-4">
+            <summary className="cursor-pointer text-base font-black text-white">More marketplaces</summary>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <PlatformButton
+                icon={<Users className="h-5 w-5 text-blue-400" />}
+                label="Facebook Marketplace ↗"
+                color="from-blue-500/10 to-transparent"
+                href={externalPlatformUrl("facebook")}
+                ariaLabel="Opens Facebook Marketplace search in a new tab"
+              />
+              <PlatformButton
+                icon={<TreePine className="h-5 w-5 text-green-400" />}
+                label="Gumtree ↗"
+                color="from-green-500/10 to-transparent"
+                href={externalPlatformUrl("gumtree")}
+                ariaLabel="Opens Gumtree search in a new tab"
+              />
+            </div>
+          </details>
+
         </section>
-
-        {/* Other Platforms */}
-        <details className="mt-10">
-          <summary className="cursor-pointer text-base font-bold text-white">More marketplaces</summary>
-          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <PlatformButton
-            icon={<Users className="h-5 w-5 text-blue-400" />}
-            label="Facebook ↗"
-            color="from-blue-500/10 to-transparent"
-            href={externalPlatformUrl("facebook")}
-            ariaLabel="Opens Facebook Marketplace search in a new tab"
-          />
-          <PlatformButton
-            icon={<TreePine className="h-5 w-5 text-green-400" />}
-            label="Gumtree ↗"
-            color="from-green-500/10 to-transparent"
-            href={externalPlatformUrl("gumtree")}
-            ariaLabel="Opens Gumtree search in a new tab"
-          />
-          </div>
-        </details>
-
-        <SearchFooter />
       </div>
 
-      <nav className="bottom-nav fixed bottom-0 left-0 right-0 z-50 sm:hidden">
+      <SiteFooter />
+
+      <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-white/10 bg-[#001A35]/95 backdrop-blur-xl sm:hidden">
         <div className="mx-auto flex max-w-3xl items-end justify-around px-3 pb-4 pt-3">
           <MobileNavLink href="/" icon={<Home className="h-5 w-5" />} label="Home" />
-          <MobileNavLink
-            href="/search?q=all&category=All%20Categories&location=All%20UK"
-            icon={<Search className="h-5 w-5" />}
-            label="Search"
-            active
-          />
-          <Link
-            href="/post-listing"
-            aria-label="Post listing"
-            className="premium-button -mt-8 flex h-14 w-14 items-center justify-center rounded-full text-white"
-          >
+          <MobileNavLink href="/search?q=all&category=All%20Categories&location=All%20UK" icon={<Search className="h-5 w-5" />} label="Search" active />
+          <Link href="/post-listing" aria-label="Post listing" className="-mt-8 flex h-14 w-14 items-center justify-center rounded-full bg-[#FF6B00] text-white shadow-lg shadow-[#FF6B00]/30">
             <Plus className="h-7 w-7" />
           </Link>
           <MobileNavLink href="/favourites" icon={<Heart className="h-5 w-5" />} label="Saved" />
@@ -1097,144 +1186,68 @@ function SearchContent() {
 
 /* ------------------ SUB-COMPONENTS ------------------ */
 
-function SectionHeader({ title, count, loading }: { title: string; count: number; loading?: boolean }) {
+function FilterGroup({
+  title,
+  children,
+}: {
+  title: string
+  children: React.ReactNode
+}) {
   return (
-    <div className="mb-3 flex items-center justify-between">
-      <h3 className="text-base font-bold">{title}</h3>
-      <span className="flex items-center gap-1.5 text-sm text-white/50">
+    <section className="border-t border-white/10 pt-4 first:border-t-0 first:pt-0">
+      <h3 className="mb-3 text-xs font-black uppercase tracking-[0.18em] text-white/70">{title}</h3>
+      {children}
+    </section>
+  )
+}
+
+function ResultGroupHeader({
+  title,
+  count,
+  loading,
+}: {
+  title: string
+  count: number
+  loading?: boolean
+}) {
+  return (
+    <div className="mb-3 flex items-center justify-between gap-3">
+      <h3 className="text-base font-black text-white">{title}</h3>
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 text-xs font-bold text-white/60">
         {loading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-        {loading ? "Loading..." : `${count} found`}
+        {loading ? "Loading" : `${count} shown`}
       </span>
     </div>
   )
 }
 
-function CaterBotCard({ analysis }: { analysis: SearchAnalysis }) {
-  const chips = [
-    analysis.fuelType ? analysis.fuelType[0].toUpperCase() + analysis.fuelType.slice(1) : null,
-    analysis.equipmentType ? analysis.equipmentType[0].toUpperCase() + analysis.equipmentType.slice(1) : null,
-    analysis.allowParts ? "Parts & spares enabled" : "Full units first",
-    analysis.allowParts ? null : "Parts hidden",
-  ].filter(Boolean)
-
+function EmptyResults({
+  title,
+  text,
+  onClear,
+}: {
+  title: string
+  text: string
+  onClear?: () => void
+}) {
   return (
-    <div className="premium-card mb-6 rounded-3xl border-[#FF6B00]/25 p-4">
-      <div className="flex items-start gap-3">
-        <div className="orange-glow flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-[#FF6B00] text-sm font-black text-white">
-          CB
-        </div>
-        <div className="min-w-0">
-          <p className="text-sm font-bold text-white">CaterBot search</p>
-          <p className="mt-1 text-sm text-white/70">
-            {analysis.allowParts
-              ? "Parts & spares search enabled."
-              : "CaterBot filtered spare parts and ranked full catering equipment first."}
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {chips.map((chip) => (
-              <span
-                key={chip}
-                className="rounded-full border border-white/10 bg-white/[0.08] px-3 py-1 text-xs font-bold text-white/80"
-              >
-                {chip}
-              </span>
-            ))}
-          </div>
-        </div>
-      </div>
+    <div className="mb-4 rounded-3xl border border-white/10 bg-white/[0.04] p-6 text-center">
+      <AlertCircle className="mx-auto h-9 w-9 text-white/30" />
+      <h3 className="mt-3 text-lg font-black text-white">{title}</h3>
+      <p className="mx-auto mt-2 max-w-md text-sm font-semibold leading-relaxed text-[#A7B5C9]">{text}</p>
+      {onClear && (
+        <button
+          type="button"
+          onClick={onClear}
+          className="mt-4 rounded-2xl border border-[#FF6B00]/40 bg-[#FF6B00]/10 px-4 py-2 text-sm font-black text-orange-100"
+        >
+          Clear filters
+        </button>
+      )}
     </div>
   )
 }
 
-function PlatformTabs({
-  activeTab,
-  onTabClick,
-}: {
-  activeTab: PlatformTab
-  onTabClick: (tab: PlatformTab) => void
-}) {
-  const tabs: { key: PlatformTab; label: string }[] = [
-    { key: "caterbids", label: "CaterBids" },
-    { key: "ebay", label: "eBay" },
-    { key: "facebook", label: "Facebook ↗" },
-    { key: "gumtree", label: "Gumtree ↗" },
-  ]
-
-  return (
-    <div className="premium-card mb-6 rounded-3xl p-2">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {tabs.map((tab) => (
-          <button
-            key={tab.key}
-            type="button"
-            onClick={() => onTabClick(tab.key)}
-            aria-label={
-              tab.key === "facebook"
-                ? "Opens Facebook Marketplace search in a new tab"
-                : tab.key === "gumtree"
-                  ? "Opens Gumtree search in a new tab"
-                  : undefined
-            }
-            className={`min-h-11 rounded-2xl px-3 py-2 text-sm font-black transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6B00] ${
-              activeTab === tab.key
-                ? "bg-[#FF6B00] text-white shadow-lg shadow-[#FF6B00]/25"
-                : "border border-white/10 bg-[#102641]/80 text-white/75 hover:border-white/20 hover:bg-white/10"
-            }`}
-          >
-            {tab.label}
-            {tab.key === "ebay" && (
-              <span className="mt-0.5 block text-[11px] font-semibold text-white/60">
-                Live results shown inside CaterBids.
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function ComparePricesCard({
-  facebookUrl,
-  gumtreeUrl,
-}: {
-  facebookUrl: string
-  gumtreeUrl: string
-}) {
-  return (
-    <article className="premium-card rounded-3xl border-[#FF6B00]/25 p-5 sm:col-span-2">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-xs font-black uppercase tracking-[0.2em] text-[#FF6B00]">Cross-platform check</p>
-          <h3 className="mt-2 text-xl font-black">More marketplaces</h3>
-          <p className="mt-1 text-sm leading-relaxed text-white/65">
-            Compare this search elsewhere.
-          </p>
-        </div>
-        <div className="grid gap-2 sm:min-w-56">
-          <a
-            href={facebookUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="Opens Facebook Marketplace search in a new tab"
-            className="soft-button flex min-h-11 items-center justify-center rounded-2xl px-4 py-2 text-sm font-bold"
-          >
-            Facebook ↗
-          </a>
-          <a
-            href={gumtreeUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="Opens Gumtree search in a new tab"
-            className="soft-button flex min-h-11 items-center justify-center rounded-2xl px-4 py-2 text-sm font-bold"
-          >
-            Gumtree ↗
-          </a>
-        </div>
-      </div>
-    </article>
-  )
-}
 
 function ListingCard({
   item,
@@ -1247,6 +1260,7 @@ function ListingCard({
   onClick: () => void
   onToggleFavourite: () => void
 }) {
+  const title = item.title || "Untitled listing"
   const cardImages =
     Array.isArray(item.images) && item.images.length > 0
       ? item.images.filter((url): url is string => typeof url === "string" && Boolean(url))
@@ -1254,263 +1268,115 @@ function ListingCard({
         ? [item.image_url]
         : []
   const cardImage = cardImages[0]
+  const badges = trustBadgesForListing(item)
 
   return (
-    <article className="premium-card premium-card-hover group overflow-hidden rounded-3xl text-left">
-      <button onClick={onClick} className="block w-full text-left focus-visible:outline-none">
-        <div className="relative border-b border-white/10 bg-[#061B35]">
-          <div className="relative aspect-[4/3] p-3">
-            <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-[#001B35] shadow-inner shadow-black/30">
-              {cardImage ? (
-                <img
-                  src={cardImage}
-                  alt={item.title}
-                  loading="lazy"
-                  className="h-full w-full object-contain transition-transform duration-500 group-hover:scale-[1.03]"
-                />
-              ) : (
-                <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-xs font-bold text-white/35">
-                  <Tag className="h-10 w-10" />
-                  No image
-                </div>
+    <article className="group relative rounded-3xl border border-white/12 bg-[#082D50]/86 p-3 shadow-lg shadow-black/15 transition hover:border-[#FF6B00]/35">
+      <div className="grid grid-cols-[104px_1fr] gap-3 sm:grid-cols-[180px_1fr_auto] sm:gap-5">
+        <button
+          type="button"
+          onClick={onClick}
+          className="relative overflow-hidden rounded-2xl border border-white/10 bg-[#001A35] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6B00]"
+          aria-label={`View ${title}`}
+        >
+          <div className="aspect-square sm:aspect-[4/3]">
+            {cardImage ? (
+              <img
+                src={cardImage}
+                alt={title}
+                loading="lazy"
+                className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
+              />
+            ) : (
+              <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-xs font-bold text-white/35">
+                <Tag className="h-8 w-8" />
+                No image
+              </div>
+            )}
+          </div>
+          <span className="absolute left-2 top-2 rounded-full bg-[#FF6B00] px-2 py-1 text-[10px] font-black uppercase text-white">
+            CaterBids
+          </span>
+          {isFeaturedAndActive(item as Record<string, unknown>) && (
+            <span className="absolute left-2 top-9 inline-flex items-center gap-1 rounded-full border-2 border-[#FF6B00] bg-[#0a2a4a] px-2 py-1 shadow-[0_0_10px_rgba(255,107,0,0.35)]">
+              <Bell className="h-3 w-3 fill-[#FF6B00] text-[#FF6B00]" />
+              <span className="text-[9px] font-black uppercase leading-none tracking-wide text-white">Featured</span>
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={onClick}
+          className="min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6B00]"
+        >
+          <div className="flex min-w-0 flex-col gap-2">
+            <h4 className="line-clamp-2 text-sm font-black leading-snug text-white sm:text-lg">
+              {title}
+            </h4>
+            {item.description && (
+              <p className="hidden line-clamp-1 text-sm font-semibold text-[#A7B5C9] sm:block">
+                {item.description}
+              </p>
+            )}
+            <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold text-[#A7B5C9] sm:text-xs">
+              <span className="inline-flex items-center gap-1">
+                <MapPin className="h-3.5 w-3.5 text-white/45" />
+                {item.city || item.location || "UK"}
+              </span>
+              {item.category && <span className="hidden sm:inline">• {item.category}</span>}
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {item.condition && (
+                <span className={`rounded-full border px-2 py-0.5 text-[10px] font-black ${conditionBadgeClass(item.condition)}`}>
+                  {conditionLabel(item.condition)}
+                </span>
               )}
-            </div>
-          </div>
-
-          <div className="absolute left-4 top-4 flex h-8 w-24 items-center justify-center rounded-xl border border-white/80 bg-white px-2 shadow-lg shadow-black/25">
-            <img
-              src="/caterbids-card-logo.png"
-              alt="CaterBids"
-              loading="lazy"
-              className="h-full w-full object-contain"
-            />
-          </div>
-
-          {cardImages.length > 1 && (
-            <div className="absolute bottom-4 right-4 rounded-full border border-white/10 bg-black/60 px-2.5 py-1 text-[10px] font-bold text-white backdrop-blur">
-              1 / {cardImages.length}
-            </div>
-          )}
-        </div>
-
-        <div className="p-4 pb-3">
-          <div className="flex items-start justify-between gap-3">
-            <h4 className="line-clamp-2 text-sm font-bold leading-snug">{item.title}</h4>
-            <span className="premium-badge shrink-0 rounded-xl px-2 py-1 text-xs font-bold">
-              {item.price}
-            </span>
-          </div>
-
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-white/50">
-            <span className="inline-flex items-center gap-1">
-              <MapPin className="h-3 w-3" /> {item.city || item.location || "UK"}
-            </span>
-            <span>•</span>
-            <span>{item.category}</span>
-          </div>
-
-          {item.condition && (
-            <span className={`mt-2 inline-block rounded-full border px-2 py-0.5 text-[10px] font-bold ${conditionBadgeClass(item.condition)}`}>
-              {conditionLabel(item.condition)}
-            </span>
-          )}
-
-          {trustBadgesForListing(item).length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {trustBadgesForListing(item).slice(0, 3).map((badge) => (
+              {badges.slice(0, 3).map((badge) => (
                 <span
                   key={badge}
-                  className="rounded-full border border-[#FF6B00]/25 bg-[#FF6B00]/10 px-2 py-0.5 text-[10px] font-bold text-orange-100"
+                  className="rounded-full border border-[#FF6B00]/25 bg-[#FF6B00]/10 px-2 py-0.5 text-[10px] font-black text-orange-100"
                 >
                   {badge}
                 </span>
               ))}
             </div>
-          )}
-
-          <div className="mt-3 flex items-center gap-1 text-xs font-bold text-[#FF6B00]">
             {item.created_at && (
-              <span className="text-white/60 text-[10px]">
-                {new Date(item.created_at).toLocaleDateString()}
-              </span>
-            )}
-            <span className="transition-colors group-hover:text-orange-400">
-              View Listing →
-            </span>
-          </div>
-        </div>
-      </button>
-
-      <div className="border-t border-white/10 p-3">
-        <button
-          type="button"
-          onClick={onToggleFavourite}
-          className={`soft-button flex w-full items-center justify-center gap-2 rounded-2xl px-3 py-2 text-xs font-bold ${
-            isSaved ? "text-[#FF6B00]" : "text-white/75"
-          }`}
-        >
-          <Heart className={`h-4 w-4 ${isSaved ? "fill-[#FF6B00]" : ""}`} />
-          {isSaved ? "Saved" : "Save"}
-        </button>
-      </div>
-    </article>
-  )
-}
-
-function EbayCard({
-  item,
-  isSaved,
-  onToggleFavourite,
-}: {
-  item: EbayItem
-  isSaved: boolean
-  onToggleFavourite: () => void
-}) {
-  return (
-    <article className="premium-card premium-card-hover group overflow-hidden rounded-3xl text-left">
-      <a
-        href={item.itemWebUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="block focus-visible:outline-none"
-      >
-        {item.image?.imageUrl && (
-          <div className="relative aspect-[4/3] overflow-hidden bg-white">
-            <img
-              src={item.image.imageUrl}
-              alt={item.title}
-              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-            />
-          </div>
-        )}
-
-        <div className="p-4 pb-3">
-          <h4 className="line-clamp-2 text-sm font-bold leading-snug">{item.title}</h4>
-
-          <div className="mt-2 flex items-center gap-2">
-            <span className="premium-badge rounded-xl px-2 py-1 text-xs font-bold">
-              {ebayPrice(item)}
-            </span>
-            {item.condition && (
-              <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${conditionBadgeClass(item.condition)}`}>
-                {conditionLabel(item.condition)}
+              <span className="text-[11px] font-semibold text-white/40">
+                Listed {new Date(item.created_at).toLocaleDateString("en-GB")}
               </span>
             )}
           </div>
-
-          <div className="mt-2 flex items-center gap-1 text-xs text-white/50">
-            <MapPin className="h-3 w-3" />
-            {item.city || item.location || item.itemLocation?.city || item.itemLocation?.postalCode || item.itemLocation?.country || "UK"}
-          </div>
-
-          <div className="mt-3 flex items-center gap-1 text-xs font-bold text-[#FF6B00] transition-colors group-hover:text-orange-400">
-            View on eBay <ExternalLink className="h-3 w-3" />
-          </div>
-        </div>
-      </a>
-
-      <div className="border-t border-white/10 p-3">
-        <button
-          type="button"
-          onClick={onToggleFavourite}
-          className={`soft-button flex w-full items-center justify-center gap-2 rounded-2xl px-3 py-2 text-xs font-bold ${
-            isSaved ? "text-[#FF6B00]" : "text-white/75"
-          }`}
-        >
-          <Heart className={`h-4 w-4 ${isSaved ? "fill-[#FF6B00]" : ""}`} />
-          {isSaved ? "Saved" : "Save"}
         </button>
-      </div>
-    </article>
-  )
-}
 
-function SupplierResultCard({ item }: { item: SupplierResult }) {
-  const fallbackImage = supplierFallbackImage(item.title, item.snippet)
-  const image = item.image || fallbackImage
-  const [resolvedImageType, setResolvedImageType] = useState(item.imageType || "fallback")
-  const isSupplierLogo = resolvedImageType === "supplier-logo"
-
-  return (
-    <article className="premium-card premium-card-hover overflow-hidden rounded-3xl">
-      {image ? (
-        <div
-          className={`relative aspect-[4/3] overflow-hidden ${
-            isSupplierLogo ? "bg-[#071b32]" : "bg-white"
-          }`}
-        >
-          {isSupplierLogo && (
-            <span className="absolute left-3 top-3 z-10 rounded-full border border-white/10 bg-white/10 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-white/75">
-              Supplier
-            </span>
-          )}
-          <img
-            src={image}
-            alt={item.title}
-            loading="lazy"
-            onError={(event) => {
-              event.currentTarget.onerror = null
-              event.currentTarget.src = fallbackImage
-              setResolvedImageType("fallback")
-            }}
-            className={`h-full w-full transition-transform duration-500 hover:scale-105 ${
-              isSupplierLogo ? "object-contain p-8" : "object-cover"
+        <div className="col-span-2 flex items-center justify-between gap-3 border-t border-white/10 pt-3 sm:col-span-1 sm:flex-col sm:items-end sm:justify-start sm:border-t-0 sm:pt-0">
+          <div className="text-left sm:text-right">
+            <p className="text-xl font-black text-[#FF6B00]">{displayPrice(item.price)}</p>
+            <p className="text-xs font-bold text-white/55">CaterBids listing</p>
+          </div>
+          <button
+            type="button"
+            onClick={onToggleFavourite}
+            className={`flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.06] ${
+              isSaved ? "text-[#FF6B00]" : "text-white/75"
             }`}
-          />
+            aria-label={isSaved ? "Remove from saved listings" : "Save listing"}
+          >
+            <Heart className={`h-5 w-5 ${isSaved ? "fill-[#FF6B00]" : ""}`} />
+          </button>
+          <button
+            type="button"
+            onClick={onClick}
+            className="hidden rounded-2xl bg-[#FF6B00] px-5 py-2.5 text-sm font-black text-white sm:inline-flex"
+          >
+            View details
+          </button>
         </div>
-      ) : (
-        <div className="flex aspect-[4/3] items-center justify-center bg-white/5">
-          <Tag className="h-10 w-10 text-white/25" />
-        </div>
-      )}
-
-      <div className="p-4">
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          <span className="premium-badge rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wider">
-            {item.badge || "Used supplier"}
-          </span>
-          {item.domain && (
-            <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-bold text-white/55">
-              {item.domain}
-            </span>
-          )}
-        </div>
-
-        <h4 className="line-clamp-2 text-sm font-black leading-snug text-white">
-          {item.title}
-        </h4>
-        {item.snippet && (
-          <details className="mt-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/60">
-            <summary className="cursor-pointer font-bold text-white/75">More details</summary>
-            <p className="mt-2 leading-relaxed">{item.snippet}</p>
-          </details>
-        )}
-
-        <a
-          href={item.link}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="premium-button mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl px-4 py-2 text-sm font-black"
-        >
-          View supplier page <ExternalLink className="h-4 w-4" />
-        </a>
       </div>
     </article>
   )
 }
 
-function SkeletonCard() {
-  return (
-    <div className="premium-card overflow-hidden rounded-3xl">
-      <div className="h-44 animate-pulse bg-white/5" />
-      <div className="space-y-2 p-4">
-        <div className="h-4 w-3/4 animate-pulse rounded bg-white/5" />
-        <div className="h-3 w-1/2 animate-pulse rounded bg-white/5" />
-        <div className="h-3 w-1/3 animate-pulse rounded bg-white/5" />
-      </div>
-    </div>
-  )
-}
 
 function PlatformButton({
   icon,
@@ -1544,34 +1410,6 @@ function PlatformButton({
   )
 }
 
-function SearchFooter() {
-  const links = [
-    ["About", "/about"],
-    ["How It Works", "/how-it-works"],
-    ["Safety", "/safety"],
-    ["Contact", "/contact"],
-    ["Terms", "/legal/terms"],
-    ["Privacy", "/legal/privacy"],
-    ["Cookies", "/legal/cookies"],
-    ["Prohibited Items", "/legal/prohibited-items"],
-    ["Report Listing", "/report-listing"],
-  ]
-
-  return (
-    <footer className="mt-10 border-t border-white/10 py-8">
-      <div className="flex flex-wrap justify-center gap-x-5 gap-y-3 text-sm text-white/55">
-        {links.map(([label, href]) => (
-          <Link key={href} href={href} className="hover:text-[#FF6B00]">
-            {label}
-          </Link>
-        ))}
-      </div>
-      <p className="mt-5 text-center text-xs font-semibold uppercase tracking-[0.2em] text-[#FF6B00]">
-        CaterBidsUK • Buy • Sell • Save
-      </p>
-    </footer>
-  )
-}
 
 function MobileNavLink({
   href,

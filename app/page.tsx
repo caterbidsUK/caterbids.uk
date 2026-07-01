@@ -1,386 +1,610 @@
-"use client"
-
+import type { Metadata } from "next"
+import SiteFooter from "@/components/SiteFooter"
+import SiteLogo from "@/components/SiteLogo"
 import Image from "next/image"
-import { useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react"
+import Link from "next/link"
+import { redirect } from "next/navigation"
+import type { ReactElement, ReactNode } from "react"
 import {
   ArrowRight,
-  Bell,
+  BadgeCheck,
   Bot,
-  CheckCircle2,
+  ChevronRight,
+  MapPin,
   Menu,
   PackageCheck,
   Percent,
+  Search,
   ShieldCheck,
+  Sparkles,
   Store,
+  Tag,
   Truck,
+  Upload,
+  Utensils,
 } from "lucide-react"
-import { createClient } from "@/lib/supabase/client"
 
-const categoryCards = [
-  {
-    title: "Catering Equipment",
-    description: "Ovens, refrigeration, fryers, preparation equipment and more.",
-    image: "/home-equipment-card.png",
-    icon: <PackageCheck className="h-7 w-7" strokeWidth={1.8} />,
-  },
-  {
-    title: "Vans & Trailers",
-    description: "Food vans, catering trailers and mobile business setups.",
-    image: "/home-van-card.png",
-    icon: <Truck className="h-7 w-7" strokeWidth={1.8} />,
-  },
-  {
-    title: "Hospitality Businesses",
-    description: "Equipment packages and catering business opportunities.",
-    image: "/home-business-card.png",
-    icon: <Store className="h-7 w-7" strokeWidth={1.8} />,
-  },
-]
+import { createClient } from "@/lib/supabase/server"
+import type { Database } from "@/types/supabase"
+import FeaturedCarousel from "@/components/FeaturedCarousel"
 
-const featureCards = [
-  {
-    title: "CaterBot Listing Help",
-    description: "Upload photos and equipment details to create clearer listings faster.",
-    icon: <Bot className="h-7 w-7" strokeWidth={1.8} />,
-  },
-  {
-    title: "Delivery Support",
-    description: "Built to help buyers and sellers prepare delivery details for large catering items.",
-    icon: <Truck className="h-7 w-7" strokeWidth={1.8} />,
-  },
-  {
-    title: "Verified Seller Tools",
-    description: "Designed to build greater buyer trust through seller profiles and verification.",
-    icon: <ShieldCheck className="h-7 w-7" strokeWidth={1.8} />,
-  },
-  {
-    title: "No Final Value Fees",
-    description: "Pay to list after the launch offer, not a percentage of each sale.",
-    icon: <Percent className="h-7 w-7" strokeWidth={1.8} />,
-  },
-]
+export const dynamic = "force-dynamic"
 
-type FormStatus = {
-  tone: "idle" | "success" | "error"
-  message: string
+export const metadata: Metadata = {
+  title: "CaterBidsUK | The UK Marketplace for Catering Equipment",
+  description:
+    "Buy, sell and save on catering equipment, vans and hospitality assets with CaterBidsUK.",
+  openGraph: {
+    title: "CaterBidsUK — The UK Marketplace for Catering Equipment",
+    description: "BUY • SELL • SAVE on catering equipment, vans and hospitality assets.",
+    images: ["/images/caterbids-hero-showroom.png"],
+  },
 }
 
-export default function LandingPage() {
-  const [email, setEmail] = useState("")
-  const [status, setStatus] = useState<FormStatus>({ tone: "idle", message: "" })
-  const [submitting, setSubmitting] = useState(false)
-  const emailInputRef = useRef<HTMLInputElement | null>(null)
+type Listing = Database["public"]["Tables"]["listings"]["Row"]
+type CategoryKey = "equipment" | "vans" | "businesses"
+type HomePageSearchParams = Record<string, string | string[] | undefined>
 
-  function focusSignup() {
-    emailInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
-    window.setTimeout(() => emailInputRef.current?.focus(), 350)
-  }
+type CategoryCardData = {
+  key: CategoryKey
+  title: string
+  description: string
+  image: string
+  href: string
+  fallbackLabel: string
+  icon: ReactNode
+}
 
-  async function submitWaitlist(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const normalisedEmail = email.trim().toLowerCase()
+type BenefitCard = {
+  title: string
+  description: string
+  icon: ReactNode
+}
 
-    if (!normalisedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalisedEmail)) {
-      setStatus({ tone: "error", message: "Enter a valid email address to join the launch list." })
-      return
+type StepCard = {
+  title: string
+  description: string
+  icon: ReactNode
+}
+
+const searchAllHref = "/search?q=all&category=All%20Categories&location=All%20UK"
+const sellHref = "/post-listing"
+
+const heroFeatureCards = [
+  {
+    src: "/images/home/features/caterbot-listing-help-card.png",
+    alt: "CaterBot Listing Help — Get AI help to create better listings faster.",
+  },
+  {
+    src: "/images/home/features/delivery-support-card.png",
+    alt: "Delivery Support — Built to help buyers and sellers with delivery details.",
+  },
+  {
+    src: "/images/home/features/verified-seller-tools-card.png",
+    alt: "Verified Seller Tools — Build trust with verification and seller profiles.",
+  },
+  {
+    src: "/images/home/features/no-final-value-fees-card.png",
+    alt: "No Final Value Fees — Pay to list, not a percentage of each sale.",
+  },
+]
+
+function isCurrentFeatured(listing: Listing) {
+  const featured = Boolean(listing.featured || listing.is_featured)
+  if (!featured) return false
+  if (!listing.featured_until) return true
+
+  const timestamp = new Date(listing.featured_until).getTime()
+  return Number.isFinite(timestamp) ? timestamp > Date.now() : true
+}
+
+function categoryMatchText(listing: Listing) {
+  return `${listing.category || ""} ${listing.subcategory || ""} ${listing.title || ""}`.toLowerCase()
+}
+
+function categoryCount(listings: Listing[], key: CategoryKey) {
+  const count = listings.filter((listing) => {
+    const text = categoryMatchText(listing)
+
+    if (key === "equipment") {
+      return (
+        text.includes("equipment") ||
+        text.includes("oven") ||
+        text.includes("fridge") ||
+        text.includes("freezer") ||
+        text.includes("fryer") ||
+        text.includes("range") ||
+        text.includes("grill")
+      )
     }
 
-    setSubmitting(true)
-    setStatus({ tone: "idle", message: "" })
+    if (key === "vans") {
+      return text.includes("van") || text.includes("trailer") || text.includes("food truck")
+    }
 
-    try {
-      const supabase = createClient()
-      const { error } = await supabase.from("waitlist_signups").insert({
-        email: normalisedEmail,
-        source: "coming_soon_landing_page",
-        consent_to_updates: true,
-      })
+    return (
+      text.includes("business") ||
+      text.includes("cafe") ||
+      text.includes("café") ||
+      text.includes("restaurant") ||
+      text.includes("takeaway")
+    )
+  }).length
 
-      if (error) {
-        const errorText = `${error.code || ""} ${error.message || ""}`.toLowerCase()
-        if (error.code === "23505" || errorText.includes("duplicate") || errorText.includes("unique")) {
-          setStatus({ tone: "success", message: "You're already signed up for launch updates." })
-          return
-        }
+  return count > 0 ? count : null
+}
 
-        throw error
+async function loadHomepageData() {
+  const empty = {
+    userId: null as string | null,
+    listings: [] as Listing[],
+    featuredListings: [] as Listing[],
+    categoryCounts: {
+      equipment: null,
+      vans: null,
+      businesses: null,
+    } as Record<CategoryKey, number | null>,
+  }
+
+  try {
+    const supabase = await createClient()
+    const [{ data: authData }, { data, error }] = await Promise.all([
+      supabase.auth.getUser(),
+      supabase
+        .from("listings")
+        .select("*")
+        .or("status.eq.live,status.is.null")
+        .order("created_at", { ascending: false })
+        .limit(1000),
+    ])
+
+    if (error) {
+      console.warn("Homepage listings unavailable:", error.message || error)
+      return { ...empty, userId: authData.user?.id || null }
+    }
+
+    const stripDataUrls = (listing: Listing): Listing => ({
+      ...listing,
+      images: Array.isArray(listing.images)
+        ? (listing.images as string[]).filter((img) => typeof img === "string" && !img.startsWith("data:"))
+        : listing.images,
+    })
+
+    const listings = ((data || []) as Listing[]).filter((listing) => listing.status !== "sold").map(stripDataUrls)
+    const featured = listings.filter(isCurrentFeatured).slice(0, 10)
+
+    return {
+      userId: authData.user?.id || null,
+      listings,
+      featuredListings: featured.length > 0 ? featured : listings.slice(0, 3),
+      categoryCounts: {
+        equipment: categoryCount(listings, "equipment"),
+        vans: categoryCount(listings, "vans"),
+        businesses: categoryCount(listings, "businesses"),
+      },
+    }
+  } catch (error) {
+    console.warn("Homepage data unavailable:", error)
+    return empty
+  }
+}
+
+function firstSearchParam(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value
+}
+
+function authCallbackQuery(params: HomePageSearchParams) {
+  const callbackParams = new URLSearchParams()
+
+  for (const [key, value] of Object.entries(params)) {
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (typeof item === "string") callbackParams.append(key, item)
       }
-
-      setEmail("")
-      setStatus({
-        tone: "success",
-        message: "You’re on the launch list. We’ll notify you when CaterBidsUK goes live.",
-      })
-    } catch (error) {
-      console.warn("CaterBidsUK launch signup failed:", error)
-      setStatus({
-        tone: "error",
-        message: "We could not add you just now. Please try again in a moment.",
-      })
-    } finally {
-      setSubmitting(false)
+      continue
     }
+
+    if (typeof value === "string") callbackParams.set(key, value)
   }
+
+  return callbackParams.toString()
+}
+
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams?: Promise<HomePageSearchParams>
+}) {
+  const params = (await searchParams) || {}
+  if (firstSearchParam(params.code)) {
+    redirect(`/auth/callback?${authCallbackQuery(params)}`)
+  }
+
+  const { userId, featuredListings, categoryCounts } = await loadHomepageData()
+  const accountHref = userId ? "/account" : "/login?next=%2Faccount"
+  const accountLabel = userId ? "Account" : "Sign In"
 
   return (
     <main className="min-h-screen overflow-hidden bg-[#001225] text-white">
-      <section className="relative isolate min-h-[620px] overflow-hidden">
-        <Image
-          src="/images/caterbids-hero-showroom.png"
-          alt="Commercial catering equipment showroom"
-          fill
-          priority
-          sizes="100vw"
-          className="object-cover object-center"
-        />
-        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(0,13,30,0.96)_0%,rgba(0,31,66,0.88)_42%,rgba(0,22,48,0.48)_100%)]" />
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.18)_0%,rgba(0,18,40,0.44)_58%,rgba(0,18,40,0.96)_100%)]" />
+      <HeroSection accountHref={accountHref} accountLabel={accountLabel} />
 
-        <div className="relative z-10 mx-auto flex min-h-[620px] w-full max-w-[1440px] flex-col px-5 py-6 sm:px-8 lg:px-14">
-          <LandingHeader onSignupClick={focusSignup} />
-
-          <div className="grid flex-1 items-center gap-9 py-12 lg:grid-cols-[1.02fr_0.78fr] lg:py-16">
-            <section className="max-w-3xl">
-              <span className="inline-flex rounded-full border border-[#FF6B00] px-5 py-2 text-xs font-black uppercase tracking-[0.18em] text-[#FF6B00] shadow-[0_0_28px_rgba(255,107,0,0.16)]">
-                Launching Soon
-              </span>
-              <h1 className="mt-7 text-[3rem] font-black leading-[0.98] tracking-[-0.065em] text-white sm:text-[4.5rem] lg:text-[5.25rem]">
-                The UK Marketplace
-                <span className="block">
-                  for <span className="text-[#FF6B00]">Catering Equipment</span>
-                </span>
-              </h1>
-              <p className="mt-6 max-w-2xl text-xl font-bold leading-snug text-white/88 sm:text-2xl">
-                Buy, sell and save on catering equipment, vans and hospitality assets.
-              </p>
-              <div className="mt-8 grid gap-4 text-base font-extrabold text-white sm:text-lg">
-                <BenefitLine>First 100 listings free at launch</BenefitLine>
-                <BenefitLine>No final value fees. Built for UK catering businesses.</BenefitLine>
-              </div>
-            </section>
-
-            <HeroLaunchSignup
-              email={email}
-              setEmail={setEmail}
-              status={status}
-              submitting={submitting}
-              inputRef={emailInputRef}
-              onSubmit={submitWaitlist}
-            />
-          </div>
-        </div>
-      </section>
-
-      <section className="bg-[#002E5D] px-5 pb-7 pt-9 sm:px-8 lg:px-14">
-        <div className="mx-auto max-w-[1310px]">
-          <div className="text-center">
-            <h2 className="text-3xl font-black tracking-[-0.04em] text-white sm:text-4xl">
-              Browse the marketplace at launch
-            </h2>
-            <p className="mx-auto mt-3 max-w-2xl text-base font-medium text-white/82 sm:text-lg">
-              Built for the catering equipment, mobile food and hospitality industry.
-            </p>
-          </div>
-
-          <div className="mt-7 grid gap-5 lg:grid-cols-3">
-            {categoryCards.map((card) => (
-              <MarketplaceCategoryCard key={card.title} {...card} />
-            ))}
-          </div>
-
+      <section className="relative z-20 -mt-8 px-4 pb-10 sm:px-6 lg:px-10">
+        <div className="mx-auto max-w-6xl">
+          <SearchPanel />
+          <FeaturedListings listings={featuredListings} />
+          <CategorySection counts={categoryCounts} />
           <WhyCaterBids />
-          <LaunchOfferBanner onSignupClick={focusSignup} />
-          <LandingFooter />
+          <HowItWorks />
+          <ClosingCta />
         </div>
       </section>
+
+      <SiteFooter />
     </main>
   )
 }
 
-function LandingHeader({ onSignupClick }: { onSignupClick: () => void }) {
+function HeroSection({ accountHref, accountLabel }: { accountHref: string; accountLabel: string }) {
   return (
-    <header className="flex items-center justify-between gap-5">
-      <a href="/" className="flex min-w-0 items-center gap-3" aria-label="CaterBidsUK home">
-        <Image
-          src="/brand/caterbids-logo.png"
-          alt="CaterBidsUK bell logo"
-          width={72}
-          height={72}
-          priority
-          className="h-14 w-14 shrink-0 rounded-[1.1rem] object-contain shadow-[0_18px_40px_rgba(255,107,0,0.24)] sm:h-[72px] sm:w-[72px]"
-        />
-        <span className="min-w-0">
-          <span className="block whitespace-nowrap text-3xl font-black leading-none tracking-[-0.055em] text-white sm:text-[2.85rem]">
-            Cater<span className="text-[#FF6B00]">Bids</span>UK
-          </span>
-          <span className="mt-1 block whitespace-nowrap text-xs font-black uppercase tracking-[0.29em] text-[#FF6B00] sm:text-base">
-            BUY • SELL • SAVE
-          </span>
-        </span>
-      </a>
+    <section className="relative isolate min-h-[900px] overflow-hidden pb-28 pt-6 sm:min-h-[850px] lg:min-h-[820px]">
+      <Image
+        src="/images/caterbids-hero-showroom.png"
+        alt="Commercial catering equipment showroom"
+        fill
+        priority
+        sizes="100vw"
+        className="object-cover object-center"
+      />
+      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(0,12,30,0.96)_0%,rgba(0,30,68,0.86)_42%,rgba(0,19,43,0.58)_100%)]" />
+      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,18,40,0.06)_0%,rgba(0,18,40,0.38)_56%,rgba(0,18,40,1)_100%)]" />
 
-      <nav className="hidden items-center gap-8 text-base font-extrabold text-white lg:flex" aria-label="Primary">
-        <a className="transition hover:text-[#FF6B00]" href="/about">
-          About
-        </a>
-        <button className="transition hover:text-[#FF6B00]" type="button" onClick={onSignupClick}>
-          Launch Updates
-        </button>
-        <a className="transition hover:text-[#FF6B00]" href="/contact">
-          Contact
-        </a>
-        <button
-          type="button"
-          onClick={onSignupClick}
-          className="rounded-xl bg-[#FF6B00] px-6 py-4 font-black text-white shadow-[0_18px_38px_rgba(255,107,0,0.28)] transition hover:brightness-110"
-        >
-          Get Launch Updates
-        </button>
-      </nav>
+      <div className="relative z-10 mx-auto max-w-6xl px-4 sm:px-6 lg:px-10">
+        <SiteHeader accountHref={accountHref} accountLabel={accountLabel} />
 
-      <button
-        type="button"
-        aria-label="Get launch updates"
-        onClick={onSignupClick}
-        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-white shadow-xl backdrop-blur lg:hidden"
-      >
-        <Menu className="h-6 w-6" strokeWidth={2} />
-      </button>
-    </header>
-  )
-}
+        <div className="pt-11 sm:pt-16 lg:max-w-4xl lg:pt-24">
+          <h1 className="max-w-4xl text-[4.15rem] font-black leading-[0.96] tracking-[-0.075em] text-white sm:text-[5.8rem] lg:text-[6.7rem]">
+            The UK Marketplace for <span className="text-[#FF6B00]">Catering Equipment</span>
+          </h1>
+          <p className="mt-6 max-w-2xl text-2xl font-semibold leading-snug text-white/82 sm:text-3xl">
+            Buy, sell and save on catering equipment, vans and hospitality assets.
+          </p>
 
-function HeroLaunchSignup({
-  email,
-  setEmail,
-  status,
-  submitting,
-  inputRef,
-  onSubmit,
-}: {
-  email: string
-  setEmail: (value: string) => void
-  status: FormStatus
-  submitting: boolean
-  inputRef: RefObject<HTMLInputElement | null>
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void
-}) {
-  return (
-    <section
-      id="launch-updates"
-      className="rounded-[1.75rem] bg-white p-6 text-[#001b35] shadow-[0_32px_95px_rgba(0,0,0,0.34)] sm:p-8 lg:ml-auto lg:w-full lg:max-w-[500px]"
-      aria-labelledby="launch-updates-heading"
-    >
-      <h2 id="launch-updates-heading" className="text-3xl font-black tracking-[-0.045em]">
-        Get launch updates
-      </h2>
-      <p className="mt-3 text-base font-semibold leading-relaxed text-[#2d4360]">
-        Be first to know when CaterBidsUK goes live and when free launch listings open.
-      </p>
+          <div className="mt-9 grid gap-4 sm:flex sm:flex-wrap">
+            <Link
+              href={sellHref}
+              className="group flex min-h-16 items-center justify-center gap-4 rounded-[1.7rem] bg-[#FF6B00] px-8 text-xl font-black text-white shadow-[0_24px_70px_rgba(255,107,0,0.34)] transition hover:brightness-110 focus:outline-none focus:ring-4 focus:ring-[#FF6B00]/35 sm:min-w-72"
+            >
+              Start Free Listing
+              <ArrowRight className="h-7 w-7 transition group-hover:translate-x-1" strokeWidth={2.2} />
+            </Link>
+            <Link
+              href="#marketplace-search"
+              className="group flex min-h-16 items-center justify-center gap-4 rounded-[1.7rem] border border-white/38 bg-white/7 px-8 text-xl font-black text-white shadow-[0_20px_65px_rgba(0,0,0,0.26)] backdrop-blur-md transition hover:border-[#FF6B00]/80 hover:bg-white/12 focus:outline-none focus:ring-4 focus:ring-white/20 sm:min-w-72"
+            >
+              <Search className="h-8 w-8" strokeWidth={2.1} />
+              Search Equipment
+            </Link>
+          </div>
 
-      <form className="mt-6 grid gap-4" onSubmit={onSubmit} noValidate>
-        <label className="sr-only" htmlFor="launch-email">
-          Email address
-        </label>
-        <input
-          ref={inputRef}
-          id="launch-email"
-          type="email"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          placeholder="Enter your email address"
-          autoComplete="email"
-          className="min-h-14 rounded-xl border border-[#cbd7e5] bg-white px-4 text-base font-bold text-[#001b35] outline-none transition placeholder:text-slate-400 focus:border-[#FF6B00] focus:ring-4 focus:ring-[#FF6B00]/15"
-          style={{ backgroundColor: "#ffffff", color: "#001b35", WebkitTextFillColor: "#001b35" }}
-          disabled={submitting}
-        />
-        <button
-          type="submit"
-          disabled={submitting}
-          className="min-h-14 rounded-xl bg-[#FF6B00] px-5 text-base font-black text-white shadow-[0_18px_38px_rgba(255,107,0,0.24)] transition hover:brightness-110 disabled:cursor-wait disabled:opacity-70"
-        >
-          {submitting ? "Joining..." : "Notify Me at Launch"}
-        </button>
-      </form>
+        </div>
 
-      <p className="mt-4 text-sm font-medium leading-relaxed text-[#001b35]">
-        By signing up, you agree to receive CaterBidsUK launch updates. You can unsubscribe at any time.
-      </p>
-
-      {status.message ? (
-        <p
-          className={`mt-4 rounded-xl px-4 py-3 text-sm font-black ${
-            status.tone === "success"
-              ? "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200"
-              : "bg-red-50 text-red-700 ring-1 ring-red-200"
-          }`}
-          role="status"
-        >
-          {status.message}
-        </p>
-      ) : null}
+        <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {heroFeatureCards.map((card) => (
+            <div key={card.src} className="aspect-square overflow-hidden rounded-[1.15rem]">
+              <Image
+                src={card.src}
+                alt={card.alt}
+                width={640}
+                height={640}
+                sizes="(min-width: 1024px) 260px, (min-width: 640px) 24vw, 46vw"
+                className="h-full w-full object-contain"
+              />
+            </div>
+          ))}
+        </div>
+      </div>
     </section>
   )
 }
 
-function BenefitLine({ children }: { children: ReactNode }) {
+function SiteHeader({ accountHref, accountLabel }: { accountHref: string; accountLabel: string }) {
   return (
-    <div className="flex items-center gap-3">
-      <CheckCircle2 className="h-6 w-6 shrink-0 text-[#FF6B00]" strokeWidth={2.1} />
-      <span>{children}</span>
-    </div>
+    <header className="flex items-center justify-between gap-4">
+      <Link href="/" aria-label="CaterBidsUK home">
+        <SiteLogo size="lg" priority />
+      </Link>
+
+      <nav className="hidden items-center gap-7 text-sm font-black text-white/86 lg:flex" aria-label="Primary">
+        <Link className="transition hover:text-[#FF6B00]" href="/">
+          Home
+        </Link>
+        <Link className="transition hover:text-[#FF6B00]" href={searchAllHref}>
+          Marketplace
+        </Link>
+        <Link className="transition hover:text-[#FF6B00]" href="/blog">
+          Blog
+        </Link>
+        <Link className="transition hover:text-[#FF6B00]" href={sellHref}>
+          Sell
+        </Link>
+        <Link className="transition hover:text-[#FF6B00]" href="/pricing">
+          Pricing
+        </Link>
+        <Link className="transition hover:text-[#FF6B00]" href={accountHref}>
+          {accountLabel}
+        </Link>
+        <Link
+          href={sellHref}
+          className="rounded-2xl bg-[#FF6B00] px-5 py-3 text-white shadow-[0_18px_44px_rgba(255,107,0,0.28)] transition hover:brightness-110"
+        >
+          Start Free Listing
+        </Link>
+      </nav>
+
+      <details className="relative lg:hidden">
+        <summary className="flex h-16 w-16 cursor-pointer list-none items-center justify-center rounded-full border border-white/22 bg-white/8 text-white shadow-xl backdrop-blur-md [&::-webkit-details-marker]:hidden">
+          <Menu className="h-8 w-8" strokeWidth={2.2} />
+        </summary>
+        <div className="absolute right-0 top-20 z-30 w-72 rounded-3xl border border-white/14 bg-[#001a34]/96 p-3 shadow-2xl backdrop-blur-xl">
+          <MobileMenuLink href="/">Home</MobileMenuLink>
+          <MobileMenuLink href={searchAllHref}>Marketplace</MobileMenuLink>
+          <MobileMenuLink href="/blog">Blog</MobileMenuLink>
+          <MobileMenuLink href={sellHref}>Sell an Item</MobileMenuLink>
+          <MobileMenuLink href="/pricing">Pricing</MobileMenuLink>
+          <MobileMenuLink href={accountHref}>{accountLabel}</MobileMenuLink>
+          <MobileMenuLink href="/about">About</MobileMenuLink>
+          <MobileMenuLink href="/contact">Contact</MobileMenuLink>
+        </div>
+      </details>
+    </header>
   )
 }
 
-function MarketplaceCategoryCard({
-  title,
-  description,
-  image,
+function MobileMenuLink({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <Link
+      href={href}
+      className="flex items-center justify-between rounded-2xl px-4 py-3 text-sm font-black text-white transition hover:bg-white/8 hover:text-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/45"
+    >
+      {children}
+      <ChevronRight className="h-4 w-4" strokeWidth={2.4} />
+    </Link>
+  )
+}
+
+function SearchPanel() {
+  return (
+    <section
+      id="marketplace-search"
+      className="rounded-[2rem] bg-white p-4 text-[#001b35] shadow-[0_28px_90px_rgba(0,0,0,0.34)] sm:p-6"
+      aria-labelledby="search-heading"
+    >
+      <h2 id="search-heading" className="sr-only">
+        Search CaterBidsUK listings
+      </h2>
+      <form action="/search" method="get" className="grid gap-3">
+        <label className="group flex min-h-16 items-center gap-4 rounded-2xl border border-slate-200 bg-white px-4 text-lg font-bold shadow-sm transition focus-within:border-[#FF6B00] focus-within:ring-4 focus-within:ring-[#FF6B00]/12">
+          <Search className="h-7 w-7 shrink-0 text-[#FF3B00]" strokeWidth={2} />
+          <span className="sr-only">Search keyword</span>
+          <input
+            type="search"
+            name="q"
+            placeholder="Search fryers, ovens, fridges..."
+            className="min-w-0 flex-1 bg-transparent text-[#001b35] outline-none [&::placeholder]:text-slate-400 [&::placeholder]:opacity-100"
+            style={{ color: "#001b35", WebkitTextFillColor: "#001b35" }}
+          />
+        </label>
+
+        <label className="group flex min-h-16 items-center gap-4 rounded-2xl border border-slate-200 bg-white px-4 text-lg font-bold shadow-sm transition focus-within:border-[#FF6B00] focus-within:ring-4 focus-within:ring-[#FF6B00]/12">
+          <MapPin className="h-7 w-7 shrink-0 text-[#FF3B00]" strokeWidth={2} />
+          <span className="sr-only">Location</span>
+          <input
+            type="text"
+            name="location"
+            placeholder="Postcode or city"
+            className="min-w-0 flex-1 bg-transparent text-[#001b35] outline-none [&::placeholder]:text-slate-400 [&::placeholder]:opacity-100"
+            style={{ color: "#001b35", WebkitTextFillColor: "#001b35" }}
+          />
+        </label>
+
+        <button
+          type="submit"
+          className="min-h-16 rounded-2xl bg-[#FF6B00] px-6 text-xl font-black text-white shadow-[0_20px_45px_rgba(255,107,0,0.28)] transition hover:brightness-110 focus:outline-none focus:ring-4 focus:ring-[#FF6B00]/30"
+        >
+          Search
+        </button>
+
+        <div className="grid grid-cols-2 gap-3 pt-2 sm:flex sm:flex-wrap sm:justify-center">
+          <SearchQuickButton name="category" value="Catering Equipment" icon={<PackageCheck />}>
+            Equipment
+          </SearchQuickButton>
+          <SearchQuickButton name="category" value="Catering Vans & Trailers" icon={<Truck />}>
+            Vans & Trailers
+          </SearchQuickButton>
+          <SearchQuickButton name="category" value="Catering Businesses" icon={<Store />}>
+            Businesses
+          </SearchQuickButton>
+          <SearchQuickButton name="condition" value="used" icon={<Tag />}>
+            Used
+          </SearchQuickButton>
+          <SearchQuickButton name="condition" value="new" icon={<Sparkles />}>
+            New
+          </SearchQuickButton>
+        </div>
+      </form>
+    </section>
+  )
+}
+
+function SearchQuickButton({
+  name,
+  value,
   icon,
+  children,
 }: {
-  title: string
-  description: string
-  image: string
-  icon: ReactNode
+  name: string
+  value: string
+  icon: ReactElement
+  children: ReactNode
 }) {
   return (
-    <article className="group overflow-hidden rounded-2xl border border-white/28 bg-[#001b35] shadow-[0_24px_80px_rgba(0,0,0,0.22)] transition duration-200 hover:-translate-y-1 hover:border-[#FF6B00]/70">
-      <div className="relative h-48 overflow-hidden">
-        <Image
-          src={image}
-          alt={title}
-          fill
-          sizes="(min-width: 1024px) 33vw, 100vw"
-          className="object-cover transition duration-500 group-hover:scale-105"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#001b35] via-[#001b35]/22 to-transparent" />
+    <button
+      type="submit"
+      name={name}
+      value={value}
+      className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-[#07182d] shadow-sm transition hover:border-[#FF6B00]/45 hover:text-[#FF3B00] focus:outline-none focus:ring-4 focus:ring-[#FF6B00]/15"
+    >
+      <span className="text-[#07182d] [&>svg]:h-5 [&>svg]:w-5">{icon}</span>
+      {children}
+    </button>
+  )
+}
+
+function CategorySection({ counts }: { counts: Record<CategoryKey, number | null> }) {
+  const categoryCards: CategoryCardData[] = [
+    {
+      key: "equipment",
+      title: "Catering Equipment",
+      description: "Ovens, fridges, fryers and more",
+      image: "/home-equipment-card.png",
+      href: "/search?q=all&category=Catering%20Equipment&location=All%20UK",
+      fallbackLabel: "Browse equipment",
+      icon: <Utensils className="h-8 w-8" strokeWidth={1.8} />,
+    },
+    {
+      key: "vans",
+      title: "Vans & Trailers",
+      description: "Catering vans, trailers and vehicles",
+      image: "/home-van-card.png",
+      href: "/search?q=all&category=Catering%20Vans%20%26%20Trailers&location=All%20UK",
+      fallbackLabel: "Browse vans & trailers",
+      icon: <Truck className="h-8 w-8" strokeWidth={1.8} />,
+    },
+    {
+      key: "businesses",
+      title: "Hospitality Businesses",
+      description: "Cafes, restaurants and takeaways",
+      image: "/home-business-card.png",
+      href: "/search?q=all&category=Catering%20Businesses&location=All%20UK",
+      fallbackLabel: "Browse businesses",
+      icon: <Store className="h-8 w-8" strokeWidth={1.8} />,
+    },
+  ]
+  return (
+    <section className="mt-10" aria-labelledby="categories-heading">
+      <SectionHeader title="Browse top categories" href={searchAllHref} action="View all" />
+      <div className="mt-5 grid gap-4 md:grid-cols-3">
+        {categoryCards.map((category) => (
+          <CategoryCard key={category.key} category={category} count={counts[category.key]} />
+        ))}
       </div>
-      <div className="-mt-12 relative z-10 p-6 pt-0">
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-[#FF6B00]/60 bg-[#001b35]/92 text-[#FF6B00] shadow-xl">
-          {icon}
+    </section>
+  )
+}
+
+function CategoryCard({ category, count }: { category: CategoryCardData; count: number | null }) {
+  const countLabel = count && count > 0 ? `${count.toLocaleString("en-GB")} listing${count === 1 ? "" : "s"}` : category.fallbackLabel
+
+  return (
+    <Link
+      href={category.href}
+      className="group relative min-h-[250px] overflow-hidden rounded-[1.55rem] border border-white/14 bg-[#061d38] shadow-[0_24px_75px_rgba(0,0,0,0.24)] transition hover:-translate-y-1 hover:border-[#FF6B00]/70 focus:outline-none focus:ring-4 focus:ring-[#FF6B00]/25"
+    >
+      <Image
+        src={category.image}
+        alt={category.title}
+        fill
+        sizes="(min-width: 768px) 33vw, 100vw"
+        className="object-cover transition duration-500 group-hover:scale-105"
+      />
+      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,18,40,0.12)_0%,rgba(0,18,40,0.94)_82%)]" />
+      <div className="absolute inset-x-0 bottom-0 p-5">
+        <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#FF6B00] text-white shadow-[0_18px_40px_rgba(255,107,0,0.34)]">
+          {category.icon}
+        </span>
+        <h3 className="mt-4 text-2xl font-black tracking-[-0.035em] text-white">{category.title}</h3>
+        <p className="mt-2 text-base font-semibold leading-snug text-white/75">{category.description}</p>
+        <div className="mt-4 flex items-center justify-between text-[#FF6B00]">
+          <span className="text-base font-black">{countLabel}</span>
+          <ArrowRight className="h-7 w-7 transition group-hover:translate-x-1" strokeWidth={2.2} />
         </div>
-        <h3 className="mt-5 text-2xl font-black tracking-[-0.035em] text-white">{title}</h3>
-        <p className="mt-3 min-h-[3.25rem] text-base font-medium leading-relaxed text-white/86">{description}</p>
-        <ArrowRight className="mt-5 h-7 w-7 text-[#FF6B00] transition group-hover:translate-x-1" strokeWidth={2} />
       </div>
-    </article>
+    </Link>
+  )
+}
+
+function FeaturedListings({ listings }: { listings: Listing[] }) {
+  return (
+    <section className="mt-5 rounded-[1.7rem] border border-white/12 bg-[#031d38]/74 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.2)] sm:p-6">
+      <SectionHeader title="Featured Listings" href={searchAllHref} action="View all listings" />
+
+      {listings.length > 0 ? (
+        <FeaturedCarousel listings={listings} />
+      ) : (
+        <div className="mt-5 rounded-3xl border border-white/10 bg-white/6 p-6 text-center">
+          <PackageCheck className="mx-auto h-12 w-12 text-[#FF6B00]" strokeWidth={1.7} />
+          <h3 className="mt-4 text-2xl font-black text-white">Listings will appear here soon</h3>
+          <p className="mx-auto mt-2 max-w-lg text-base font-semibold leading-relaxed text-white/70">
+            Listings will appear here as sellers begin uploading equipment.
+          </p>
+          <Link
+            href={sellHref}
+            className="mt-5 inline-flex min-h-12 items-center justify-center rounded-2xl bg-[#FF6B00] px-6 text-sm font-black text-white shadow-[0_18px_45px_rgba(255,107,0,0.28)]"
+          >
+            Start Free Listing
+          </Link>
+        </div>
+      )}
+    </section>
   )
 }
 
 function WhyCaterBids() {
+  const whyCards: BenefitCard[] = [
+    {
+      title: "No final value fees",
+      description: "Keep more of what you earn. No hidden costs.",
+      icon: <Percent className="h-10 w-10" strokeWidth={1.65} />,
+    },
+    {
+      title: "Verified seller tools",
+      description: "Build trust with buyer verification and reviews.",
+      icon: <ShieldCheck className="h-10 w-10" strokeWidth={1.65} />,
+    },
+    {
+      title: "CaterBot AI listing support",
+      description: "Our AI helps you create better listings, faster.",
+      icon: <Bot className="h-10 w-10" strokeWidth={1.65} />,
+    },
+    {
+      title: "Delivery support",
+      description: "Prepare quote-ready delivery details across the UK.",
+      icon: <Truck className="h-10 w-10" strokeWidth={1.65} />,
+    },
+    {
+      title: "Built for UK catering",
+      description: "Designed for the needs of UK caterers.",
+      icon: <BadgeCheck className="h-10 w-10" strokeWidth={1.65} />,
+    },
+    {
+      title: "Easy search & discovery",
+      description: "Find the right equipment, faster.",
+      icon: <Search className="h-10 w-10" strokeWidth={1.65} />,
+    },
+  ]
   return (
-    <section className="mt-7 rounded-2xl border border-white/8 bg-[linear-gradient(135deg,rgba(11,55,100,0.72),rgba(0,21,48,0.74))] p-6 shadow-[0_22px_80px_rgba(0,0,0,0.18)] sm:p-8">
-      <h2 className="text-center text-3xl font-black tracking-[-0.04em] text-white sm:text-4xl">
-        Why CaterBidsUK?
-      </h2>
-      <div className="mt-7 grid gap-6 md:grid-cols-2 lg:grid-cols-4 lg:divide-x lg:divide-white/18">
-        {featureCards.map((feature) => (
-          <article key={feature.title} className="lg:px-7 first:lg:pl-0 last:lg:pr-0">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full border border-[#FF6B00] text-[#FF6B00]">
-              {feature.icon}
-            </div>
-            <h3 className="mt-4 text-xl font-black leading-tight text-white">{feature.title}</h3>
-            <p className="mt-3 text-base font-medium leading-relaxed text-white/84">{feature.description}</p>
+    <section className="mt-5 rounded-[1.7rem] border border-white/12 bg-[#041e38]/82 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.2)] sm:p-6">
+      <h2 className="text-3xl font-black tracking-[-0.04em] text-white">Why CaterBidsUK</h2>
+      <div className="mt-5 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+        {whyCards.map((card) => (
+          <article key={card.title} className="flex items-center gap-4 rounded-2xl border border-white/10 bg-[#061d3a] p-4 shadow-[0_6px_24px_rgba(0,0,0,0.28)]">
+            <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border border-[#FF6B00] bg-[#FF6B00]/15 text-[#FF6B00]">
+              {card.icon}
+            </span>
+            <span>
+              <h3 className="text-lg font-black leading-tight text-white">{card.title}</h3>
+              <p className="mt-1 text-sm font-semibold leading-relaxed text-white/70">{card.description}</p>
+            </span>
           </article>
         ))}
       </div>
@@ -388,111 +612,100 @@ function WhyCaterBids() {
   )
 }
 
-function LaunchOfferBanner({ onSignupClick }: { onSignupClick: () => void }) {
+function HowItWorks() {
+  const howItWorks: StepCard[] = [
+    {
+      title: "Upload item",
+      description: "Add photos, details and set your price in minutes.",
+      icon: <Upload className="h-9 w-9" strokeWidth={1.7} />,
+    },
+    {
+      title: "CaterBot helps fill details",
+      description: "AI suggests titles, descriptions and categories.",
+      icon: <Bot className="h-9 w-9" strokeWidth={1.7} />,
+    },
+    {
+      title: "Buyers discover listings",
+      description: "Buyers find your item through smart search.",
+      icon: <Search className="h-9 w-9" strokeWidth={1.7} />,
+    },
+    {
+      title: "Sell and arrange delivery",
+      description: "Close the deal and arrange collection or delivery.",
+      icon: <Truck className="h-9 w-9" strokeWidth={1.7} />,
+    },
+  ]
   return (
-    <section className="relative mt-7 overflow-hidden rounded-2xl bg-white p-5 text-[#001b35] shadow-[0_26px_85px_rgba(0,0,0,0.24)] sm:p-8">
-      <Bell className="pointer-events-none absolute -right-3 bottom-1 h-36 w-36 text-[#002E5D]/7" strokeWidth={1.5} />
-      <div className="relative z-10 grid items-center gap-6 lg:grid-cols-[260px_1fr_auto]">
-        <div className="relative h-40 overflow-hidden rounded-2xl bg-[#f2f6fb]">
-          <Image
-            src="/home-equipment-card.png"
-            alt="Commercial catering equipment"
-            fill
-            sizes="260px"
-            className="object-cover"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-white/50 to-transparent" />
-        </div>
-        <div>
-          <p className="text-xl font-black">Founding Launch Offer</p>
-          <h2 className="mt-2 text-4xl font-black tracking-[-0.05em] text-[#FF6B00] sm:text-5xl">
-            First 100 listings free
-          </h2>
-          <p className="mt-4 max-w-2xl text-base font-semibold leading-relaxed text-[#102c4d]">
-            Be among the first UK catering businesses to list equipment, vans or hospitality assets on CaterBidsUK.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={onSignupClick}
-          className="rounded-xl bg-[#FF6B00] px-7 py-4 text-base font-black text-white shadow-[0_18px_38px_rgba(255,107,0,0.24)] transition hover:brightness-110"
-        >
-          Get Launch Updates
-        </button>
+    <section className="mt-5 rounded-[1.7rem] border border-white/12 bg-[#02152c]/82 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.2)] sm:p-6">
+      <h2 className="text-3xl font-black tracking-[-0.04em] text-white">How It Works</h2>
+      <div className="mt-5 grid gap-4 md:grid-cols-4">
+        {howItWorks.map((step, index) => (
+          <article key={step.title} className="relative rounded-2xl border border-white/10 bg-[#061d3a] p-5 text-center shadow-[0_6px_24px_rgba(0,0,0,0.28)]">
+            <span className="absolute -top-3 left-4 flex h-9 w-9 items-center justify-center rounded-full bg-[#FF6B00] text-sm font-black text-white shadow-lg">
+              {index + 1}
+            </span>
+            <span className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-[#FF6B00]/15 text-[#FF6B00]">
+              {step.icon}
+            </span>
+            <h3 className="mt-5 text-lg font-black leading-tight text-white">{step.title}</h3>
+            <p className="mt-3 text-sm font-semibold leading-relaxed text-white/70">{step.description}</p>
+          </article>
+        ))}
       </div>
     </section>
   )
 }
 
-function LandingFooter() {
+function ClosingCta() {
   return (
-    <footer className="grid gap-7 py-12 text-white lg:grid-cols-[1.6fr_0.8fr_0.8fr_1.25fr] lg:gap-12">
-      <section>
-        <a href="/" className="flex items-center gap-3" aria-label="CaterBidsUK home">
-          <Image
-            src="/brand/caterbids-logo.png"
-            alt="CaterBidsUK bell logo"
-            width={58}
-            height={58}
-            className="h-14 w-14 rounded-2xl object-contain"
-          />
-          <span>
-            <span className="block text-3xl font-black leading-none tracking-[-0.055em]">
-              Cater<span className="text-[#FF6B00]">Bids</span>UK
-            </span>
-            <span className="mt-1 block text-xs font-black uppercase tracking-[0.28em] text-[#FF6B00]">
-              BUY • SELL • SAVE
-            </span>
-          </span>
-        </a>
-        <p className="mt-4 max-w-sm text-base font-medium leading-relaxed text-white/68">
-          The UK Marketplace for Catering Equipment — BUY • SELL • SAVE
-        </p>
-        <div className="mt-4 flex gap-3" aria-label="Social links coming soon">
-          <SocialPlaceholder label="f" />
-          <SocialPlaceholder label="ig" />
-          <SocialPlaceholder label="in" />
+    <section className="mt-5 overflow-hidden rounded-[1.7rem] border border-[#FF6B00]/35 bg-[linear-gradient(135deg,rgba(7,36,72,0.96),rgba(3,20,43,0.98))] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.22)] sm:p-8">
+      <div className="grid items-center gap-6 lg:grid-cols-[auto_1fr_auto]">
+        <div className="flex h-20 w-20 rotate-[-14deg] items-center justify-center rounded-3xl bg-[#FF6B00] text-white shadow-[0_20px_60px_rgba(255,107,0,0.36)]">
+          <Tag className="h-10 w-10" strokeWidth={1.8} />
         </div>
-        <p className="mt-6 text-sm font-medium text-white/52">© 2026 CaterBidsUK. All rights reserved.</p>
-      </section>
-
-      <FooterColumn title="Company" links={[["About", "/about"], ["Launch Updates", "#launch-updates"], ["Contact", "/contact"]]} />
-      <FooterColumn title="Support" links={[["Privacy Policy", "/privacy-policy"], ["Terms", "/terms"], ["Contact", "/contact"]]} />
-
-      <section className="rounded-2xl border border-white/14 bg-white/5 p-6 shadow-xl">
-        <h3 className="text-lg font-black">Coming soon.</h3>
-        <p className="mt-3 text-sm font-medium leading-relaxed text-white/70">
-          CaterBidsUK is preparing to launch its UK catering marketplace.
-        </p>
-        <div className="mt-5 flex justify-end">
-          <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#FF6B00]/12 text-[#FF6B00]">
-            <Bell className="h-7 w-7" strokeWidth={1.8} />
-          </span>
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.25em] text-[#FF6B00]">Limited time launch offer</p>
+          <h2 className="mt-1 text-3xl font-black tracking-[-0.045em] text-white sm:text-4xl">First 100 listings free</h2>
+          <p className="mt-2 text-base font-semibold text-white/72">No fees. No catch. Join UK caterers buying and selling equipment.</p>
+          <p className="mt-3 text-sm font-black uppercase tracking-[0.28em] text-[#FF6B00]">BUY • SELL • SAVE</p>
         </div>
-      </section>
-    </footer>
-  )
-}
-
-function FooterColumn({ title, links }: { title: string; links: [string, string][] }) {
-  return (
-    <nav aria-label={title}>
-      <h3 className="font-black text-white">{title}</h3>
-      <div className="mt-4 grid gap-3 text-base font-medium text-white/78">
-        {links.map(([label, href]) => (
-          <a key={label} href={href} className="transition hover:text-[#FF6B00]">
-            {label}
-          </a>
-        ))}
+        <div className="flex flex-col gap-3 sm:flex-row lg:min-w-[240px] lg:flex-col">
+          <Link
+            href={sellHref}
+            className="flex min-h-14 items-center justify-center gap-3 rounded-2xl bg-[#FF6B00] px-7 text-base font-black text-white shadow-[0_18px_45px_rgba(255,107,0,0.3)] transition hover:brightness-110 focus:outline-none focus:ring-4 focus:ring-[#FF6B00]/25"
+          >
+            Start Free Listing
+            <ArrowRight className="h-5 w-5" strokeWidth={2.4} />
+          </Link>
+          <Link
+            href={searchAllHref}
+            className="flex min-h-14 items-center justify-center gap-3 rounded-2xl border border-white/20 bg-white/10 px-7 text-base font-black text-white transition hover:border-[#FF6B00]/55 focus:outline-none focus:ring-4 focus:ring-white/20"
+          >
+            <Search className="h-5 w-5" strokeWidth={2.2} />
+            Browse Equipment
+          </Link>
+        </div>
       </div>
-    </nav>
+    </section>
   )
 }
 
-function SocialPlaceholder({ label }: { label: string }) {
+
+function SectionHeader({ title, href, action }: { title: string; href: string; action: string }) {
   return (
-    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/9 text-xs font-black uppercase text-white/72">
-      {label}
-    </span>
+    <div className="flex items-center justify-between gap-4">
+      <h2 className="flex items-center gap-3 text-3xl font-black tracking-[-0.045em] text-white">
+        <span className="h-9 w-1.5 rounded-full bg-[#FF6B00]" aria-hidden="true" />
+        {title}
+      </h2>
+      <Link
+        href={href}
+        className="hidden items-center gap-2 text-sm font-black text-[#FF6B00] transition hover:text-orange-300 sm:flex"
+      >
+        {action}
+        <ArrowRight className="h-5 w-5" strokeWidth={2.4} />
+      </Link>
+    </div>
   )
 }
+

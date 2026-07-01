@@ -1,11 +1,20 @@
 "use client"
 
+import Image from "next/image"
+import SiteLogo from "@/components/SiteLogo"
 import { createClient } from '@/lib/supabase/client'
 import { getCurrentUser } from '@/lib/supabase/auth'
 import { useEffect, useState, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import {
   ArrowLeft,
+  BadgeCheck,
+  Bell,
+  BookOpen,
+  CalendarDays,
+  CheckCircle2,
+  ChevronDown,
+  ExternalLink,
   MapPin,
   Tag,
   Shield,
@@ -15,16 +24,30 @@ import {
   Heart,
   AlertTriangle,
   Eye,
+  Info,
+  Mail,
+  Package,
   Plus,
   Pencil,
+  Star,
   Trash2,
+  Truck,
+  UserCircle2,
+  Zap,
   X,
 } from "lucide-react"
 
 import DeliveryQuoteBox from "@/components/DeliveryQuoteBox"
 import BuyCheckoutBox from "@/components/BuyCheckoutBox"
+import SellerTrustCard from "@/components/trust/SellerTrustCard"
+import SocialShareButtons from "@/components/social/SocialShareButtons"
+import SellerSocialLinks, { type SellerSocialLinksValue } from "@/components/social/SellerSocialLinks"
+import FeaturedBoostButton from "@/components/FeaturedBoostButton"
+import SellerReviewsList from "@/components/SellerReviewsList"
+import { isFeaturedAndActive } from "@/lib/featured"
 import type { DeliveryQuote } from "@/components/DeliveryQuoteBox"
 import type { Database } from '@/types/supabase'
+import { formatUKDate } from "@/lib/trust/badges"
 import { CATEGORY_OPTIONS, categoryByTitle, subcategoriesForCategory } from "@/lib/categories"
 import { resolveFullUkPostcode } from "@/lib/delivery/postcodes"
 import {
@@ -41,9 +64,73 @@ import {
 } from "@/lib/listing-trust"
 
 type Listing = Database['public']['Tables']['listings']['Row']
+type SellerProfile = Pick<
+  Database['public']['Tables']['profiles']['Row'],
+  | 'verified'
+  | 'email_verified'
+  | 'phone_verified'
+  | 'badge'
+  | 'seller_verification_level'
+  | 'business_verified'
+  | 'government_id_verified'
+  | 'stripe_connect_onboarding_complete'
+  | 'created_at'
+  | 'name'
+  | 'full_name'
+  | 'business'
+> & {
+  social_links?: SellerSocialLinksValue | null
+}
+type SellerReviewStats = {
+  reviewCount: number
+  averageRating: number
+  completedSales: number
+  responseRate: number
+  averageResponseHours: number
+  disputeCount: number
+}
+type OptionalProfileRow = Database['public']['Tables']['profiles']['Row'] & {
+  is_email_verified?: boolean | null
+  is_phone_verified?: boolean | null
+  verified_user_badge?: boolean | null
+  full_name?: string | null
+  social_links?: SellerSocialLinksValue | null
+  stripe_connect_onboarding_complete?: boolean | null
+}
+type SellerReviewStatsRow = {
+  review_count?: number | string | null
+  average_rating?: number | string | null
+}
+type SellerReviewRow = Database["public"]["Tables"]["seller_reviews"]["Row"]
 type EquipmentSpec = Database['public']['Tables']['EquipmentSpecs']['Row']
 type ListingEquipmentSpec = Database['public']['Tables']['listing_equipment_specs']['Row'] & {
   EquipmentSpecs?: EquipmentSpec | null
+}
+type CaterBotEquipmentSpec = {
+  id: string
+  listing_id: string | null
+  brand: string | null
+  model: string | null
+  equipment_type: string | null
+  height_cm: number | null
+  width_cm: number | null
+  depth_cm: number | null
+  net_weight_kg: number | null
+  gross_weight_kg: number | null
+  capacity_litres: number | null
+  power_type: string | null
+  voltage: string | null
+  phase: string | null
+  watts: number | null
+  amps: number | null
+  refrigerant: string | null
+  pallet_required: boolean | null
+  suggested_pallet_size: string | null
+  source_url: string | null
+  source_title: string | null
+  source_type: string | null
+  confidence_score: number | null
+  checked_at: string | null
 }
 
 const listingConditions = CONDITION_OPTIONS
@@ -80,11 +167,124 @@ function listingPriceNumber(price: unknown) {
   return Number.isFinite(value) ? value : 0
 }
 
+function copyTextFallback(value: string) {
+  try {
+    const input = document.createElement("textarea")
+    input.value = value
+    input.setAttribute("readonly", "true")
+    input.style.position = "fixed"
+    input.style.left = "-9999px"
+    document.body.appendChild(input)
+    input.select()
+    document.execCommand("copy")
+    document.body.removeChild(input)
+    return true
+  } catch {
+    return false
+  }
+}
+
 function listingImageUrls(item: Partial<Listing> | null | undefined) {
   const images = Array.isArray(item?.images)
     ? item.images.filter((url): url is string => typeof url === "string" && Boolean(url))
     : []
   return images.length > 0 ? images : item?.image_url ? [item.image_url] : []
+}
+
+function cleanSellerDisplayName(value?: string | null) {
+  const text = String(value || "").replace(/\s+/g, " ").trim()
+  if (!text) return ""
+  if (/^caterbids(?:uk)?\s+seller$/i.test(text)) return ""
+  if (/^seller$/i.test(text)) return ""
+  return text
+}
+
+function publicSellerDisplayName(profile: SellerProfile | null, item: Listing | null) {
+  return (
+    cleanSellerDisplayName(profile?.business) ||
+    cleanSellerDisplayName(profile?.name) ||
+    cleanSellerDisplayName(profile?.full_name) ||
+    cleanSellerDisplayName(item?.seller_contact_name) ||
+    "Private seller"
+  )
+}
+
+function outwardPostcode(value?: string | null) {
+  const text = String(value || "").trim().toUpperCase()
+  if (!text) return ""
+  return text.split(/\s+/)[0] || text
+}
+
+function publicListingLocation(item: Listing) {
+  return (
+    String(item.city || "").trim() ||
+    String(item.location || "").trim() ||
+    outwardPostcode(item.collection_postcode) ||
+    "UK"
+  )
+}
+
+function supportedViewCount(item: Listing) {
+  const candidate = (item as unknown as { view_count?: unknown; views?: unknown }).view_count ??
+    (item as unknown as { view_count?: unknown; views?: unknown }).views
+  const value = Number(candidate)
+  return Number.isFinite(value) && value > 0 ? value : null
+}
+
+function formatPalletSize(value: string | null | undefined): string {
+  const map: Record<string, string> = {
+    // new slug values
+    mini_quarter: "Mini Quarter Pallet",
+    quarter: "Quarter Pallet",
+    half: "Half Pallet",
+    light: "Light Pallet",
+    full: "Full Pallet",
+    custom: "Custom / Oversized",
+    // old capitalised values (existing listings)
+    "Mini Quarter": "Mini Quarter Pallet",
+    "Quarter": "Quarter Pallet",
+    "Half": "Half Pallet",
+    "Light": "Light Pallet",
+    "Full": "Full Pallet",
+  }
+  return value ? (map[value] ?? value) : "Not confirmed"
+}
+
+function listingStatusCopy(status?: string | null) {
+  const normalised = String(status || "").toLowerCase()
+  if (normalised === "sold") {
+    return {
+      title: "Item marked as sold",
+      text: "This listing is no longer available to new buyers.",
+      tone: "red",
+    }
+  }
+  if (normalised === "draft") {
+    return {
+      title: "Draft listing",
+      text: "Complete and publish your listing when ready.",
+      tone: "amber",
+    }
+  }
+  if (normalised === "pending" || normalised === "pending_review") {
+    return {
+      title: "Listing pending review",
+      text: "Your listing will appear to buyers once approved.",
+      tone: "amber",
+    }
+  }
+  if (normalised === "removed" || normalised === "archived") {
+    return {
+      title: "Listing hidden from buyers",
+      text: "This listing is not currently visible on the marketplace.",
+      tone: "red",
+    }
+  }
+  return {
+    title: "Your listing is live",
+    text: "Your listing is visible to buyers.",
+    tone: "green",
+  }
 }
 
 function readJsonValue<T>(key: string, fallback: T, clearOnError = false): T {
@@ -171,6 +371,7 @@ function ListingContent() {
   const router = useRouter()
   const params = useSearchParams()
   const id = params.get("id")
+  const [showFeaturedSuccess, setShowFeaturedSuccess] = useState(params.get("featured") === "success")
 
   const [listing, setListing] = useState<Listing | null>(null)
   const [myListings, setMyListings] = useState<Listing[]>([])
@@ -187,6 +388,18 @@ function ListingContent() {
   const [messageError, setMessageError] = useState("")
   const [openingMessage, setOpeningMessage] = useState(false)
   const [verifiedSpec, setVerifiedSpec] = useState<ListingEquipmentSpec | null>(null)
+  const [caterBotEquipmentSpec, setCaterBotEquipmentSpec] = useState<CaterBotEquipmentSpec | null>(null)
+  const [sellerProfile, setSellerProfile] = useState<SellerProfile | null>(null)
+  const [sellerReviewStats, setSellerReviewStats] = useState<SellerReviewStats>({
+    reviewCount: 0,
+    averageRating: 0,
+    completedSales: 0,
+    responseRate: 0,
+    averageResponseHours: 0,
+    disputeCount: 0,
+  })
+  const [sellerReviews, setSellerReviews] = useState<SellerReviewRow[]>([])
+  const [showAllReviews, setShowAllReviews] = useState(false)
   const [specReportSent, setSpecReportSent] = useState(false)
 
   function userOwnsListing(item: Partial<Listing> | null | undefined) {
@@ -274,6 +487,8 @@ function ListingContent() {
     }
 
     const formData = new FormData(event.currentTarget)
+    const editedDeliveryOption = (formData.get("delivery_option") as string) || "Collection Only"
+    const editedUsesPalletDelivery = /pallet/i.test(editedDeliveryOption)
     const updatedListing: Listing = {
       ...editingListing,
       title: ((formData.get("title") as string) || "").trim(),
@@ -289,19 +504,20 @@ function ListingContent() {
       warranty_type: (formData.get("warranty_type") as string) || "No warranty",
       manuals_available: formData.get("manuals_available") === "on",
       tested_status: (formData.get("tested_status") as string) || "Untested",
-      delivery_option: (formData.get("delivery_option") as string) || "Collection only",
-      collection_postcode: ((formData.get("collection_postcode") as string) || "").trim() || null,
+      delivery_option: editedUsesPalletDelivery ? "CaterBids Pallet Delivery" : "Collection Only",
+      collection_postcode: editedUsesPalletDelivery ? ((formData.get("collection_postcode") as string) || "").trim() || null : null,
       vat_included: formData.get("vat_included") === "on",
       weight_kg: optionalNumber(formData.get("weight_kg")),
       length_cm: optionalNumber(formData.get("length_cm")),
       width_cm: optionalNumber(formData.get("width_cm")),
       height_cm: optionalNumber(formData.get("height_cm")),
-      pallet_ready: formData.get("pallet_ready") === "on",
-      tail_lift_required: formData.get("tail_lift_required") === "on",
-      forklift_available: formData.get("forklift_available") === "on",
-      ground_floor_collection: formData.get("ground_floor_collection") === "on",
-      commercial_premises: formData.get("commercial_premises") === "on",
-      delivery_available: formData.get("delivery_available") === "on",
+      pallet_ready: editedUsesPalletDelivery ? formData.get("pallet_ready") === "on" : false,
+      tail_lift_required: editedUsesPalletDelivery ? formData.get("tail_lift_required") === "on" : false,
+      forklift_available: editedUsesPalletDelivery ? formData.get("forklift_available") === "on" : false,
+      ground_floor_collection: editedUsesPalletDelivery ? formData.get("ground_floor_collection") === "on" : false,
+      commercial_premises: editedUsesPalletDelivery ? formData.get("commercial_premises") === "on" : false,
+      delivery_available: editedUsesPalletDelivery,
+      caterbids_delivery_available: editedUsesPalletDelivery,
       description: ((formData.get("description") as string) || "").trim(),
       image_url: editImagePreviews[0] || editingListing.image_url,
       images: editImagePreviews.length > 0 ? editImagePreviews : listingImageUrls(editingListing),
@@ -352,6 +568,7 @@ function ListingContent() {
         ground_floor_collection: updatedListing.ground_floor_collection,
         commercial_premises: updatedListing.commercial_premises,
         delivery_available: updatedListing.delivery_available,
+        caterbids_delivery_available: updatedListing.caterbids_delivery_available,
         description: updatedListing.description,
         image_url: updatedListing.image_url,
         images: updatedListing.images,
@@ -396,10 +613,17 @@ function ListingContent() {
     }
 
     const supabase = createClient()
-    const { error } = await supabase.from("listings").delete().eq("id", itemId)
+    const { error, count } = await supabase
+      .from("listings")
+      .delete({ count: "exact" })
+      .eq("id", itemId)
 
     if (error) {
       setEditError(error.message || "Could not delete listing.")
+      return
+    }
+    if (!count) {
+      setEditError("Listing could not be deleted. You may not have permission.")
       return
     }
 
@@ -649,6 +873,7 @@ function ListingContent() {
       const listingId = safeListingId(listing?.id || id)
       if (!listingId) {
         setVerifiedSpec(null)
+        setCaterBotEquipmentSpec(null)
         return
       }
 
@@ -663,18 +888,190 @@ function ListingContent() {
         if (error) {
           console.warn("Verified specs unavailable:", error.message || error)
           setVerifiedSpec(null)
-          return
+        } else {
+          setVerifiedSpec((data as ListingEquipmentSpec | null) || null)
         }
-
-        setVerifiedSpec((data as ListingEquipmentSpec | null) || null)
       } catch (error) {
         console.warn("Verified specs unavailable:", error)
         setVerifiedSpec(null)
+      }
+
+      try {
+        const supabase = createClient()
+        const { data, error } = await supabase
+          .from("equipment_specs")
+          .select("*")
+          .eq("listing_id", listingId)
+          .order("confidence_score", { ascending: false })
+          .order("checked_at", { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        if (error) {
+          console.warn("CaterBot specs unavailable:", error.message || error)
+          setCaterBotEquipmentSpec(null)
+          return
+        }
+
+        setCaterBotEquipmentSpec((data as CaterBotEquipmentSpec | null) || null)
+      } catch (error) {
+        console.warn("CaterBot specs unavailable:", error)
+        setCaterBotEquipmentSpec(null)
       }
     }
 
     fetchVerifiedSpecs()
   }, [id, listing])
+
+  useEffect(() => {
+    async function fetchSellerProfile() {
+      const sellerId = safeListingId(listing?.seller_id || listing?.user_id)
+      if (!sellerId || sellerId === "local") {
+        setSellerProfile(null)
+        return
+      }
+
+      try {
+        const supabase = createClient()
+        let publicProfileResult = await supabase
+          .from("seller_public_profiles" as "profiles")
+          .select("verified,email_verified,is_email_verified,phone_verified,is_phone_verified,verified_user_badge,seller_verification_level,business_verified,government_id_verified,stripe_connect_onboarding_complete,created_at,name,full_name,business,social_links")
+          .eq("id", sellerId)
+          .maybeSingle()
+
+        if (publicProfileResult.error && /full_name|social_links|schema cache|column|does not exist/i.test(publicProfileResult.error.message || "")) {
+          publicProfileResult = await supabase
+            .from("seller_public_profiles" as "profiles")
+            .select("verified,email_verified,is_email_verified,phone_verified,is_phone_verified,verified_user_badge,seller_verification_level,business_verified,government_id_verified,stripe_connect_onboarding_complete,created_at,name,business")
+            .eq("id", sellerId)
+            .maybeSingle()
+        }
+
+        if (!publicProfileResult.error) {
+          const publicProfile = publicProfileResult.data as OptionalProfileRow | null
+          setSellerProfile(
+            publicProfile
+              ? {
+                  ...publicProfile,
+                  badge: publicProfile.verified_user_badge ||
+                    publicProfile.is_email_verified ||
+                    publicProfile.email_verified ||
+                    publicProfile.verified
+                    ? "Verified User"
+                    : "Email pending",
+                }
+              : null
+          )
+          return
+        }
+
+        let fallback = await supabase
+          .from("profiles")
+          .select("verified,email_verified,phone_verified,badge,seller_verification_level,business_verified,government_id_verified,stripe_connect_onboarding_complete,created_at,name,full_name,business,social_links")
+          .eq("id", sellerId)
+          .maybeSingle()
+
+        if (fallback.error && /social_links|schema cache|column|does not exist/i.test(fallback.error.message || "")) {
+          fallback = await supabase
+            .from("profiles")
+            .select("verified,email_verified,phone_verified,badge,seller_verification_level,business_verified,government_id_verified,stripe_connect_onboarding_complete,created_at,name,full_name,business")
+            .eq("id", sellerId)
+            .maybeSingle()
+        }
+
+        const fallbackProfile = fallback.data as OptionalProfileRow | null
+        setSellerProfile(
+          fallbackProfile
+            ? ({
+                verified: Boolean(fallbackProfile.verified),
+                email_verified: Boolean(fallbackProfile.email_verified || fallbackProfile.verified),
+                phone_verified: Boolean(fallbackProfile.phone_verified),
+                badge: fallbackProfile.badge || (fallbackProfile.verified ? "Verified User" : "Email pending"),
+                seller_verification_level: fallbackProfile.seller_verification_level || "unverified",
+                business_verified: Boolean(fallbackProfile.business_verified),
+                government_id_verified: Boolean(fallbackProfile.government_id_verified),
+                stripe_connect_onboarding_complete: Boolean(fallbackProfile.stripe_connect_onboarding_complete),
+                created_at: fallbackProfile.created_at || null,
+                name: fallbackProfile.name || null,
+                full_name: fallbackProfile.full_name || null,
+                business: fallbackProfile.business || null,
+                social_links: fallbackProfile.social_links || null,
+              } as SellerProfile)
+            : null
+        )
+      } catch (error) {
+        console.warn("Seller profile badge unavailable:", error)
+        setSellerProfile(null)
+      }
+    }
+
+    fetchSellerProfile()
+  }, [listing?.seller_id, listing?.user_id])
+
+  useEffect(() => {
+    async function fetchSellerTrustStats() {
+      const sellerId = safeListingId(listing?.seller_id || listing?.user_id)
+      if (!sellerId || sellerId === "local") {
+        setSellerReviewStats({
+          reviewCount: 0,
+          averageRating: 0,
+          completedSales: 0,
+          responseRate: 0,
+          averageResponseHours: 0,
+          disputeCount: 0,
+        })
+        return
+      }
+
+      try {
+        const supabase = createClient()
+        const [{ data: reviewStats }, { count: completedSales }] = await Promise.all([
+          supabase
+            .from("seller_review_stats")
+            .select("review_count,average_rating")
+            .eq("seller_id", sellerId)
+            .maybeSingle(),
+          supabase
+            .from("orders")
+            .select("*", { count: "exact", head: true })
+            .eq("seller_id", sellerId)
+            .or("payment_status.eq.paid,order_status.eq.paid,order_status.eq.delivered,delivery_status.eq.delivered"),
+        ])
+
+        const reviewStatsRow = reviewStats as SellerReviewStatsRow | null
+        setSellerReviewStats({
+          reviewCount: Number(reviewStatsRow?.review_count || 0),
+          averageRating: Number(reviewStatsRow?.average_rating || 0),
+          completedSales: completedSales || 0,
+          responseRate: 0,
+          averageResponseHours: 0,
+          disputeCount: 0,
+        })
+
+        try {
+          const reviewsRes = await fetch(`/api/reviews?sellerId=${encodeURIComponent(sellerId)}`)
+          if (reviewsRes.ok) {
+            const reviewsData = await reviewsRes.json()
+            setSellerReviews(Array.isArray(reviewsData.reviews) ? reviewsData.reviews : [])
+          }
+        } catch {
+          // individual reviews are non-critical
+        }
+      } catch (error) {
+        console.warn("Seller trust stats unavailable:", error)
+        setSellerReviewStats({
+          reviewCount: 0,
+          averageRating: 0,
+          completedSales: 0,
+          responseRate: 0,
+          averageResponseHours: 0,
+          disputeCount: 0,
+        })
+      }
+    }
+
+    fetchSellerTrustStats()
+  }, [listing?.seller_id, listing?.user_id])
 
   const editListingPanel = editingListing ? (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 px-4 py-4 backdrop-blur-sm sm:items-center">
@@ -878,11 +1275,11 @@ function ListingContent() {
           </div>
         </div>
         <div className="mb-4 rounded-3xl border border-[#FF6B00]/20 bg-[#002E5D]/35 p-4">
-          <p className="mb-3 text-sm font-black text-[#FF6B00]">CaterBids Delivery setup</p>
+          <p className="mb-3 text-sm font-black text-[#FF6B00]">CaterBids Pallet Delivery setup</p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-white/80">
-              <input name="delivery_available" type="checkbox" defaultChecked={editingListing.delivery_available !== false} className="h-4 w-4 accent-[#FF6B00]" />
-              Delivery available
+              <input name="delivery_available" type="checkbox" defaultChecked={Boolean(editingListing.caterbids_delivery_available)} className="h-4 w-4 accent-[#FF6B00]" />
+              CaterBids Pallet Delivery available
             </label>
             <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-white/80">
               <input name="pallet_ready" type="checkbox" defaultChecked={Boolean(editingListing.pallet_ready)} className="h-4 w-4 accent-[#FF6B00]" />
@@ -1059,6 +1456,17 @@ function ListingContent() {
                     </div>
                   </button>
 
+                  <div className="px-3 pb-3">
+                    <SocialShareButtons
+                      listingId={itemId}
+                      title={item.title || "CaterBidsUK listing"}
+                      price={formatPrice(item.price)}
+                      location={item.city || item.location || "UK"}
+                      url={`/listing?id=${encodeURIComponent(itemId)}`}
+                      compact
+                    />
+                  </div>
+
                   <div className="flex gap-2 border-t border-white/10 p-3">
                     <button
                       type="button"
@@ -1111,17 +1519,14 @@ function ListingContent() {
   }
 
   const listingImages = listingImageUrls(listing)
+  const publicLocation = publicListingLocation(listing)
+  const viewCount = supportedViewCount(listing)
   const buyerChecklist = buyerChecklistForListing(listing)
   const trustBadges = trustBadgesForListing(listing)
   const deliveryOptionText = (listing.delivery_option || "").toLowerCase()
   const usesCaterBidsDelivery =
-    Boolean(listing.caterbids_delivery_available) ||
-    Boolean(listing.delivery_available) ||
-    listing.delivery_method === "caterbids_delivery" ||
-    deliveryOptionText.includes("delivery") ||
-    deliveryOptionText.includes("pallet") ||
-    deliveryOptionText.includes("courier") ||
-    deliveryOptionText.includes("local")
+    Boolean(listing.caterbids_delivery_available && deliveryOptionText.includes("pallet")) ||
+    Boolean(listing.delivery_available && deliveryOptionText.includes("pallet"))
   const listingWeightKg = listing.pallet_weight_kg || listing.weight_kg
   const listingLengthCm = listing.pallet_length_cm || listing.length_cm
   const listingWidthCm = listing.pallet_width_cm || listing.width_cm
@@ -1133,7 +1538,8 @@ function ListingContent() {
     Number(listingHeightCm || 0) > 0
   const deliveryExplicitlyDisabled =
     !usesCaterBidsDelivery &&
-    (listing.delivery_method === "collection_only" ||
+    ((listing as any).collection_enabled === true ||
+      (listing as any).buyer_arranges_enabled === true ||
       listing.delivery_available === false ||
       deliveryOptionText.includes("buyer arranges transport")
     )
@@ -1142,12 +1548,15 @@ function ListingContent() {
     hasDeliveryMeasurements &&
     (listing.delivery_available === true ||
       usesCaterBidsDelivery ||
-      deliveryOptionText.includes("delivery") ||
-      deliveryOptionText.includes("pallet") ||
-      deliveryOptionText.includes("courier") ||
-      deliveryOptionText.includes("local"))
+      deliveryOptionText.includes("pallet"))
   const isListingOwner = userOwnsListing(listing)
   const isSoldListing = listing.status === "sold"
+  const ownerStatus = listingStatusCopy(listing.status)
+  const deliveryStatusText = usesCaterBidsDelivery
+    ? "CaterBids Pallet Delivery Available"
+    : deliveryExplicitlyDisabled
+      ? "Collection only"
+      : "Check with seller"
   const manualSourceUrl = listing.manual_source_url || listing.spec_source_url || ""
   const manualSourceName = listing.manual_source_name || "Verified manual/spec source"
   const specConfidence = listing.ai_spec_confidence || ""
@@ -1161,6 +1570,40 @@ function ListingContent() {
     !sourceRejectedBySeller &&
     specConfidence.toLowerCase() !== "low" &&
     specConfidence.toLowerCase() !== "source rejected"
+  const sellerTrustProfile = sellerProfile as (SellerProfile & {
+    is_email_verified?: boolean | null
+    is_phone_verified?: boolean | null
+    verified_user_badge?: boolean | null
+  }) | null
+  const sellerEmailVerified = Boolean(
+    sellerProfile?.email_verified ||
+      sellerProfile?.verified ||
+      sellerTrustProfile?.is_email_verified ||
+      sellerTrustProfile?.verified_user_badge
+  )
+  const sellerTrustBadge = sellerEmailVerified ? sellerProfile?.badge || "Verified User" : ""
+  const sellerVerificationBadge =
+    sellerProfile?.seller_verification_level === "verified" ||
+    sellerProfile?.seller_verification_level === "business_verified" ||
+    sellerProfile?.business_verified ||
+    sellerProfile?.government_id_verified
+      ? "Verified Seller"
+      : ""
+  const sellerFullyVerified = Boolean(sellerVerificationBadge)
+  const sellerDisplayName = publicSellerDisplayName(sellerProfile, listing)
+  const sellerTrustInput = {
+    emailVerified: sellerEmailVerified,
+    phoneVerified: Boolean(sellerProfile?.phone_verified || sellerTrustProfile?.is_phone_verified),
+    idVerified: Boolean(sellerProfile?.government_id_verified),
+    businessVerified: Boolean(sellerProfile?.business_verified),
+    stripeConnected: Boolean(sellerProfile?.stripe_connect_onboarding_complete),
+    completedSales: sellerReviewStats.completedSales,
+    averageRating: sellerReviewStats.averageRating,
+    reviewCount: sellerReviewStats.reviewCount,
+    responseRate: sellerReviewStats.responseRate,
+    averageResponseHours: sellerReviewStats.averageResponseHours,
+    disputeCount: sellerReviewStats.disputeCount,
+  }
   const checkoutSellerId = isUuid(safeListingId(listing.seller_id || listing.user_id))
     ? safeListingId(listing.seller_id || listing.user_id)
     : ""
@@ -1169,6 +1612,7 @@ function ListingContent() {
     listing.collection_full_address,
     listing.location
   )
+  const publicCollectionArea = publicLocation || outwardPostcode(listing.collection_postcode) || "Not provided"
   const safetyRows = [
     ["Condition", valueOrNotProvided(listing.condition)],
     ["Tested status", valueOrNotProvided(listing.tested_status)],
@@ -1178,44 +1622,88 @@ function ListingContent() {
     ["Service history", valueOrNotProvided(listing.service_history)],
     ["Manuals", listing.manuals_available ? "Available" : "Not provided"],
     ["VAT", listing.vat_included ? "Included" : "Not stated"],
-    ["Delivery", valueOrNotProvided(listing.delivery_option)],
-    ["Collection postcode", fullCollectionPostcode || "Collection postcode not provided"],
+    ["Delivery", usesCaterBidsDelivery ? "CaterBids Pallet Delivery Available" : "Collection only"],
+    ["Collection area", publicCollectionArea],
+    ["Pallet size", usesCaterBidsDelivery ? formatPalletSize((listing as any).pallet_size) : "Not required"],
     ["Weight", listingWeightKg ? `${listingWeightKg} kg` : "Not provided"],
     ["Package size", listingLengthCm && listingWidthCm && listingHeightCm ? `${listingLengthCm} x ${listingWidthCm} x ${listingHeightCm} cm` : "Not provided"],
     ["Pallet ready", listing.pallet_ready ? "Yes" : "Not stated"],
     ["Tail-lift", listing.tail_lift_required === false ? "Not required" : "Available / may be required"],
   ]
-  const canonicalSpec = verifiedSpec?.EquipmentSpecs
+  const legacySpec = verifiedSpec?.EquipmentSpecs || null
+  const sourceBackedSpec = legacySpec || caterBotEquipmentSpec
+  const sourceBackedSpecConfidence = legacySpec?.confidence ?? caterBotEquipmentSpec?.confidence_score ?? 0
+  const sourceBackedSpecSourceUrl = legacySpec?.source_url || caterBotEquipmentSpec?.source_url || ""
+  const sourceBackedSpecSourceName =
+    legacySpec?.source_name ||
+    caterBotEquipmentSpec?.source_title ||
+    [caterBotEquipmentSpec?.brand, caterBotEquipmentSpec?.model].filter(Boolean).join(" ") ||
+    "Source not provided"
   const showVerifiedSpecs =
-    Boolean(verifiedSpec && canonicalSpec && verifiedSpec.verification_status === "verified" && showCaterBotSource)
-  const specRows = canonicalSpec
+    Boolean(
+      showCaterBotSource &&
+        sourceBackedSpec &&
+        ((verifiedSpec && legacySpec && verifiedSpec.verification_status === "verified") || caterBotEquipmentSpec)
+    )
+  const specRows = sourceBackedSpec
     ? [
         [
           "Dimensions",
-          canonicalSpec.ext_height_cm && canonicalSpec.ext_width_cm && canonicalSpec.ext_depth_cm
-            ? `${canonicalSpec.ext_height_cm} x ${canonicalSpec.ext_width_cm} x ${canonicalSpec.ext_depth_cm} cm`
+          (legacySpec?.ext_height_cm || caterBotEquipmentSpec?.height_cm) &&
+          (legacySpec?.ext_width_cm || caterBotEquipmentSpec?.width_cm) &&
+          (legacySpec?.ext_depth_cm || caterBotEquipmentSpec?.depth_cm)
+            ? `${legacySpec?.ext_height_cm || caterBotEquipmentSpec?.height_cm} x ${legacySpec?.ext_width_cm || caterBotEquipmentSpec?.width_cm} x ${legacySpec?.ext_depth_cm || caterBotEquipmentSpec?.depth_cm} cm`
             : "Not confirmed",
         ],
-        ["Net weight", canonicalSpec.weight_net_kg ? `${canonicalSpec.weight_net_kg} kg` : "Not confirmed"],
-        ["Packed weight", canonicalSpec.weight_gross_kg ? `${canonicalSpec.weight_gross_kg} kg` : "Not confirmed"],
+        ["Net weight", (legacySpec?.weight_net_kg || caterBotEquipmentSpec?.net_weight_kg) ? `${legacySpec?.weight_net_kg || caterBotEquipmentSpec?.net_weight_kg} kg` : "Not confirmed"],
+        ["Packed weight", (legacySpec?.weight_gross_kg || caterBotEquipmentSpec?.gross_weight_kg) ? `${legacySpec?.weight_gross_kg || caterBotEquipmentSpec?.gross_weight_kg} kg` : "Not confirmed"],
+        ["Capacity", caterBotEquipmentSpec?.capacity_litres ? `${caterBotEquipmentSpec.capacity_litres} litres` : "Not confirmed"],
         [
           "Power / gas",
           [
-            canonicalSpec.power_type,
-            canonicalSpec.voltage,
-            canonicalSpec.phase ? `${canonicalSpec.phase} phase` : "",
-            canonicalSpec.current_a ? `${canonicalSpec.current_a}A` : "",
-            canonicalSpec.gas_type,
-            canonicalSpec.gas_connection,
+            legacySpec?.power_type || caterBotEquipmentSpec?.power_type,
+            legacySpec?.voltage || caterBotEquipmentSpec?.voltage,
+            (legacySpec?.phase || caterBotEquipmentSpec?.phase) ? `${legacySpec?.phase || caterBotEquipmentSpec?.phase} phase` : "",
+            (legacySpec?.current_a || caterBotEquipmentSpec?.amps) ? `${legacySpec?.current_a || caterBotEquipmentSpec?.amps}A` : "",
+            caterBotEquipmentSpec?.watts ? `${caterBotEquipmentSpec.watts}W` : "",
+            legacySpec?.gas_type,
+            legacySpec?.gas_connection,
           ]
             .filter(Boolean)
             .join(" · ") || "Not confirmed",
         ],
-        ["Pallet", canonicalSpec.pallet_required ? "Required" : "Not stated"],
-        ["Handling", canonicalSpec.lifting_notes || verifiedSpec?.seller_forklift_required ? "Mechanical handling may be required" : "Not stated"],
-        ["Hazards", canonicalSpec.hazardous_notes || "Not stated"],
+        ["Refrigerant", caterBotEquipmentSpec?.refrigerant || "Not stated"],
+        ["Pallet", (legacySpec?.pallet_required || caterBotEquipmentSpec?.pallet_required) ? "Required" : caterBotEquipmentSpec?.suggested_pallet_size || "Not stated"],
+        ["Handling", legacySpec?.lifting_notes || verifiedSpec?.seller_forklift_required ? "Mechanical handling may be required" : "Not stated"],
+        ["Hazards", legacySpec?.hazardous_notes || "Not stated"],
       ]
     : []
+
+  async function quickShareListing() {
+    const shareUrl = window.location.href
+    const shareTitle = listing?.title || "CaterBidsUK listing"
+    const shareText = `${shareTitle} on CaterBidsUK`
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: shareTitle, text: shareText, url: shareUrl })
+        return
+      } catch {
+        return
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(shareUrl)
+      setMessageError("Listing link copied.")
+    } catch {
+      if (copyTextFallback(shareUrl)) {
+        setMessageError("Listing link copied.")
+      } else {
+        document.getElementById("listing-share-panel")?.scrollIntoView({ behavior: "smooth", block: "center" })
+      }
+    }
+  }
 
   async function reportIncorrectSpecs() {
     if (!verifiedSpec) return
@@ -1238,6 +1726,898 @@ function ListingContent() {
       console.warn("Could not report specs:", error)
       setMessageError("Could not report specs. Please try again.")
     }
+  }
+
+  const ownerStatusClasses =
+    ownerStatus.tone === "red"
+      ? "border-red-400/25 bg-red-500/10 text-red-100"
+      : ownerStatus.tone === "amber"
+        ? "border-amber-400/25 bg-amber-500/10 text-amber-100"
+        : "border-green-400/25 bg-green-500/10 text-green-100"
+  const activeImageIndex = listingImages.length > 0 ? Math.max(0, listingImages.indexOf(activeImage)) : 0
+  const sellerJoinedDate = sellerProfile?.created_at || listing.created_at
+  const canContactSeller = !isListingOwner && !isSoldListing
+
+  if (safeListingId(listing.id) || id) {
+    return (
+      <main className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(255,107,0,0.12),_transparent_30%),linear-gradient(180deg,#001A35_0%,#002E5D_48%,#001A35_100%)] pb-28 text-white md:pb-12">
+        {editListingPanel}
+
+        <header className="sticky top-0 z-40 border-b border-white/10 bg-[#001A35]/92 backdrop-blur-xl">
+          <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
+            <button
+              type="button"
+              onClick={() => router.back()}
+              className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/15 bg-white/8 text-white transition hover:border-[#FF6B00]/60"
+              aria-label="Go back"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </button>
+
+            <SiteLogo size="sm" priority />
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={toggleListingFavourite}
+                className={`flex h-11 w-11 items-center justify-center rounded-2xl border transition ${
+                  liked
+                    ? "border-red-400/40 bg-red-500/25 text-red-100"
+                    : "border-white/15 bg-white/8 text-white hover:border-[#FF6B00]/60"
+                }`}
+                aria-label={liked ? "Remove saved listing" : "Save listing"}
+              >
+                <Heart className={`h-5 w-5 ${liked ? "fill-current" : ""}`} />
+              </button>
+              <button
+                type="button"
+                onClick={quickShareListing}
+                className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/15 bg-white/8 text-white transition hover:border-[#FF6B00]/60"
+                aria-label="Share listing"
+              >
+                <Share2 className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+        </header>
+
+        {showFeaturedSuccess && (
+          <div className="w-full bg-gradient-to-r from-[#FF6B00] to-amber-500 px-4 py-5 shadow-[0_4px_28px_rgba(255,107,0,0.45)]">
+            <div className="mx-auto flex max-w-6xl items-center gap-4 sm:px-6">
+              <Star className="h-7 w-7 shrink-0 fill-white text-white" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xl font-black text-white">Your listing is now Featured!</p>
+                {(listing as any)?.featured_until && (
+                  <p className="mt-0.5 text-sm font-bold text-white/85">
+                    Featured until {new Date(String((listing as any).featured_until)).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowFeaturedSuccess(false)
+                  router.replace(`/listing?id=${encodeURIComponent(id || "")}`, { scroll: false })
+                }}
+                className="shrink-0 rounded-xl p-1.5 text-white/80 hover:text-white"
+                aria-label="Dismiss"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="mx-auto grid max-w-6xl gap-6 overflow-hidden px-4 py-5 sm:px-6 lg:grid-cols-[minmax(0,1.12fr)_minmax(360px,0.88fr)] lg:items-start lg:py-8">
+          <section className="min-w-0 space-y-5">
+            <div className="overflow-hidden rounded-[2rem] border border-white/12 bg-[#062747]/85 shadow-2xl shadow-black/25">
+              <div className="relative flex aspect-[4/3] min-h-[330px] items-center justify-center bg-[#001A35] p-2 sm:aspect-[16/10] lg:min-h-[560px]">
+                {activeImage ? (
+                  <div className="h-full w-full overflow-hidden rounded-[1.6rem] bg-white/5">
+                    <img
+                      src={activeImage}
+                      alt={listing.title || "CaterBidsUK listing image"}
+                      className="h-full w-full object-contain"
+                    />
+                  </div>
+                ) : (
+                  <div className="flex h-full w-full flex-col items-center justify-center gap-3 rounded-[1.6rem] border border-white/10 bg-white/5 text-white/55">
+                    <Package className="h-14 w-14 text-white/25" />
+                    <span className="text-sm font-bold">No image available</span>
+                  </div>
+                )}
+
+                <div className="pointer-events-none absolute inset-x-2 bottom-2 h-28 rounded-b-[1.6rem] bg-gradient-to-t from-[#001A35]/90 to-transparent" />
+
+                <div className="absolute bottom-5 left-5 rounded-2xl bg-[#FF6B00] px-4 py-3 text-2xl font-black text-white shadow-xl shadow-[#FF6B00]/25">
+                  {formatPrice(listing.price)}
+                </div>
+
+                {listingImages.length > 0 && (
+                  <div className="absolute bottom-5 right-5 rounded-2xl bg-[#001A35]/85 px-4 py-2 text-sm font-black text-white shadow-lg backdrop-blur">
+                    {activeImageIndex + 1} / {listingImages.length}
+                  </div>
+                )}
+              </div>
+
+              {listingImages.length > 1 && (
+                <div className="flex items-center justify-center gap-2 px-4 py-4">
+                  {listingImages.map((img, index) => (
+                    <button
+                      key={`${img}-${index}`}
+                      type="button"
+                      onClick={() => setActiveImage(img)}
+                      className={`h-3 w-3 rounded-full transition ${
+                        activeImage === img ? "bg-[#FF6B00]" : "bg-white/25 hover:bg-white/45"
+                      }`}
+                      aria-label={`Show listing image ${index + 1}`}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {listingImages.length > 1 && (
+              <div className="hidden grid-cols-5 gap-3 lg:grid">
+                {listingImages.slice(0, 5).map((img, index) => (
+                  <button
+                    key={`${img}-thumb-${index}`}
+                    type="button"
+                    onClick={() => setActiveImage(img)}
+                    className={`overflow-hidden rounded-2xl border bg-white/5 p-1 ${
+                      activeImage === img ? "border-[#FF6B00]" : "border-white/12"
+                    }`}
+                  >
+                    <img
+                      src={img}
+                      alt={`Listing thumbnail ${index + 1}`}
+                      className="aspect-square w-full rounded-xl object-cover"
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <section className="rounded-[2rem] border border-white/12 bg-[#062747]/85 p-5 shadow-2xl shadow-black/20 lg:hidden">
+              <h1 className="text-2xl font-black leading-tight text-white">{listing.title}</h1>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.08] px-3 py-2 text-xs font-bold text-white/78">
+                  <MapPin className="h-4 w-4 text-[#FF6B00]" />
+                  {publicLocation}
+                </span>
+                {listing.category && (
+                  <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.08] px-3 py-2 text-xs font-bold text-white/78">
+                    <Tag className="h-4 w-4 text-[#FF6B00]" />
+                    {listing.category}
+                  </span>
+                )}
+                {listing.condition && (
+                  <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.08] px-3 py-2 text-xs font-bold text-white/78">
+                    <Package className="h-4 w-4 text-white/70" />
+                    {listing.condition}
+                  </span>
+                )}
+                {listing.power_type && !/unknown/i.test(listing.power_type) && (
+                  <span className="inline-flex items-center gap-2 rounded-full border border-[#FF6B00]/25 bg-[#FF6B00]/10 px-3 py-2 text-xs font-bold text-orange-100">
+                    <Zap className="h-4 w-4 text-[#FF6B00]" />
+                    {listing.power_type}
+                  </span>
+                )}
+                {usesCaterBidsDelivery && (
+                  <span className="inline-flex items-center gap-2 rounded-full border border-[#FF6B00]/25 bg-[#FF6B00]/10 px-3 py-2 text-xs font-bold text-orange-100">
+                    <Truck className="h-4 w-4 text-white/80" />
+                    Pallet delivery
+                  </span>
+                )}
+                {sellerFullyVerified && (
+                  <span className="inline-flex items-center gap-2 rounded-full border border-green-400/25 bg-green-500/12 px-3 py-2 text-xs font-bold text-green-100">
+                    <BadgeCheck className="h-4 w-4 text-green-300" />
+                    Verified Seller
+                  </span>
+                )}
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-4 text-sm font-bold text-white/55">
+                {listing.created_at && (
+                  <span className="inline-flex items-center gap-2">
+                    <CalendarDays className="h-4 w-4" />
+                    Posted {formatUKDate(listing.created_at)}
+                  </span>
+                )}
+                {viewCount !== null && (
+                  <span className="inline-flex items-center gap-2">
+                    <Eye className="h-4 w-4" />
+                    {viewCount} {viewCount === 1 ? "view" : "views"}
+                  </span>
+                )}
+              </div>
+
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <div className="rounded-3xl border border-white/10 bg-white/[0.06] p-4">
+                  <p className="text-xs font-bold text-white/55">Price</p>
+                  <p className="mt-1 text-xl font-black text-white">{formatPrice(listing.price)}</p>
+                </div>
+                <div className="rounded-3xl border border-white/10 bg-white/[0.06] p-4">
+                  <p className="text-xs font-bold text-white/55">Delivery</p>
+                  <p className="mt-1 text-lg font-black text-white">{usesCaterBidsDelivery ? "Pallet" : "Collection"}</p>
+                </div>
+                <div className="rounded-3xl border border-white/10 bg-white/[0.06] p-4">
+                  <p className="text-xs font-bold text-white/55">Condition</p>
+                  <p className="mt-1 text-lg font-black text-white">{listing.condition || "Not stated"}</p>
+                </div>
+                <div className="rounded-3xl border border-white/10 bg-white/[0.06] p-4">
+                  <p className="text-xs font-bold text-white/55">Seller</p>
+                  <p className="mt-1 line-clamp-2 text-lg font-black text-white">{sellerDisplayName}</p>
+                </div>
+              </div>
+
+              {(sellerReviewStats.reviewCount > 0 || sellerReviewStats.completedSales > 0 || sellerReviewStats.responseRate > 0) && (
+                <div className="mt-5 grid gap-3 grid-cols-3">
+                  {sellerReviewStats.reviewCount > 0 && (
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-3">
+                      <Star className="h-5 w-5 text-[#FF6B00]" />
+                      <p className="mt-2 text-lg font-black text-white">{sellerReviewStats.averageRating.toFixed(1)} / 5</p>
+                      <p className="text-xs font-bold text-white/45">Seller rating</p>
+                    </div>
+                  )}
+                  {sellerReviewStats.completedSales > 0 && (
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-3">
+                      <Package className="h-5 w-5 text-[#FF6B00]" />
+                      <p className="mt-2 text-lg font-black text-white">{sellerReviewStats.completedSales}</p>
+                      <p className="text-xs font-bold text-white/45">Completed sales</p>
+                    </div>
+                  )}
+                  {sellerReviewStats.responseRate > 0 && (
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-3">
+                      <MessageCircle className="h-5 w-5 text-[#FF6B00]" />
+                      <p className="mt-2 text-lg font-black text-white">{sellerReviewStats.responseRate}%</p>
+                      <p className="text-xs font-bold text-white/45">Response rate</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {sellerReviews.length > 0 && (
+                <div className="mt-4">
+                  <p className="mb-3 text-xs font-black uppercase tracking-[0.15em] text-white/45">
+                    Buyer Reviews
+                  </p>
+                  <SellerReviewsList
+                    reviews={sellerReviews.slice(0, showAllReviews ? undefined : 5)}
+                  />
+                  {sellerReviews.length > 5 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllReviews((v) => !v)}
+                      className="mt-3 w-full rounded-2xl border border-white/10 py-2 text-xs font-black text-white/50 transition hover:bg-white/5"
+                    >
+                      {showAllReviews ? "Show fewer" : `Show all ${sellerReviews.length} reviews`}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {isListingOwner && !isSoldListing && (
+                <div className="mt-5">
+                  <FeaturedBoostButton
+                    listingId={safeListingId(listing.id)}
+                    isFeatured={Boolean((listing as any).featured || (listing as any).is_featured)}
+                    featuredUntil={(listing as any).featured_until ?? null}
+                  />
+                </div>
+              )}
+
+              {canContactSeller && (
+                <button
+                  type="button"
+                  onClick={messageSeller}
+                  disabled={openingMessage}
+                  className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-[#FF6B00] px-5 py-4 text-sm font-black text-white shadow-xl shadow-[#FF6B00]/20 disabled:opacity-60"
+                >
+                  <MessageCircle className="h-5 w-5" />
+                  {openingMessage ? "Opening..." : "Contact seller"}
+                </button>
+              )}
+            </section>
+
+            <section className="rounded-[2rem] border border-white/12 bg-[#062747]/85 p-4 shadow-xl shadow-black/15 sm:p-5 lg:hidden">
+              <h2 className="text-lg font-black text-white">{isListingOwner ? "Promote listing" : "Share listing"}</h2>
+              <div className="mt-4">
+                <SocialShareButtons
+                  listingId={safeListingId(listing.id || id)}
+                  title={listing.title || "CaterBidsUK listing"}
+                  price={formatPrice(listing.price)}
+                  location={publicLocation}
+                  heading={isListingOwner ? "Promote Listing" : "Share Listing"}
+                  description={isListingOwner ? "Share this listing to get more views." : "Share this item with someone who may be interested."}
+                  compact
+                />
+              </div>
+            </section>
+
+            <section className="space-y-3">
+              <details className="group rounded-3xl border border-white/12 bg-[#062747]/85 p-4 shadow-lg shadow-black/10" open>
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+                  <span className="flex items-center gap-3 text-lg font-black text-white">
+                    <BookOpen className="h-5 w-5 text-white/75" />
+                    Description
+                  </span>
+                  <ChevronDown className="h-5 w-5 text-white/55 transition group-open:rotate-180" />
+                </summary>
+                <p className="mt-4 whitespace-pre-line text-sm leading-7 text-white/75">
+                  {listing.description || "No description has been provided yet."}
+                </p>
+              </details>
+
+              <details className="group rounded-3xl border border-white/12 bg-[#062747]/85 p-4 shadow-lg shadow-black/10">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+                  <span className="flex items-center gap-3 text-lg font-black text-white">
+                    <CheckCircle2 className="h-5 w-5 text-white/75" />
+                    Specs & Checks
+                  </span>
+                  <ChevronDown className="h-5 w-5 text-white/55 transition group-open:rotate-180" />
+                </summary>
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  {safetyRows.map(([label, value]) => (
+                    <div key={label} className="rounded-2xl border border-white/10 bg-white/[0.06] p-3">
+                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/38">{label}</p>
+                      <p className="mt-1 text-sm font-bold text-white/82">{value}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {showVerifiedSpecs && sourceBackedSpec && (
+                  <div className="mt-4 rounded-3xl border border-[#FF6B00]/25 bg-[#FF6B00]/10 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#FF9A4A]">
+                          CaterBot Specs
+                        </p>
+                        <h3 className="mt-1 text-lg font-black text-white">Source-backed equipment specs</h3>
+                      </div>
+                      <span className="rounded-full border border-green-400/25 bg-green-500/15 px-3 py-1 text-xs font-black text-green-200">
+                        {sourceBackedSpecConfidence}% confidence
+                      </span>
+                    </div>
+
+                    <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                      {specRows.map(([label, value]) => (
+                        <div key={label} className="rounded-2xl border border-white/10 bg-[#001A35]/45 p-3">
+                          <p className="text-[10px] font-black uppercase tracking-[0.14em] text-white/40">{label}</p>
+                          <p className="mt-1 text-sm font-bold text-white/82">{value}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    <p className="mt-4 text-xs leading-relaxed text-white/65">
+                      Specs are for guidance only. Buyers should confirm details with the seller before purchase, collection or delivery booking.
+                    </p>
+
+                    <div className="mt-4 flex flex-wrap gap-3">
+                      {sourceBackedSpecSourceUrl && showCaterBotSource && (
+                        <a
+                          href={sourceBackedSpecSourceUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-2 rounded-2xl bg-[#FF6B00] px-4 py-3 text-sm font-black text-white"
+                        >
+                          Open source
+                          <ExternalLink className="h-4 w-4" />
+                        </a>
+                      )}
+                      {verifiedSpec && (
+                        <button
+                          type="button"
+                          onClick={reportIncorrectSpecs}
+                          className="inline-flex items-center rounded-2xl border border-white/12 px-4 py-3 text-sm font-black text-white transition hover:border-[#FF6B00]/50"
+                        >
+                          {specReportSent ? "Report sent" : "Report incorrect specs"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <details className="mt-4 rounded-2xl border border-[#FF6B00]/25 bg-[#FF6B00]/10 p-3 text-xs text-orange-100">
+                  <summary className="cursor-pointer font-black">Safety note</summary>
+                  <p className="mt-2 leading-relaxed">{BUYER_WARNING}</p>
+                  <p className="mt-2 leading-relaxed text-orange-100/75">{SAFETY_DISCLAIMER}</p>
+                </details>
+              </details>
+
+              <details className="group rounded-3xl border border-white/12 bg-[#062747]/85 p-4 shadow-lg shadow-black/10">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+                  <span className="flex items-center gap-3 text-lg font-black text-white">
+                    <Truck className="h-5 w-5 text-white/75" />
+                    Delivery Details
+                  </span>
+                  <ChevronDown className="h-5 w-5 text-white/55 transition group-open:rotate-180" />
+                </summary>
+
+                <div className="mt-4 space-y-4">
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4">
+                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/40">Delivery option</p>
+                    <p className="mt-1 text-lg font-black text-white">{deliveryStatusText}</p>
+                    <p className="mt-2 text-sm text-white/60">
+                      {usesCaterBidsDelivery
+                        ? listing.delivery_details_confirmed
+                          ? "Delivery details have been confirmed by the seller."
+                          : "Seller should confirm measurements before booking delivery."
+                        : "Contact the seller to arrange collection."}
+                    </p>
+                    {usesCaterBidsDelivery && (
+                      <p className="mt-3 text-sm font-semibold text-orange-100/85">
+                        Before collection, the seller must prepare the item correctly.{" "}
+                        <a
+                          href="/pallet-delivery-guide"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="font-black text-[#FF9A4A] underline-offset-4 hover:underline"
+                        >
+                          View pallet preparation guide
+                        </a>
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-3">
+                      <p className="text-[10px] font-black uppercase tracking-[0.14em] text-white/40">Collection area</p>
+                      <p className="mt-1 text-sm font-bold text-white/82">{publicCollectionArea}</p>
+                    </div>
+                    {usesCaterBidsDelivery && (
+                      <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-3">
+                        <p className="text-[10px] font-black uppercase tracking-[0.14em] text-white/40">Pallet size</p>
+                        <p className="mt-1 text-sm font-bold text-white/82">{formatPalletSize((listing as any).pallet_size)}</p>
+                      </div>
+                    )}
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-3">
+                      <p className="text-[10px] font-black uppercase tracking-[0.14em] text-white/40">Weight</p>
+                      <p className="mt-1 text-sm font-bold text-white/82">{listingWeightKg ? `${listingWeightKg} kg` : "Not confirmed"}</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-3 sm:col-span-2">
+                      <p className="text-[10px] font-black uppercase tracking-[0.14em] text-white/40">Dimensions</p>
+                      <p className="mt-1 text-sm font-bold text-white/82">
+                        {listingLengthCm && listingWidthCm && listingHeightCm
+                          ? `${listingLengthCm} x ${listingWidthCm} x ${listingHeightCm} cm`
+                          : "Not confirmed"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </details>
+
+              <details className="group rounded-3xl border border-white/12 bg-[#062747]/85 p-4 shadow-lg shadow-black/10">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+                  <span className="flex items-center gap-3 text-lg font-black text-white">
+                    <Info className="h-5 w-5 text-white/75" />
+                    More Details
+                  </span>
+                  <ChevronDown className="h-5 w-5 text-white/55 transition group-open:rotate-180" />
+                </summary>
+                <div className="mt-4 space-y-4 text-sm text-white/70">
+                  <div>
+                    <h3 className="flex items-center gap-2 text-sm font-black text-white">
+                      <Shield className="h-4 w-4 text-[#FF6B00]" />
+                      Buyer checks: {buyerChecklist.label}
+                    </h3>
+                    <ul className="mt-3 space-y-2">
+                      {buyerChecklist.items.map((item) => (
+                        <li key={item} className="flex items-start gap-2">
+                          <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#FF6B00]" />
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-3">
+                    <p className="text-[10px] font-black uppercase tracking-[0.14em] text-white/40">Listing reference</p>
+                    <p className="mt-1 break-all text-xs font-bold text-white/82">{safeListingId(listing.id || id)}</p>
+                  </div>
+                </div>
+              </details>
+            </section>
+          </section>
+
+          <aside className="min-w-0 space-y-5 lg:sticky lg:top-24">
+            <section className="hidden rounded-[2rem] border border-white/12 bg-[#062747]/85 p-5 shadow-2xl shadow-black/20 lg:block">
+              <h1 className="text-2xl font-black leading-tight text-white sm:text-3xl">{listing.title}</h1>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                {isFeaturedAndActive(listing as Record<string, unknown>) && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border-2 border-[#FF6B00] bg-[#0a2a4a] px-3 py-1.5 shadow-[0_0_12px_rgba(255,107,0,0.3)]">
+                    <Bell className="h-3.5 w-3.5 fill-[#FF6B00] text-[#FF6B00]" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-white">Featured</span>
+                    <span className="ml-0.5 text-[8px] font-black uppercase text-[#FF6B00]">· Top Listing</span>
+                  </span>
+                )}
+                <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.08] px-3 py-2 text-xs font-bold text-white/78">
+                  <MapPin className="h-4 w-4 text-[#FF6B00]" />
+                  {publicLocation}
+                </span>
+                {listing.category && (
+                  <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.08] px-3 py-2 text-xs font-bold text-white/78">
+                    <Tag className="h-4 w-4 text-[#FF6B00]" />
+                    {listing.category}
+                  </span>
+                )}
+                {listing.condition && (
+                  <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.08] px-3 py-2 text-xs font-bold text-white/78">
+                    <Package className="h-4 w-4 text-white/70" />
+                    {listing.condition}
+                  </span>
+                )}
+                {listing.power_type && !/unknown/i.test(listing.power_type) && (
+                  <span className="inline-flex items-center gap-2 rounded-full border border-[#FF6B00]/25 bg-[#FF6B00]/10 px-3 py-2 text-xs font-bold text-orange-100">
+                    <Zap className="h-4 w-4 text-[#FF6B00]" />
+                    {listing.power_type}
+                  </span>
+                )}
+                {(listing.manuals_available || showCaterBotSource) && (
+                  <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.08] px-3 py-2 text-xs font-bold text-white/78">
+                    <BookOpen className="h-4 w-4 text-white/70" />
+                    Manuals
+                  </span>
+                )}
+                {usesCaterBidsDelivery && (
+                  <span className="inline-flex items-center gap-2 rounded-full border border-[#FF6B00]/25 bg-[#FF6B00]/10 px-3 py-2 text-xs font-bold text-orange-100">
+                    <Truck className="h-4 w-4 text-white/80" />
+                    Pallet delivery
+                  </span>
+                )}
+                {sellerFullyVerified && (
+                  <span className="inline-flex items-center gap-2 rounded-full border border-green-400/25 bg-green-500/12 px-3 py-2 text-xs font-bold text-green-100">
+                    <BadgeCheck className="h-4 w-4 text-green-300" />
+                    Verified Seller
+                  </span>
+                )}
+                {trustBadges
+                  .filter((badge) => !/delivery available|manuals/i.test(badge))
+                  .map((badge) => (
+                    <span
+                      key={badge}
+                      className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.08] px-3 py-2 text-xs font-bold text-white/75"
+                    >
+                      <Shield className="h-4 w-4 text-[#FF6B00]" />
+                      {badge}
+                    </span>
+                  ))}
+              </div>
+
+              <div className="mt-5 flex flex-wrap gap-4 text-sm font-bold text-white/55">
+                {listing.created_at && (
+                  <span className="inline-flex items-center gap-2">
+                    <CalendarDays className="h-4 w-4" />
+                    Posted {formatUKDate(listing.created_at)}
+                  </span>
+                )}
+                {viewCount !== null && (
+                  <span className="inline-flex items-center gap-2">
+                    <Eye className="h-4 w-4" />
+                    {viewCount} {viewCount === 1 ? "view" : "views"}
+                  </span>
+                )}
+              </div>
+
+              <div className="mt-6 grid grid-cols-2 gap-3">
+                <div className="rounded-3xl border border-white/10 bg-white/[0.06] p-4">
+                  <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-[#FF6B00]/20 text-[#FF6B00]">
+                    <Tag className="h-5 w-5" />
+                  </div>
+                  <p className="text-xs font-bold text-white/55">Price</p>
+                  <p className="mt-1 text-xl font-black text-white">{formatPrice(listing.price)}</p>
+                </div>
+                <div className="rounded-3xl border border-white/10 bg-white/[0.06] p-4">
+                  <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-green-500/18 text-green-200">
+                    <Truck className="h-5 w-5" />
+                  </div>
+                  <p className="text-xs font-bold text-white/55">Delivery</p>
+                  <p className="mt-1 text-lg font-black text-white">{usesCaterBidsDelivery ? "Pallet" : "Collection"}</p>
+                </div>
+                <div className="rounded-3xl border border-white/10 bg-white/[0.06] p-4">
+                  <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-500/18 text-blue-200">
+                    <Package className="h-5 w-5" />
+                  </div>
+                  <p className="text-xs font-bold text-white/55">Condition</p>
+                  <p className="mt-1 text-lg font-black text-white">{listing.condition || "Not stated"}</p>
+                </div>
+                <div className="rounded-3xl border border-white/10 bg-white/[0.06] p-4">
+                  <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-purple-500/20 text-purple-100">
+                    <UserCircle2 className="h-5 w-5" />
+                  </div>
+                  <p className="text-xs font-bold text-white/55">Seller</p>
+                  <p className="mt-1 line-clamp-2 text-lg font-black text-white">{sellerDisplayName}</p>
+                </div>
+              </div>
+
+              {canContactSeller && (
+                <button
+                  type="button"
+                  onClick={messageSeller}
+                  disabled={openingMessage}
+                  className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-[#FF6B00] px-5 py-4 text-sm font-black text-white shadow-xl shadow-[#FF6B00]/20 transition hover:bg-[#ff7c1f] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <MessageCircle className="h-5 w-5" />
+                  {openingMessage ? "Opening..." : "Contact seller"}
+                </button>
+              )}
+            </section>
+
+            {isListingOwner && !isSoldListing && (
+              <FeaturedBoostButton
+                listingId={safeListingId(listing.id)}
+                isFeatured={Boolean((listing as any).featured || (listing as any).is_featured)}
+                featuredUntil={(listing as any).featured_until ?? null}
+              />
+            )}
+
+            <section className="hidden rounded-[2rem] border border-white/12 bg-[#062747]/85 p-5 shadow-xl shadow-black/15 lg:block">
+              <div className="flex items-start gap-3">
+                <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${
+                  sellerFullyVerified ? "bg-green-500/18 text-green-200" : "bg-white/10 text-white/75"
+                }`}>
+                  {sellerFullyVerified ? <CheckCircle2 className="h-6 w-6" /> : <UserCircle2 className="h-6 w-6" />}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#FF6B00]">
+                    {sellerFullyVerified ? "Verified Seller" : "Seller Profile"}
+                  </p>
+                  <h2 className="mt-1 text-xl font-black text-white">{sellerDisplayName}</h2>
+                  {sellerJoinedDate && (
+                    <p className="mt-1 text-sm font-semibold text-white/55">Joined {formatUKDate(sellerJoinedDate)}</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                {sellerEmailVerified && (
+                  <span className="inline-flex items-center gap-2 rounded-full border border-green-400/20 bg-green-500/10 px-3 py-2 text-xs font-black text-green-100">
+                    <Mail className="h-4 w-4" />
+                    Email verified
+                  </span>
+                )}
+                {sellerTrustInput.phoneVerified && (
+                  <span className="inline-flex items-center gap-2 rounded-full border border-green-400/20 bg-green-500/10 px-3 py-2 text-xs font-black text-green-100">
+                    <CheckCircle2 className="h-4 w-4" />
+                    Phone verified
+                  </span>
+                )}
+                {sellerFullyVerified && (
+                  <span className="inline-flex items-center gap-2 rounded-full border border-green-400/20 bg-green-500/10 px-3 py-2 text-xs font-black text-green-100">
+                    <BadgeCheck className="h-4 w-4" />
+                    Seller verification complete
+                  </span>
+                )}
+              </div>
+
+              {(sellerReviewStats.reviewCount > 0 || sellerReviewStats.completedSales > 0 || sellerReviewStats.responseRate > 0) ? (
+                <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                  {sellerReviewStats.reviewCount > 0 && (
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-3">
+                      <Star className="h-5 w-5 text-[#FF6B00]" />
+                      <p className="mt-2 text-lg font-black text-white">{sellerReviewStats.averageRating.toFixed(1)} / 5</p>
+                      <p className="text-xs font-bold text-white/45">Seller rating</p>
+                    </div>
+                  )}
+                  {sellerReviewStats.completedSales > 0 && (
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-3">
+                      <Package className="h-5 w-5 text-[#FF6B00]" />
+                      <p className="mt-2 text-lg font-black text-white">{sellerReviewStats.completedSales}</p>
+                      <p className="text-xs font-bold text-white/45">Completed sales</p>
+                    </div>
+                  )}
+                  {sellerReviewStats.responseRate > 0 && (
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-3">
+                      <MessageCircle className="h-5 w-5 text-[#FF6B00]" />
+                      <p className="mt-2 text-lg font-black text-white">{sellerReviewStats.responseRate}%</p>
+                      <p className="text-xs font-bold text-white/45">Response rate</p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="mt-4 rounded-2xl border border-white/10 bg-white/[0.06] p-3 text-sm font-semibold text-white/65">
+                  This seller is building their CaterBidsUK trust profile.
+                </p>
+              )}
+
+              {sellerReviews.length > 0 && (
+                <div className="mt-4">
+                  <p className="mb-3 text-xs font-black uppercase tracking-[0.15em] text-white/45">
+                    Buyer Reviews
+                  </p>
+                  <SellerReviewsList
+                    reviews={sellerReviews.slice(0, showAllReviews ? undefined : 5)}
+                  />
+                  {sellerReviews.length > 5 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllReviews((v) => !v)}
+                      className="mt-3 w-full rounded-2xl border border-white/10 py-2 text-xs font-black text-white/50 transition hover:bg-white/5"
+                    >
+                      {showAllReviews ? "Show fewer" : `Show all ${sellerReviews.length} reviews`}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {isListingOwner && (
+                <button
+                  type="button"
+                  onClick={() => router.push("/account")}
+                  className="mt-4 w-full rounded-2xl border border-[#FF6B00]/30 px-4 py-3 text-sm font-black text-orange-100 transition hover:bg-[#FF6B00]/10"
+                >
+                  Manage verification
+                </button>
+              )}
+            </section>
+
+            <SellerSocialLinks links={sellerProfile?.social_links || null} />
+
+            <section className="hidden lg:block">
+              <SocialShareButtons
+                listingId={safeListingId(listing.id || id)}
+                title={listing.title || "CaterBidsUK listing"}
+                price={formatPrice(listing.price)}
+                location={publicLocation}
+                heading={isListingOwner ? "Promote Listing" : "Share Listing"}
+                description={isListingOwner ? "Share this listing to get more views." : "Share this item with someone who may be interested."}
+              />
+            </section>
+
+            {isListingOwner && (
+              <section className={`rounded-3xl border p-4 ${ownerStatusClasses}`}>
+                <div className="flex items-start gap-3">
+                  <CheckCircle2 className="mt-0.5 h-6 w-6 shrink-0" />
+                  <div>
+                    <h2 className="text-lg font-black">{ownerStatus.title}</h2>
+                    <p className="mt-1 text-sm font-semibold opacity-80">{ownerStatus.text}</p>
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {isListingOwner ? (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1">
+                <button
+                  type="button"
+                  onClick={() => startEditing(listing)}
+                  className="flex items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/[0.08] px-5 py-4 text-sm font-black text-white transition hover:border-[#FF6B00]/60"
+                >
+                  <Pencil className="h-5 w-5" />
+                  Edit Listing
+                </button>
+                <button
+                  type="button"
+                  onClick={() => deleteListing(listing)}
+                  className="flex items-center justify-center gap-2 rounded-2xl border border-red-400/35 bg-red-500/10 px-5 py-4 text-sm font-black text-red-100 transition hover:bg-red-500/15"
+                >
+                  <Trash2 className="h-5 w-5" />
+                  Delete Listing
+                </button>
+              </div>
+            ) : null}
+
+            {editError && !isListingOwner && (
+              <p className="rounded-2xl border border-[#FF6B00]/25 bg-[#FF6B00]/10 px-4 py-3 text-sm font-bold text-orange-100">
+                {editError}
+              </p>
+            )}
+
+            {!isSoldListing && hasDeliveryOption && (
+              <DeliveryQuoteBox
+                listingId={safeListingId(listing.id)}
+                collectionPostcode={fullCollectionPostcode}
+                weightKg={listingWeightKg}
+                lengthCm={listingLengthCm}
+                widthCm={listingWidthCm}
+                heightCm={listingHeightCm}
+                palletReady={listing.pallet_ready}
+                tailLiftRequired={listing.tail_lift_required}
+                palletCount={listing.pallet_count}
+                insuranceValue={listing.insurance_value}
+                deliveryAvailable={hasDeliveryOption}
+                onSelectDelivery={setSelectedDelivery}
+              />
+            )}
+
+            {!isSoldListing && !hasDeliveryOption && !deliveryExplicitlyDisabled && !hasDeliveryMeasurements && (
+              <div className="rounded-3xl border border-[#FF6B00]/25 bg-[#FF6B00]/10 p-5">
+                <h3 className="text-xl font-black text-white">Delivery pending</h3>
+                <p className="mt-2 text-sm text-orange-100/80">Weight and size are not confirmed yet. Contact the seller for delivery details.</p>
+              </div>
+            )}
+
+            {!isListingOwner && !isSoldListing ? (
+              <BuyCheckoutBox
+                listingId={safeListingId(listing.id)}
+                sellerId={checkoutSellerId}
+                title={listing.title}
+                price={listingPriceNumber(listing.price)}
+                selectedDelivery={selectedDelivery}
+                deliveryAvailable={hasDeliveryOption}
+                onMessageSeller={messageSeller}
+              />
+            ) : isSoldListing ? (
+              <div className="rounded-3xl border border-red-500/20 bg-red-500/10 p-5">
+                <h3 className="text-xl font-black text-red-100">This item has sold</h3>
+                <p className="mt-2 text-sm text-red-100/75">
+                  Checkout and delivery options are closed for this listing.
+                </p>
+              </div>
+            ) : null}
+
+            {showCaterBotSource && (
+              <details className="rounded-3xl border border-[#FF6B00]/25 bg-[#062747]/85 p-5">
+                <summary className="cursor-pointer list-none text-sm font-black uppercase tracking-wider text-white/70">
+                  Product specs supported by CaterBot
+                </summary>
+                <div className="mt-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <p className="text-sm font-black text-white">Seller-confirmed product source available.</p>
+                  <p className="mt-1 text-xs text-white/55">
+                    {manualSourceName}
+                    {specConfidence ? ` · CaterBot spec confidence: ${specConfidence}` : ""}
+                    {" · Seller checked"}
+                  </p>
+                  <a
+                    href={manualSourceUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-3 inline-flex items-center gap-2 rounded-2xl bg-[#FF6B00] px-4 py-3 text-sm font-black text-white"
+                  >
+                    Open manual/spec source
+                    <ExternalLink className="h-4 w-4" />
+                  </a>
+                </div>
+                <p className="mt-3 text-xs leading-relaxed text-white/55">
+                  Specs are provided to help buyers check details. Please confirm suitability before purchase.
+                </p>
+              </details>
+            )}
+
+            {messageError && (
+              <p className="rounded-2xl border border-orange-400/30 bg-orange-500/10 px-4 py-3 text-sm font-bold text-orange-200">
+                {messageError}
+              </p>
+            )}
+          </aside>
+        </div>
+
+        <div className="fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-[#001A35]/95 p-3 backdrop-blur-xl md:hidden">
+          <div className="mx-auto flex max-w-3xl gap-3">
+            {isListingOwner ? (
+              <button
+                type="button"
+                onClick={() => startEditing(listing)}
+                className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[#FF6B00] px-4 py-4 text-sm font-black text-white"
+              >
+                <Pencil className="h-5 w-5" />
+                Edit Listing
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={messageSeller}
+                disabled={openingMessage || isSoldListing}
+                className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[#FF6B00] px-4 py-4 text-sm font-black text-white disabled:opacity-55"
+              >
+                <MessageCircle className="h-5 w-5" />
+                {isSoldListing ? "Sold" : openingMessage ? "Opening..." : "Contact seller"}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={quickShareListing}
+              className="flex min-w-28 items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/[0.08] px-4 py-4 text-sm font-black text-white"
+            >
+              <Share2 className="h-5 w-5" />
+              Share
+            </button>
+          </div>
+        </div>
+      </main>
+    )
   }
 
   return (
@@ -1284,7 +2664,12 @@ function ListingContent() {
               >
                 <Heart className={`h-5 w-5 ${liked ? "fill-white" : ""}`} />
               </button>
-              <button type="button" className="soft-button flex h-11 w-11 items-center justify-center rounded-2xl bg-black/35 backdrop-blur-md">
+              <button
+                type="button"
+                onClick={quickShareListing}
+                className="soft-button flex h-11 w-11 items-center justify-center rounded-2xl bg-black/35 backdrop-blur-md"
+                aria-label="Share listing"
+              >
                 <Share2 className="h-5 w-5" />
               </button>
             </div>
@@ -1349,11 +2734,24 @@ function ListingContent() {
                   <Shield className="h-3 w-3" /> {badge}
                 </span>
               ))}
+              {sellerTrustBadge && (
+                <span
+                  className="inline-flex items-center gap-1 rounded-full border border-green-400/25 bg-green-500/10 px-3 py-1 text-xs font-bold text-green-100"
+                  title="This account has verified ownership of their email address."
+                >
+                  <Shield className="h-3 w-3" /> {sellerTrustBadge}
+                </span>
+              )}
+              {sellerVerificationBadge && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-[#FF6B00]/25 bg-[#FF6B00]/10 px-3 py-1 text-xs font-bold text-orange-100">
+                  <Shield className="h-3 w-3" /> {sellerVerificationBadge}
+                </span>
+              )}
             </div>
 
             <div className="mt-4 flex items-center gap-4 text-xs text-white/50">
               <span className="inline-flex items-center gap-1">
-                <Clock className="h-3 w-3" /> {listing.created_at ? new Date(listing.created_at).toLocaleDateString() : 'Listed recently'}
+                <Clock className="h-3 w-3" /> {listing.created_at ? formatUKDate(listing.created_at) : 'Listed recently'}
               </span>
               <span className="inline-flex items-center gap-1">
                 <Eye className="h-3 w-3" /> 1 view
@@ -1368,7 +2766,7 @@ function ListingContent() {
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
                   <p className="text-[10px] font-black uppercase tracking-wide text-white/45">Delivery</p>
-                  <p className="mt-1 font-black text-white">{usesCaterBidsDelivery ? "Available" : "Collection"}</p>
+                  <p className="mt-1 font-black text-white">{usesCaterBidsDelivery ? "Pallet" : "Collection"}</p>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
                   <p className="text-[10px] font-black uppercase tracking-wide text-white/45">Condition</p>
@@ -1376,7 +2774,7 @@ function ListingContent() {
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
                   <p className="text-[10px] font-black uppercase tracking-wide text-white/45">Seller</p>
-                  <p className="mt-1 font-black text-white">{listing.seller_contact_name || "CaterBids seller"}</p>
+                  <p className="mt-1 font-black text-white">{sellerDisplayName}</p>
                 </div>
               </div>
               {!isListingOwner && !isSoldListing && (
@@ -1391,6 +2789,21 @@ function ListingContent() {
               )}
             </div>
           </div>
+
+          <SellerTrustCard
+            sellerName={sellerDisplayName}
+            createdAt={sellerProfile?.created_at || listing.created_at}
+            trust={sellerTrustInput}
+          />
+
+          <SellerSocialLinks links={sellerProfile?.social_links || null} />
+
+          <SocialShareButtons
+            listingId={safeListingId(listing.id || id)}
+            title={listing.title || "CaterBidsUK listing"}
+            price={formatPrice(listing.price)}
+            location={listing.city || listing.location || "UK"}
+          />
 
           {/* Listing status */}
           <div className={`flex items-center gap-3 rounded-2xl border px-4 py-3 ${
@@ -1446,19 +2859,19 @@ function ListingContent() {
             </p>
           </details>
 
-          {showVerifiedSpecs && canonicalSpec && (
+          {showVerifiedSpecs && sourceBackedSpec && (
             <section className="premium-card rounded-3xl border-[#FF6B00]/25 p-5">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <p className="text-xs font-black uppercase tracking-[0.18em] text-[#FF6B00]">
-                    Verified Specs
+                    Verified Equipment Specs
                   </p>
                   <h2 className="mt-1 text-xl font-black text-white">
                     Shipping specs
                   </h2>
                 </div>
                 <span className="inline-flex w-fit rounded-full border border-green-400/25 bg-green-500/10 px-3 py-1 text-xs font-black text-green-200">
-                  {canonicalSpec.confidence}% confidence
+                  {sourceBackedSpecConfidence}% confidence
                 </span>
               </div>
 
@@ -1473,30 +2886,32 @@ function ListingContent() {
 
               <p className="mt-4 text-xs leading-relaxed text-white/60">
                 Source:{" "}
-                {canonicalSpec.source_url && showCaterBotSource ? (
+                {sourceBackedSpecSourceUrl && showCaterBotSource ? (
                   <a
-                    href={canonicalSpec.source_url}
+                    href={sourceBackedSpecSourceUrl}
                     target="_blank"
                     rel="noreferrer"
                     className="font-black text-[#FF9A4A] underline-offset-4 hover:underline"
                   >
-                    {canonicalSpec.source_name || `${canonicalSpec.brand} ${canonicalSpec.model} spec sheet`}
+                    {sourceBackedSpecSourceName}
                   </a>
                 ) : (
-                  canonicalSpec.source_name || "Source not provided"
+                  sourceBackedSpecSourceName
                 )}{" "}
-                - data confidence: {canonicalSpec.confidence}%
+                - data confidence: {sourceBackedSpecConfidence}%
               </p>
               <p className="mt-3 rounded-2xl border border-white/10 bg-white/5 p-3 text-xs leading-relaxed text-white/55">
-                Specs are provided for convenience. Buyers should confirm dimensions, weight and requirements with the manufacturer before purchase.
+                Specs are for guidance only. Buyers should confirm details with the seller before purchase or collection.
               </p>
-              <button
-                type="button"
-                onClick={reportIncorrectSpecs}
-                className="mt-3 text-xs font-black text-[#FF9A4A] underline-offset-4 hover:underline"
-              >
-                {specReportSent ? "Report sent" : "Report incorrect specs"}
-              </button>
+              {verifiedSpec && (
+                <button
+                  type="button"
+                  onClick={reportIncorrectSpecs}
+                  className="mt-3 text-xs font-black text-[#FF9A4A] underline-offset-4 hover:underline"
+                >
+                  {specReportSent ? "Report sent" : "Report incorrect specs"}
+                </button>
+              )}
             </section>
           )}
 
@@ -1527,13 +2942,25 @@ function ListingContent() {
             </summary>
             {usesCaterBidsDelivery ? (
               <div className="mt-3 space-y-3">
-                <p className="text-lg font-black text-white">Delivery available</p>
+                <p className="text-lg font-black text-white">CaterBids Pallet Delivery Available</p>
                 <p className="text-sm text-white/65">
                   {listing.delivery_details_confirmed
                     ? "Pallet details confirmed."
                     : "Pallet details need checking."}
                 </p>
+                <a
+                  href="/pallet-delivery-guide"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex rounded-2xl border border-[#FF6B00]/30 bg-[#FF6B00]/10 px-4 py-2 text-xs font-black text-[#FF9A4A]"
+                >
+                  View pallet preparation guide
+                </a>
                 <div className="grid gap-2 text-xs sm:grid-cols-2">
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                    <p className="font-black uppercase text-white/40">Pallet size</p>
+                    <p className="mt-1 font-bold text-white">{formatPalletSize((listing as any).pallet_size)}</p>
+                  </div>
                   <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
                     <p className="font-black uppercase text-white/40">Pallets</p>
                     <p className="mt-1 font-bold text-white">{listing.pallet_count || 1}</p>
@@ -1551,9 +2978,9 @@ function ListingContent() {
                     </p>
                   </div>
                   <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
-                    <p className="font-black uppercase text-white/40">Collection postcode</p>
+                    <p className="font-black uppercase text-white/40">Collection area</p>
                     <p className="mt-1 font-bold text-white">
-                      {fullCollectionPostcode || "Collection postcode not provided"}
+                      {publicCollectionArea}
                     </p>
                   </div>
                 </div>
@@ -1671,7 +3098,13 @@ function ListingContent() {
               <MessageCircle className="h-5 w-5" />
               {openingMessage ? "Opening..." : "Contact seller"}
             </button>
-            <button className="soft-button flex items-center justify-center gap-2 rounded-2xl px-6 py-4 text-sm font-semibold">
+            <button
+              type="button"
+              onClick={() => {
+                quickShareListing()
+              }}
+              className="soft-button flex items-center justify-center gap-2 rounded-2xl px-6 py-4 text-sm font-semibold"
+            >
               <Share2 className="h-4 w-4" />
               Share
             </button>
