@@ -21,6 +21,7 @@ import {
   WARRANTY_TYPE_OPTIONS,
 } from "@/lib/listing-trust"
 import { CATEGORY_OPTIONS, subcategoriesForCategory } from "@/lib/categories"
+import WizardPage from "./wizard/WizardPage"
 
 type QuickListAiResponse = {
   suggested_title: string
@@ -201,6 +202,7 @@ type CaterBotSpecLookupResponse = {
     delivery_notes?: string
   }
   source?: CaterBotSourceValidationResponse["source"]
+  matchType?: "exact" | "approximate" | "no_match"
   sources?: Array<{
     title?: string
     url?: string
@@ -676,7 +678,7 @@ function upperPostcode(value?: string | null) {
   return String(value || "").trim().toUpperCase()
 }
 
-export default function PostListingPage() {
+function PostListingPage() {
   const router = useRouter()
   const postListingParams = useSearchParams()
   const [showOverageSuccess, setShowOverageSuccess] = useState(postListingParams.get("overage") === "success")
@@ -1540,10 +1542,16 @@ export default function PostListingPage() {
           specPlate,
         }),
       }).finally(() => window.clearTimeout(timeout))
-      const suggestion = (await res.json()) as QuickListAiResponse
+      const suggestion = (await res.json()) as QuickListAiResponse & { error?: string; detail?: string }
 
       if (!res.ok) {
-        throw new Error("CaterBot could not read these photos. Add clearer images or enter details manually.")
+        const detail = suggestion.detail ?? suggestion.error ?? ""
+        const isApiError = res.status >= 500 || /denied|contact support|quota|unavailable/i.test(detail)
+        throw new Error(
+          isApiError
+            ? "CaterBot is temporarily unavailable — please fill in details manually or try again later."
+            : "CaterBot could not read these photos. Add clearer images or enter details manually."
+        )
       }
 
       setQuickListResult(suggestion)
@@ -1556,7 +1564,7 @@ export default function PostListingPage() {
       })
 
       if (suggestion.description?.includes("CaterBot vision is not configured")) {
-        setAiError("CaterBot needs clearer photos. You can still enter the details manually.")
+        setAiError("CaterBot is temporarily unavailable — please fill in details manually or try again later.")
       } else {
         setAiNotice("CaterBot filled what it could. Please check the details.")
       }
@@ -2018,7 +2026,6 @@ export default function PostListingPage() {
         ? `data:${itemImages[0].fileType};base64,${itemImages[0].imageBase64}`
         : ""
       const specPlateDataUrl = activeSpecPlateFile ? await resizeSpecPlateForAi(activeSpecPlateFile) : ""
-      const shouldAutoApply = options.autoApplyEmpty ?? true
       const res = await fetch("/api/caterbot/spec-lookup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2059,7 +2066,11 @@ export default function PostListingPage() {
       if (data.extracted?.model && !shippingSpecModel) setShippingSpecModel(data.extracted.model)
 
       if (!res.ok || data.success === false) {
-        const message = data.error || data.warnings?.[0] || "CaterBot could not complete the spec lookup."
+        const rawMessage = data.error || data.warnings?.[0] || ""
+        const isApiError = res.status >= 500 || /denied|contact support|quota/i.test(rawMessage)
+        const message = isApiError
+          ? "CaterBot is temporarily unavailable — please fill in details manually or try again later."
+          : rawMessage || "CaterBot could not complete the spec lookup."
         setManualSourceMatchNotes(message)
         setManualSourceValidated(false)
         setSpecConfidence("low")
@@ -2070,21 +2081,19 @@ export default function PostListingPage() {
 
       setPendingSpecLookup(data)
       setSpecConfidence(data.source?.confidence || "low")
-      if (shouldAutoApply && data.source?.url) {
-        applySpecLookupResult(data, { replace: false, keepPanel: true })
-      }
 
-      if (data.source?.url) {
-        setManualSourceMatchNotes(data.source.matchNotes || "CaterBot found a possible product source.")
-        setAiNotice(
-          shouldAutoApply
-            ? "CaterBot found specs and filled the empty fields. Please check the measurements before publishing."
-            : "CaterBot found possible equipment specs. Review them before applying."
-        )
-      } else {
-        const message = "CaterBot couldn't confirm a matching source — please check the model number and details yourself."
+      if (data.matchType === "exact" && data.source?.url) {
+        setManualSourceMatchNotes(data.source.matchNotes || "CaterBot found an exact match for this product.")
+        setAiNotice("CaterBot found an exact match. Review the specs below and confirm before applying.")
+      } else if (data.source?.url) {
+        const message = "CaterBot found a partial match only — no exact product record. Check the model number and enter details manually."
         setManualSourceMatchNotes(message)
-        setManualSourceValidated(false)
+        if (!manualSourceValidated) setManualSourceValidated(false)
+        setAiNotice(message)
+      } else {
+        const message = "No verified information found — please enter specs from the item's spec plate or manufacturer documentation."
+        setManualSourceMatchNotes(message)
+        if (!manualSourceValidated) setManualSourceValidated(false)
         setAiNotice(message)
       }
     } catch (error) {
@@ -2750,17 +2759,23 @@ export default function PostListingPage() {
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <p className="text-sm font-black text-[#FF6B00]">CaterBot found item details [BETA]</p>
-                <h3 className="mt-1 text-lg font-black">Check the details before publishing.</h3>
-                {!manualSourceHasVerifiedUrl && (
-                  <p className="mt-1 text-xs font-bold text-amber-700">Please check the model number and details yourself.</p>
+                <h3 className="mt-1 text-lg font-black">
+                  {pendingSpecLookup.matchType === "exact"
+                    ? "Exact match found — confirm before applying."
+                    : "No exact match found — enter details manually."}
+                </h3>
+                {pendingSpecLookup.matchType !== "exact" && (
+                  <p className="mt-1 text-xs font-bold text-amber-700">
+                    CaterBot could not confirm an exact product record for this brand and model. Do not apply specs — please check the model number and enter details from the spec plate.
+                  </p>
                 )}
               </div>
-              {manualSourceHasVerifiedUrl && (
+              {pendingSpecLookup.matchType === "exact" && (
                 <div className="flex flex-col items-end gap-1">
                   <span className="w-fit rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-800">
-                    ✓ Verified
+                    ✓ Exact Match
                   </span>
-                  <p className="text-right text-[10px] font-semibold text-emerald-700">Specs filled from a confirmed source.</p>
+                  <p className="text-right text-[10px] font-semibold text-emerald-700">From a verified product source.</p>
                 </div>
               )}
             </div>
@@ -2785,20 +2800,28 @@ export default function PostListingPage() {
             </div>
 
             <div className="mt-4 grid gap-2 sm:grid-cols-4">
-              <button
-                type="button"
-                onClick={() => applySpecLookupResult(pendingSpecLookup!, { replace: false })}
-                className="rounded-xl bg-[#FF6B00] px-4 py-3 text-sm font-black text-white"
-              >
-                Apply Empty Fields
-              </button>
-              <button
-                type="button"
-                onClick={() => applySpecLookupResult(pendingSpecLookup!, { replace: true })}
-                className="rounded-xl border border-[#FF6B00]/35 bg-[#FF6B00]/10 px-4 py-3 text-sm font-black text-[#B34700]"
-              >
-                Replace All Details
-              </button>
+              {pendingSpecLookup.matchType === "exact" ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => applySpecLookupResult(pendingSpecLookup!, { replace: false })}
+                    className="rounded-xl bg-[#FF6B00] px-4 py-3 text-sm font-black text-white"
+                  >
+                    Apply Empty Fields
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applySpecLookupResult(pendingSpecLookup!, { replace: true })}
+                    className="rounded-xl border border-[#FF6B00]/35 bg-[#FF6B00]/10 px-4 py-3 text-sm font-black text-[#B34700]"
+                  >
+                    Replace All Details
+                  </button>
+                </>
+              ) : (
+                <div className="col-span-2 flex items-center rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-800">
+                  Specs cannot be applied — no exact match. Enter details manually.
+                </div>
+              )}
               <button
                 type="button"
                 onClick={() => {
@@ -4073,3 +4096,5 @@ export default function PostListingPage() {
     </main>
   )
 }
+
+export default process.env.NEXT_PUBLIC_LISTING_WIZARD === "true" ? WizardPage : PostListingPage
