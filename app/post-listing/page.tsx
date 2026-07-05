@@ -21,7 +21,6 @@ import {
   WARRANTY_TYPE_OPTIONS,
 } from "@/lib/listing-trust"
 import { CATEGORY_OPTIONS, subcategoriesForCategory } from "@/lib/categories"
-import WizardPage from "./wizard/WizardPage"
 
 type QuickListAiResponse = {
   suggested_title: string
@@ -456,8 +455,20 @@ function buildCaterBotShortDescription(suggestion: QuickListAiResponse, fallback
     !suppliedDescription ||
     /upload at least one|add clear photos|commercial catering item/i.test(suppliedDescription)
 
+  const dimStr = (suggestion.dimensions ?? "").trim()
+  const weightRaw = suggestion.estimated_weight_kg
+  const weightNum =
+    typeof weightRaw === "number"
+      ? weightRaw
+      : parseFloat(String(weightRaw ?? "").replace(/[^0-9.]/g, ""))
+  const weightLine =
+    Number.isFinite(weightNum) && weightNum > 0
+      ? `Weight: ${Number.isInteger(weightNum) ? weightNum : weightNum.toFixed(1)} kg.`
+      : ""
+  const specLine = [dimStr ? `Dimensions: ${dimStr}.` : "", weightLine].filter(Boolean).join(" ")
+
   if (!genericDescription) {
-    return suppliedDescription
+    return specLine ? `${suppliedDescription} ${specLine}` : suppliedDescription
   }
 
   const brand = displayBrand(suggestion.brand)
@@ -472,11 +483,13 @@ function buildCaterBotShortDescription(suggestion: QuickListAiResponse, fallback
     .replace(/\s+/g, " ")
     .trim()
 
+  const suffix = specLine || "Please check photos and confirm condition, dimensions and collection requirements before purchase."
+
   if (itemName) {
-    return `${conditionText.charAt(0).toUpperCase()}${conditionText.slice(1)} ${itemName} suitable for commercial catering use. Please check photos and confirm condition, dimensions and collection requirements before purchase.`
+    return `${conditionText.charAt(0).toUpperCase()}${conditionText.slice(1)} ${itemName} suitable for commercial catering use. ${suffix}`
   }
 
-  return "Used catering equipment item. Please review photos carefully and confirm condition, dimensions and collection requirements before purchase."
+  return `Used catering equipment item. Please review photos carefully and confirm condition. ${suffix}`
 }
 
 function isManualsLibUrl(url: string) {
@@ -522,12 +535,12 @@ function positiveNumber(value: string) {
   return Number.isFinite(numberValue) && numberValue > 0 ? numberValue : 0
 }
 
-const PALLET_TIERS: Array<{ slug: string; label: string; maxH: number; maxW: number }> = [
-  { slug: "mini_quarter", label: "Mini Quarter pallet", maxH: 60,  maxW: 150 },
-  { slug: "quarter",      label: "Quarter pallet",      maxH: 80,  maxW: 300 },
-  { slug: "half",         label: "Half pallet",          maxH: 110, maxW: 500 },
-  { slug: "light",        label: "Light pallet",         maxH: 220, maxW: 750 },
-  { slug: "full",         label: "Full pallet",          maxH: 220, maxW: 1000 },
+const PALLET_TIERS: Array<{ slug: string; label: string; maxHeightCm: number; maxWeightKg: number }> = [
+  { slug: "mini_quarter", label: "Mini Quarter pallet", maxHeightCm: 60,  maxWeightKg: 150  },
+  { slug: "quarter",      label: "Quarter pallet",      maxHeightCm: 80,  maxWeightKg: 300  },
+  { slug: "half",         label: "Half pallet",          maxHeightCm: 110, maxWeightKg: 500  },
+  { slug: "light",        label: "Light pallet",         maxHeightCm: 220, maxWeightKg: 750  },
+  { slug: "full",         label: "Full pallet",          maxHeightCm: 220, maxWeightKg: 1000 },
 ]
 
 const PALLET_CARDS = [
@@ -538,16 +551,34 @@ const PALLET_CARDS = [
   { slug: "full",         name: "Full",              image: "/images/pallets/pallet_full.png",          maxH: "2.2m", maxW: "1000kg", example: "Heavy range cooker, full-size" },
 ] as const
 
-function inferPalletSizeFromSpecs(
-  heightCm: number,
-  weightKg: number
-): { slug: string; label: string } | { tooBig: true } | null {
-  if (heightCm <= 0 || weightKg <= 0) return null
-  if (heightCm > 220 || weightKg > 1000) return { tooBig: true }
-  for (const tier of PALLET_TIERS) {
-    if (heightCm <= tier.maxH && weightKg <= tier.maxW) return { slug: tier.slug, label: tier.label }
+function computePalletFromItem(
+  itemHeightCm: number,
+  itemWeightKg: number
+): {
+  palletLengthCm: number
+  palletWidthCm: number
+  palletHeightCm: number
+  palletWeightKg: number
+  tier: { slug: string; label: string } | { tooBig: true } | null
+} {
+  const palletLengthCm = 120
+  const palletWidthCm = 100
+  const palletHeightCm = itemHeightCm + 15
+  const palletWeightKg = itemWeightKg + 20
+  let tier: { slug: string; label: string } | { tooBig: true } | null = null
+  if (itemHeightCm > 0 && itemWeightKg > 0) {
+    if (palletHeightCm > 220 || palletWeightKg > 1000) {
+      tier = { tooBig: true }
+    } else {
+      for (const t of PALLET_TIERS) {
+        if (palletHeightCm <= t.maxHeightCm && palletWeightKg <= t.maxWeightKg) {
+          tier = { slug: t.slug, label: t.label }
+          break
+        }
+      }
+    }
   }
-  return null
+  return { palletLengthCm, palletWidthCm, palletHeightCm, palletWeightKg, tier }
 }
 
 function deliveryRecommendationFromSpecs({
@@ -714,7 +745,6 @@ function PostListingPage() {
   const [palletImgErrors, setPalletImgErrors] = useState<ReadonlySet<string>>(new Set())
   const [palletCount, setPalletCount] = useState("1")
   const [preferredCollectionDate, setPreferredCollectionDate] = useState("")
-  const [insuranceValue, setInsuranceValue] = useState("")
   const [featureBoostDays, setFeatureBoostDays] = useState<7 | 30 | null>(null)
   const [boostSettings, setBoostSettings] = useState<{
     featured_boosts_enabled: boolean
@@ -1009,6 +1039,33 @@ function PostListingPage() {
     setQuickListApplied(false)
   }
 
+  function resetScanState() {
+    // Clears only state that a previous scan could have written.
+    // Seller-typed fields (title, deliveryNotes, shippingSpec*) are intentionally excluded;
+    // their stale-scan fallbacks are removed in applySuggestionToShippingSpecs instead.
+    setQuickListResult(null)
+    setPendingSpecLookup(null)
+    setQuickListApplied(false)
+    setDimensions("")
+    setWeightKg("")
+    setLengthCm("")
+    setWidthCm("")
+    setHeightCm("")
+    setPalletSizeNote("")
+    setPalletTooBig(false)
+    setManualSourceUrl("")
+    setSpecSourceUrl("")
+    setManualSourceName("")
+    setManualSourceType("")
+    setManualSourceValidated(false)
+    setManualSourceLastCheckedAt("")
+    setManualSourceMatchNotes("")
+    setManualSourceUsefulDetails([])
+    setSpecConfidence("")
+    setSpecsVerifiedBySeller(false)
+    setSourceRejectedBySeller(false)
+  }
+
   async function handleImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files || [])
     const allowed = files.filter((file) =>
@@ -1213,28 +1270,28 @@ function PostListingPage() {
     const parsedDimensions = parseDimensionsToCm(suggestion.dimensions)
     const suggestedWeightKg = extractSuggestionWeightKg(suggestion)
 
-    setShippingSpecBrand(suggestion.brand || shippingSpecBrand)
-    setShippingSpecModel(suggestion.model || suggestion.gc_number || shippingSpecModel)
-    setShippingSpecSerial(suggestion.serial_number || shippingSpecSerial)
-    setShippingSpecGcNumber(suggestion.gc_number || shippingSpecGcNumber)
+    setShippingSpecBrand(suggestion.brand || "")
+    setShippingSpecModel(suggestion.model || suggestion.gc_number || "")
+    setShippingSpecSerial(suggestion.serial_number || "")
+    setShippingSpecGcNumber(suggestion.gc_number || "")
     setShippingSpecCategory(shippingCategoryFrom(suggestion.subcategory || suggestion.category || suggestion.suggested_title))
     setShippingSpecPowerType(shippingPowerTypeFrom(suggestion.power_type || suggestion.gas_or_electric || suggestion.gas_type))
-    setShippingSpecVoltage(suggestion.voltage || shippingSpecVoltage)
-    setShippingSpecCurrent(extractConfirmedNumber(suggestion.amps) || shippingSpecCurrent)
+    setShippingSpecVoltage(suggestion.voltage || "")
+    setShippingSpecCurrent(extractConfirmedNumber(suggestion.amps) || "")
     setShippingSpecPhase(
       /3|three/i.test(suggestion.electrical_phase || suggestion.power_type || "") ? "3" :
       /1|single/i.test(suggestion.electrical_phase || suggestion.power_type || "") ? "1" :
-      shippingSpecPhase
+      ""
     )
-    setShippingSpecGasType(suggestion.gas_type || shippingSpecGasType)
+    setShippingSpecGasType(suggestion.gas_type || "")
     if (parsedDimensions) {
       setShippingSpecWidth(parsedDimensions[0])
       setShippingSpecDepth(parsedDimensions[1])
       setShippingSpecHeight(parsedDimensions[2])
     }
-    setShippingSpecWeight(suggestedWeightKg || shippingSpecWeight)
-    setShippingSpecForkliftRequired(aiBoolean(suggestion.tail_lift_required, shippingSpecForkliftRequired))
-    setShippingSpecNotes(suggestion.delivery_notes || shippingSpecNotes)
+    setShippingSpecWeight(suggestedWeightKg || "")
+    setShippingSpecForkliftRequired(aiBoolean(suggestion.tail_lift_required, false))
+    setShippingSpecNotes(suggestion.delivery_notes || "")
   }
 
   function extractNumber(value: string) {
@@ -1391,11 +1448,25 @@ function PostListingPage() {
   }
 
   function suggestionDeliveryDimensions(suggestion: QuickListAiResponse) {
-    const parsedDimensions = parseDeliveryDimensionsToCm(suggestion.dimensions)
+    const itemDims = parseDeliveryDimensionsToCm(suggestion.dimensions)
+    const itemHeightCm = itemDims?.heightCm ? Number(itemDims.heightCm) : 0
+    const itemWeightKg = Number(extractSuggestionWeightKg(suggestion) || 0)
+
+    if (itemHeightCm > 0 && itemWeightKg > 0) {
+      const pallet = computePalletFromItem(itemHeightCm, itemWeightKg)
+      if (pallet.tier && !('tooBig' in pallet.tier)) {
+        return {
+          lengthCm: String(pallet.palletLengthCm),
+          widthCm: String(pallet.palletWidthCm),
+          heightCm: String(pallet.palletHeightCm),
+        }
+      }
+    }
+
     return {
-      lengthCm: parsedDimensions?.lengthCm || normaliseCmValue(suggestion.pallet_length_cm, { allowBareNumber: true }) || "",
-      widthCm: parsedDimensions?.widthCm || normaliseCmValue(suggestion.pallet_width_cm, { allowBareNumber: true }) || "",
-      heightCm: parsedDimensions?.heightCm || normaliseCmValue(suggestion.pallet_height_cm, { allowBareNumber: true }) || "",
+      lengthCm: normaliseCmValue(suggestion.pallet_length_cm, { allowBareNumber: true }) || "",
+      widthCm: normaliseCmValue(suggestion.pallet_width_cm, { allowBareNumber: true }) || "",
+      heightCm: normaliseCmValue(suggestion.pallet_height_cm, { allowBareNumber: true }) || "",
     }
   }
 
@@ -1505,6 +1576,7 @@ function PostListingPage() {
       return
     }
 
+    resetScanState()
     setAiLoading(true)
     setAiError("")
     setAiNotice("")
@@ -1599,7 +1671,7 @@ function PostListingPage() {
     const seoTitle = buildSeoListingTitle(suggestion, normaliseCondition(suggestion.condition))
     const aiShortDescription = buildCaterBotShortDescription(suggestion, normaliseCondition(suggestion.condition))
 
-    setTitle(seoTitle || suggestion.suggested_title || suggestion.title || title)
+    setTitle(seoTitle || suggestion.suggested_title || suggestion.title || "")
     setCategory(nextCategory)
     setSubcategory(nextSubcategory)
     setCondition(normaliseCondition(suggestion.condition))
@@ -1609,6 +1681,7 @@ function PostListingPage() {
     setDimensions(suggestion.dimensions)
     if (/pallet/i.test(nextDeliveryOption)) setPalletEnabled(true)
     const validatedSource = Boolean(suggestion.manual_source_validated)
+    console.log("[DIAG applySuggestion]", { validatedSource, preferredSourceUrl, manual_source_validated: suggestion.manual_source_validated })
     setManualsAvailable(validatedSource)
     setManualSourceUrl(validatedSource ? preferredSourceUrl : "")
     setSpecSourceUrl(validatedSource ? preferredSourceUrl : "")
@@ -1631,13 +1704,13 @@ function PostListingPage() {
     setSpecsVerifiedBySeller(false)
     setSourceRejectedBySeller(false)
     setPalletCount(aiPalletCount || "1")
-    setInsuranceValue(price ? String(Number(price.replace(/[^0-9.]/g, "")) || "") : "")
     if (suggestion.delivery_notes) {
-      setDeliveryNotes(suggestion.delivery_notes)
+      const cleaned = suggestion.delivery_notes.replace(/\s*CaterBot delivery suggestion:[^.]*\.\s*/gi, " ").trim()
+      if (cleaned) setDeliveryNotes(cleaned)
     }
 
     if (aiWeight) {
-      setWeightKg(aiWeight)
+      setWeightKg(String(Math.round(Number(aiWeight) + 20)))
       setDeliverySizeUnknown(false)
     }
 
@@ -1724,16 +1797,23 @@ function PostListingPage() {
     }
 
     const deliveryDimensions = parsedPackedDimensions || parsedDimensions
+    const itemWeightKg = parsedWeight ? positiveNumber(parsedWeight) : 0
+
     if (deliveryDimensions) {
-      setLengthCm(deliveryDimensions[1])
-      setWidthCm(deliveryDimensions[0])
-      setHeightCm(deliveryDimensions[2])
-      setDeliverySizeUnknown(false)
+      const itemHeightCm = positiveNumber(deliveryDimensions[2])
+      if (itemHeightCm > 0) {
+        const pallet = computePalletFromItem(itemHeightCm, itemWeightKg)
+        setLengthCm(String(pallet.palletLengthCm))
+        setWidthCm(String(pallet.palletWidthCm))
+        setHeightCm(String(pallet.palletHeightCm))
+        if (itemWeightKg > 0) setWeightKg(String(Math.round(pallet.palletWeightKg)))
+        setDeliverySizeUnknown(false)
+      }
     }
 
     if (parsedWeight) {
       setShippingSpecWeight(parsedWeight)
-      setWeightKg(parsedWeight)
+      if (!deliveryDimensions) setWeightKg(String(Math.round(itemWeightKg + 20)))
       setDeliverySizeUnknown(false)
     }
 
@@ -1815,21 +1895,29 @@ function PostListingPage() {
   function applyCaterBotDeliveryMeasurements(result: CaterBotSpecLookupResponse, replace: boolean) {
     const specs = result.specs
     const weight = valueForInput(specs?.gross_weight_kg || specs?.net_weight_kg || specs?.weight_kg)
+    const height = valueForInput(specs?.height_cm)
     const length = valueForInput(specs?.depth_cm)
     const width = valueForInput(specs?.width_cm)
-    const height = valueForInput(specs?.height_cm)
 
-    if (weight) setWeightKg((current) => (replace || !current.trim() ? weight : current))
-    if (length) setLengthCm((current) => (replace || !current.trim() ? length : current))
-    if (width) setWidthCm((current) => (replace || !current.trim() ? width : current))
-    if (height) setHeightCm((current) => (replace || !current.trim() ? height : current))
+    const itemWeightKg = positiveNumber(weight)
+    const itemHeightCm = positiveNumber(height)
+
+    const palletWeight = weight ? String(Math.round(Number(weight) + 20)) : ""
+    if (weight) setWeightKg((current) => (replace || !current.trim() ? palletWeight : current))
+
+    if (itemHeightCm > 0) {
+      const pallet = computePalletFromItem(itemHeightCm, itemWeightKg)
+      setLengthCm((current) => (replace || !current.trim() ? String(pallet.palletLengthCm) : current))
+      setWidthCm((current) => (replace || !current.trim() ? String(pallet.palletWidthCm) : current))
+      setHeightCm((current) => (replace || !current.trim() ? String(pallet.palletHeightCm) : current))
+    }
 
     if (weight) setShippingSpecWeight((current) => (replace || !current.trim() ? weight : current))
     if (length) setShippingSpecDepth((current) => (replace || !current.trim() ? length : current))
     if (width) setShippingSpecWidth((current) => (replace || !current.trim() ? width : current))
     if (height) setShippingSpecHeight((current) => (replace || !current.trim() ? height : current))
 
-    if (weight && length && width && height) {
+    if (weight && height) {
       setDeliverySizeUnknown(false)
     }
 
@@ -1909,38 +1997,37 @@ function PostListingPage() {
       setTextFromCaterBot(setShippingSpecWidth, specs.width_cm, replace)
       setTextFromCaterBot(setShippingSpecDepth, specs.depth_cm, replace)
       setTextFromCaterBot(setShippingSpecHeight, specs.height_cm, replace)
-      setTextFromCaterBot(setLengthCm, specs.depth_cm, replace)
-      setTextFromCaterBot(setWidthCm, specs.width_cm, replace)
-      setTextFromCaterBot(setHeightCm, specs.height_cm, replace)
       setDeliverySizeUnknown(false)
     }
 
     const sourceWeight = specs?.gross_weight_kg || specs?.net_weight_kg || specs?.weight_kg
     if (sourceWeight) {
       setTextFromCaterBot(setShippingSpecWeight, sourceWeight, replace)
-      setTextFromCaterBot(setWeightKg, sourceWeight, replace)
       setDeliverySizeUnknown(false)
     }
     const appliedMeasurements = applyCaterBotDeliveryMeasurements(result, replace)
 
-    const inferred = inferPalletSizeFromSpecs(
-      positiveNumber(appliedMeasurements.height),
-      positiveNumber(appliedMeasurements.weight)
-    )
-    if (inferred && 'tooBig' in inferred) {
+    const itemHeightCm = positiveNumber(appliedMeasurements.height)
+    const itemWeightKg = positiveNumber(appliedMeasurements.weight)
+    const pallet = computePalletFromItem(itemHeightCm, itemWeightKg)
+    if (pallet.tier && 'tooBig' in pallet.tier) {
       setPalletTooBig(true)
       setPalletEnabled(false)
       setPalletSizeNote("")
-    } else if (inferred && (replace || !palletSizeManuallySet)) {
+    } else if (pallet.tier && (replace || !palletSizeManuallySet)) {
       setPalletTooBig(false)
-      setPalletSize(inferred.slug)
-      const hM = (positiveNumber(appliedMeasurements.height) / 100).toFixed(1)
-      const wKg = Math.round(positiveNumber(appliedMeasurements.weight))
+      setPalletSize(pallet.tier.slug)
+      const hM = (pallet.palletHeightCm / 100).toFixed(1)
+      const wTotal = Math.round(pallet.palletWeightKg)
+      const wItem = Math.round(itemWeightKg)
       setPalletSizeNote(
-        `CaterBot suggests ${inferred.label} based on ~${hM}m height and ~${wKg}kg — please check before publishing.`
+        `CaterBot suggests ${pallet.tier.label} based on ~${hM}m height and ~${wTotal} kg (${wItem} kg item + 20 kg pallet) — please confirm before publishing.`
       )
     } else {
       setPalletTooBig(false)
+      if (itemHeightCm > 0 && itemWeightKg <= 0 && !palletSizeManuallySet) {
+        setPalletSizeNote("Item weight needed to confirm pallet tier — add it in Equipment Specifications below.")
+      }
     }
 
     if (specs?.voltage) setTextFromCaterBot(setShippingSpecVoltage, specs.voltage, replace)
@@ -1953,23 +2040,24 @@ function PostListingPage() {
     if (specs?.gas_connection || extracted?.gas_connection) {
       setTextFromCaterBot(setShippingSpecGasConnection, specs?.gas_connection || extracted?.gas_connection, replace)
     }
+    const palletTierLabel = pallet.tier && !('tooBig' in pallet.tier) ? pallet.tier.label : null
     if (
       specs?.refrigerant ||
       specs?.capacity_litres ||
-      specs?.suggested_pallet_size ||
       specs?.delivery_notes ||
       specs?.power_details ||
-      specs?.safety_note
+      specs?.safety_note ||
+      palletTierLabel
     ) {
       const notes = [
-        specs.capacity_litres ? `Capacity: ${specs.capacity_litres} litres.` : "",
-        specs.refrigerant ? `Refrigerant: ${specs.refrigerant}${specs.refrigerant_mass ? ` ${specs.refrigerant_mass}` : ""}.` : "",
-        specs.heat_input_kw ? `Heat input: ${specs.heat_input_kw}kW.` : "",
-        specs.power_details ? `Power details: ${specs.power_details}.` : "",
-        specs.safety_note || "",
-        specs.gas_connection ? `Gas connection: ${specs.gas_connection}.` : "",
-        specs.suggested_pallet_size ? `CaterBot delivery suggestion: ${specs.suggested_pallet_size}.` : "",
-        specs.delivery_notes || "",
+        specs?.capacity_litres ? `Capacity: ${specs.capacity_litres} litres.` : "",
+        specs?.refrigerant ? `Refrigerant: ${specs.refrigerant}${specs.refrigerant_mass ? ` ${specs.refrigerant_mass}` : ""}.` : "",
+        specs?.heat_input_kw ? `Heat input: ${specs.heat_input_kw}kW.` : "",
+        specs?.power_details ? `Power details: ${specs.power_details}.` : "",
+        specs?.safety_note || "",
+        specs?.gas_connection ? `Gas connection: ${specs.gas_connection}.` : "",
+        palletTierLabel ? `CaterBot delivery suggestion: ${palletTierLabel}.` : "",
+        specs?.delivery_notes || "",
       ].filter(Boolean)
       setDeliveryNotes((current) => (replace || !current.trim() ? notes.join(" ") : current))
     }
@@ -2030,13 +2118,13 @@ function PostListingPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          brandHint: brand || options.suggestion?.brand,
-          modelHint: model || options.suggestion?.model || options.suggestion?.gc_number,
-          titleHint: title || options.suggestion?.suggested_title || options.suggestion?.title,
+          brandHint: options.suggestion?.brand || brand,
+          modelHint: options.suggestion?.model || options.suggestion?.gc_number || model,
+          titleHint: options.suggestion?.suggested_title || options.suggestion?.title || "",
           categoryHint: category,
           conditionHint: condition,
-          equipment_type: shippingSpecCategory || subcategory || category,
-          fuel_type: shippingSpecPowerType || powerType,
+          equipment_type: shippingCategoryFrom(options.suggestion?.subcategory || options.suggestion?.category || options.suggestion?.suggested_title) || shippingSpecCategory || subcategory || category,
+          fuel_type: shippingPowerTypeFrom(options.suggestion?.power_type || options.suggestion?.gas_or_electric || options.suggestion?.gas_type) || shippingSpecPowerType || powerType,
           manualText: options.suggestion
             ? [
                 options.suggestion.brand,
@@ -2061,6 +2149,7 @@ function PostListingPage() {
       const data = (await res.json()) as CaterBotSpecLookupResponse
       const checkedAt = data.source?.checkedAt || data.checkedAt || new Date().toISOString()
       setManualSourceLastCheckedAt(checkedAt)
+      console.log("[DIAG specLookup response]", { httpStatus: res.status, ok: res.ok, success: data.success, matchType: data.matchType, sourceUrl: data.source?.url || "" })
 
       if (data.extracted?.brand && !shippingSpecBrand) setShippingSpecBrand(data.extracted.brand)
       if (data.extracted?.model && !shippingSpecModel) setShippingSpecModel(data.extracted.model)
@@ -2072,6 +2161,7 @@ function PostListingPage() {
           ? "CaterBot is temporarily unavailable — please fill in details manually or try again later."
           : rawMessage || "CaterBot could not complete the spec lookup."
         setManualSourceMatchNotes(message)
+        console.log("[DIAG specLookup ERROR PATH] unconditional setManualSourceValidated(false). status:", res.status, "success:", data.success, "error:", rawMessage)
         setManualSourceValidated(false)
         setSpecConfidence("low")
         setManualLinkError(message)
@@ -2083,17 +2173,26 @@ function PostListingPage() {
       setSpecConfidence(data.source?.confidence || "low")
 
       if (data.matchType === "exact" && data.source?.url) {
+        setManualSourceUrl(data.source.url)
+        setSpecSourceUrl(data.source.url)
+        setManualSourceName(data.source.sourceName || "Verified manual/spec source")
+        setManualSourceType(data.source.sourceType || "Verified source")
+        setManualSourceValidated(true)
+        setManualSourceUsefulDetails(Array.isArray(data.source.usefulDetails) ? data.source.usefulDetails : [])
+        setSpecConfidence(data.source.confidence || "high")
+        setSpecsVerifiedBySeller(false)
+        setSourceRejectedBySeller(false)
         setManualSourceMatchNotes(data.source.matchNotes || "CaterBot found an exact match for this product.")
         setAiNotice("CaterBot found an exact match. Review the specs below and confirm before applying.")
       } else if (data.source?.url) {
         const message = "CaterBot found a partial match only — no exact product record. Check the model number and enter details manually."
         setManualSourceMatchNotes(message)
-        if (!manualSourceValidated) setManualSourceValidated(false)
+        setManualSourceValidated(prev => { console.log("[DIAG specLookup updater approximate] prev =", prev); return prev ? prev : false })
         setAiNotice(message)
       } else {
         const message = "No verified information found — please enter specs from the item's spec plate or manufacturer documentation."
         setManualSourceMatchNotes(message)
-        if (!manualSourceValidated) setManualSourceValidated(false)
+        setManualSourceValidated(prev => { console.log("[DIAG specLookup updater no_match] prev =", prev); return prev ? prev : false })
         setAiNotice(message)
       }
     } catch (error) {
@@ -2236,7 +2335,7 @@ function PostListingPage() {
     }
 
     if (usesPalletDelivery && !hasRequiredDeliverySize) {
-      setPublishError("Add kg and cm to enable delivery quotes.")
+      setPublishError("Add item weight and pallet dimensions to enable delivery quotes.")
       return
     }
 
@@ -2249,12 +2348,11 @@ function PostListingPage() {
         ["seller_phone", "Add seller phone number."],
         ["pallet_size", "Choose pallet size."],
         ["pallet_count", "Add number of pallets."],
-        ["insurance_value", "Add insurance value."],
       ] as const
 
       for (const [fieldName, message] of requiredPalletFields) {
         const value = ((formData.get(fieldName) as string) || "").trim()
-        if (!value || ((fieldName === "pallet_count" || fieldName === "insurance_value") && !hasPositiveNumber(formData.get(fieldName)))) {
+        if (!value || (fieldName === "pallet_count" && !hasPositiveNumber(formData.get(fieldName)))) {
           setPublishError(message)
           return
         }
@@ -2407,7 +2505,7 @@ function PostListingPage() {
     }
 
     if (deliverySizeUnknown || !weightKg || !lengthCm || !widthCm || !heightCm) {
-      setInterparcelPreviewError("Add checked pallet weight and dimensions before checking Interparcel pricing.")
+      setInterparcelPreviewError("Add pallet dimensions and item weight before checking Interparcel pricing.")
       return
     }
 
@@ -2431,7 +2529,7 @@ function PostListingPage() {
           forkliftAvailable,
           commercialPremises,
           palletCount,
-          insuranceValue: insuranceValue || price,
+          insuranceValue: price || "500",
         }),
       })
       const data = await res.json()
@@ -2480,6 +2578,7 @@ function PostListingPage() {
         : manualSourceLastCheckedAt
           ? "Search completed — no reliable match"
           : "No reliable match"
+  console.log("[DIAG render sourceStatus]", { manualSourceValidated, manualSourceUrl, specSourceUrl, sourceRejectedBySeller, manualSourceHasVerifiedUrl, sourceStatusText })
   const showCaterBotProductMatch =
     Boolean(quickListResult) || manualSourceHasVerifiedUrl || Boolean(manualSourceMatchNotes) || sourceRejectedBySeller
   const deliveryMeasurementsReady = Boolean(weightKg && lengthCm && widthCm && heightCm)
@@ -3074,6 +3173,27 @@ function PostListingPage() {
               </label>
             </div>
 
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {[
+                { label: "Width (cm)", value: shippingSpecWidth, setValue: setShippingSpecWidth },
+                { label: "Depth (cm)", value: shippingSpecDepth, setValue: setShippingSpecDepth },
+                { label: "Height (cm)", value: shippingSpecHeight, setValue: setShippingSpecHeight },
+                { label: "Weight (kg)", value: shippingSpecWeight, setValue: setShippingSpecWeight },
+              ].map((field) => (
+                <label key={field.label} className="block">
+                  <span className="mb-1 block text-sm font-black">{field.label}</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={field.value}
+                    onChange={(e) => field.setValue(e.target.value)}
+                    placeholder="Needs seller check"
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                  />
+                </label>
+              ))}
+            </div>
+
             <label className="block">
               <span className="mb-1 block text-sm font-black">Short description <span className="text-[#FF6B00]">*</span></span>
               <textarea
@@ -3492,7 +3612,7 @@ function PostListingPage() {
 
               {!deliveryMeasurementsReady && (
                 <p className="rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-bold text-[#8A3A00]">
-                  Add kg and cm to enable delivery quotes.
+                  Add item weight and pallet dimensions to enable delivery quotes.
                 </p>
               )}
               {deliveryMeasurementsReady && quickListApplied && (
@@ -3665,36 +3785,31 @@ function PostListingPage() {
                 )}
               </div>
 
-              {/* Number of pallets + insurance value */}
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="block">
-                  <span className="mb-1 block text-sm font-black">Number of pallets <span className="text-[#FF6B00]">*</span></span>
-                  <input
-                    name="pallet_count"
-                    value={palletCount}
-                    onChange={(event) => setPalletCount(event.target.value)}
-                    type="number"
-                    min="1"
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
-                  />
-                </label>
-                <label className="block">
-                  <span className="mb-1 block text-sm font-black">Insurance value <span className="text-[#FF6B00]">*</span></span>
-                  <input
-                    name="insurance_value"
-                    value={insuranceValue}
-                    onChange={(event) => setInsuranceValue(event.target.value)}
-                    type="number"
-                    min="0"
-                    placeholder="e.g. 500"
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
-                  />
-                </label>
-              </div>
+              <label className="block">
+                <span className="mb-1 block text-sm font-black">Number of pallets <span className="text-[#FF6B00]">*</span></span>
+                <input
+                  name="pallet_count"
+                  value={palletCount}
+                  onChange={(event) => setPalletCount(event.target.value)}
+                  type="number"
+                  min="1"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                />
+              </label>
 
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <input type="hidden" name="weight_kg" value={weightKg} />
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
+                <span className="font-black text-[#002E5D]">Total shipping weight: </span>
+                {weightKg ? (
+                  <span className="font-semibold text-[#002E5D]">
+                    {weightKg} kg ({Math.round(Number(weightKg) - 20)} kg item + 20 kg pallet)
+                  </span>
+                ) : (
+                  <span className="font-semibold text-slate-400">Not yet set — confirm item weight in Equipment Specifications below.</span>
+                )}
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {[
-                  { label: "Pallet weight kg", name: "weight_kg", value: weightKg, setValue: setWeightKg },
                   { label: "Pallet length cm", name: "length_cm", value: lengthCm, setValue: setLengthCm },
                   { label: "Pallet width cm", name: "width_cm", value: widthCm, setValue: setWidthCm },
                   { label: "Pallet height cm", name: "height_cm", value: heightCm, setValue: setHeightCm },
@@ -4033,7 +4148,7 @@ function PostListingPage() {
         <input type="hidden" name="collection_city" value={collectionCity || city || location} />
         <input type="hidden" name="delivery_size_unknown" value="" />
         <input type="hidden" name="pallet_count" value={palletCount || "1"} />
-        <input type="hidden" name="insurance_value" value={insuranceValue || price.replace(/[^0-9.]/g, "")} />
+        <input type="hidden" name="insurance_value" value={price.replace(/[^0-9.]/g, "") || "500"} />
         <input type="hidden" name="access_restrictions" value={accessRestrictions} />
         <input type="hidden" name="estimated_weight" value={weightKg ? `${weightKg} kg` : ""} />
         <input type="hidden" name="delivery_type" value={deliveryRecommendation.recommendation} />
@@ -4097,4 +4212,4 @@ function PostListingPage() {
   )
 }
 
-export default process.env.NEXT_PUBLIC_LISTING_WIZARD === "true" ? WizardPage : PostListingPage
+export default PostListingPage
