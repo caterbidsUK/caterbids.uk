@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import Stripe from "stripe"
+import * as Sentry from "@sentry/nextjs"
 import { stripe } from "@/lib/stripe"
 import { createAdminClient } from "@/lib/supabase/admin"
 import {
@@ -125,6 +126,7 @@ export async function POST(req: NextRequest) {
     const rawBody = await req.text()
     event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret)
   } catch (error) {
+    Sentry.captureException(error, { tags: { webhook_stage: "signature_verification" } })
     console.error("Stripe webhook signature failed:", error)
     return NextResponse.json({ error: "Invalid Stripe webhook signature" }, { status: 400 })
   }
@@ -175,6 +177,7 @@ export async function POST(req: NextRequest) {
       if (error) throw error
       return NextResponse.json({ received: true, sellerPlan: true })
     } catch (error) {
+      Sentry.captureException(error, { tags: { webhook_stage: "seller_plan" } })
       console.error("Seller plan entitlement failed:", error)
       return NextResponse.json({ error: "Could not save seller plan entitlement" }, { status: 500 })
     }
@@ -219,6 +222,7 @@ export async function POST(req: NextRequest) {
         .eq("id", sellerId)
       return NextResponse.json({ received: true, foundingMember: true })
     } catch (error) {
+      Sentry.captureException(error, { tags: { webhook_stage: "founding_member" } })
       console.error("Founding member webhook failed:", error)
       return NextResponse.json({ error: "Could not grant founding membership" }, { status: 500 })
     }
@@ -249,6 +253,7 @@ export async function POST(req: NextRequest) {
       if (error) throw error
       return NextResponse.json({ received: true, featuredBoost: true })
     } catch (error) {
+      Sentry.captureException(error, { tags: { webhook_stage: "featured_boost" } })
       console.error("Featured boost webhook failed:", error)
       return NextResponse.json({ error: "Could not apply featured boost" }, { status: 500 })
     }
@@ -275,6 +280,7 @@ export async function POST(req: NextRequest) {
       if (updateError) throw updateError
       return NextResponse.json({ received: true, overageGranted: true })
     } catch (error) {
+      Sentry.captureException(error, { tags: { webhook_stage: "listing_overage" } })
       console.error("Listing overage webhook failed:", error)
       return NextResponse.json({ error: "Could not grant listing overage" }, { status: 500 })
     }
@@ -474,6 +480,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ received: true, orderCreated: true })
   } catch (error) {
+    Sentry.captureException(error, { tags: { webhook_stage: "order_creation" } })
     console.error("Stripe webhook order creation failed:", error)
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Webhook order creation failed" },

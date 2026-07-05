@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import * as Sentry from "@sentry/nextjs"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { stripe } from "@/lib/stripe"
@@ -94,6 +95,9 @@ export async function POST(request: Request) {
       .eq("id", user.id)
     if (markError) {
       // Auth is banned but deletion marker failed — log for manual follow-up
+      Sentry.captureException(new Error(`CRITICAL: user banned but deletion_scheduled_at not set for ${user.id}`), {
+        extra: { userId: user.id, supabaseError: markError },
+      })
       console.error("CRITICAL: user banned but deletion_scheduled_at not set:", user.id, markError)
     }
 
@@ -197,6 +201,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true, warnings: warnings.length ? warnings : undefined })
   } catch (error) {
+    Sentry.captureException(error)
     const message = error instanceof Error ? error.message : "Could not delete account."
     return NextResponse.json({ error: message }, { status: 500 })
   }

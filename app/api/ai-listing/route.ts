@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import * as Sentry from "@sentry/nextjs"
 import {
   CATEGORY_OPTIONS,
   CATEGORY_TITLES,
@@ -1146,6 +1147,9 @@ Rules:
 
     throw new Error(providerErrors.join(" | "))
   } catch (error) {
+    if (usedVisionProvider) {
+      Sentry.captureException(error)
+    }
     console.warn("CaterBot failed:", error)
     if (usedVisionProvider) {
       const message = error instanceof Error ? error.message : "Unknown CaterBot analysis error"
