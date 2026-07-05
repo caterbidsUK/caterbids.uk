@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { use, useEffect, useMemo, useState } from "react"
-import { ArrowLeft, Bell, ExternalLink, Loader2, Plus, Tag } from "lucide-react"
+import { ArrowLeft, Bell, Loader2, Plus, Tag } from "lucide-react"
 
 import { createClient } from "@/lib/supabase/client"
 import { CATERING_CATEGORIES, categoryBySlug, type CaterBidsCategory } from "@/lib/categories"
@@ -12,16 +12,6 @@ import type { Database } from "@/types/supabase"
 type Listing = Database["public"]["Tables"]["listings"]["Row"]
 type CategoryPageProps = {
   params: Promise<{ slug: string }>
-}
-type SupplierResult = {
-  id: string
-  title: string
-  snippet: string
-  link: string
-  domain: string
-  image?: string | null
-  imageType?: "product" | "supplier-logo" | "fallback"
-  badge?: string
 }
 
 const LOCAL_LISTINGS_KEY = "caterbids_listings"
@@ -103,13 +93,7 @@ export default function CategoryPage({ params }: CategoryPageProps) {
   const { slug } = use(params)
   const category = categoryBySlug(slug)
   const [listings, setListings] = useState<Listing[]>([])
-  const [supplierResults, setSupplierResults] = useState<SupplierResult[]>([])
   const [loadingListings, setLoadingListings] = useState(true)
-  const [loadingSuppliers, setLoadingSuppliers] = useState(true)
-
-  const categoryQuery = useMemo(() => {
-    return category?.searchQuery || "commercial catering equipment"
-  }, [category])
   const browseLinks = useMemo(() => {
     if (!category) return []
 
@@ -165,27 +149,6 @@ export default function CategoryPage({ params }: CategoryPageProps) {
 
     loadListings()
   }, [category])
-
-  useEffect(() => {
-    if (!category) return
-
-    async function loadSuppliers() {
-      setLoadingSuppliers(true)
-      try {
-        const params = new URLSearchParams({ q: categoryQuery })
-        const response = await fetch(`/api/supplier-search?${params.toString()}`)
-        const data = await response.json()
-        setSupplierResults(Array.isArray(data.items) ? data.items.slice(0, 6) : [])
-      } catch (error) {
-        console.warn("Category supplier results unavailable:", error)
-        setSupplierResults([])
-      } finally {
-        setLoadingSuppliers(false)
-      }
-    }
-
-    loadSuppliers()
-  }, [category, categoryQuery])
 
   if (!category) {
     return (
@@ -331,48 +294,6 @@ export default function CategoryPage({ params }: CategoryPageProps) {
           )}
         </section>
 
-        <section className="mt-10" id="supplier-results">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-xl font-black">Trusted Used Supplier Results</h2>
-            <span className="text-sm text-white/55">{supplierResults.length} shown</span>
-          </div>
-          {loadingSuppliers ? (
-            <div className="premium-card rounded-3xl p-6 text-white/60">Loading supplier results...</div>
-          ) : (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {supplierResults.map((item) => (
-                <a key={item.id} href={item.link} target="_blank" rel="noopener noreferrer" className="premium-card overflow-hidden rounded-3xl">
-                  <div className={item.imageType === "supplier-logo" ? "flex h-48 items-center justify-center bg-white p-8" : "h-48 bg-[#001B35]"}>
-                    {item.image ? (
-                      <img
-                        src={item.image}
-                        alt={item.title}
-                        className={item.imageType === "supplier-logo" ? "max-h-full max-w-full object-contain" : "h-full w-full object-cover"}
-                      />
-                    ) : (
-                      <Tag className="mx-auto h-full w-10 text-white/30" />
-                    )}
-                  </div>
-                  <div className="p-4">
-                    <div className="mb-2 flex flex-wrap gap-2">
-                      <span className="rounded-full border border-[#FF6B00]/30 bg-[#FF6B00]/10 px-2 py-1 text-[11px] font-black uppercase text-orange-100">
-                        {item.badge || "Used supplier"}
-                      </span>
-                      <span className="rounded-full border border-white/10 bg-white/[0.08] px-2 py-1 text-[11px] font-bold text-white/65">
-                        {item.domain}
-                      </span>
-                    </div>
-                    <h3 className="line-clamp-2 font-black">{item.title}</h3>
-                    <p className="mt-2 line-clamp-3 text-sm text-white/60">{item.snippet}</p>
-                    <span className="mt-4 inline-flex items-center gap-1 text-sm font-black text-[#FF6B00]">
-                      View supplier page <ExternalLink className="h-3.5 w-3.5" />
-                    </span>
-                  </div>
-                </a>
-              ))}
-            </div>
-          )}
-        </section>
       </div>
     </main>
   )
