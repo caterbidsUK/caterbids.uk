@@ -623,6 +623,14 @@ export async function POST(req: NextRequest) {
     if (!specs.gross_weight_kg && specs.net_weight_kg) warnings.push("Gross weight not found from trusted source.")
     if (!source) warnings.push("CaterBot could not verify an exact manual/spec source. Please add a link manually.")
 
+    const matchType: "exact" | "approximate" | "no_match" = !source
+      ? "no_match"
+      : source.confidence === "high" &&
+        source.matchedFields.includes("brand") &&
+        source.matchedFields.includes("exact_model")
+      ? "exact"
+      : "approximate"
+
     const saveResult = await saveLookupResult({
       supabase,
       listingId: clean(body.listingId || body.listing_id),
@@ -660,6 +668,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      matchType,
       image_analysis: {
         main_image: mainImageAnalysis,
         spec_plate: specPlateAnalysis,

@@ -265,6 +265,7 @@ function SettingsClient({ initialProfile }: { initialProfile: Profile | null }) 
   const [vatNumber, setVatNumber] = useState('')
   const [verificationConsent, setVerificationConsent] = useState(false)
   const [trustActionPending, setTrustActionPending] = useState(false)
+  const [businessVerifyResult, setBusinessVerifyResult] = useState<{ ok: boolean; text: string } | null>(null)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState("")
   const [showDeleteModal, setShowDeleteModal] = useState(false)
@@ -516,11 +517,12 @@ function SettingsClient({ initialProfile }: { initialProfile: Profile | null }) 
 
   async function verifyBusiness() {
     if (!companiesHouseNumber || !verificationConsent) {
-      setMessage('Add your Companies House number and accept verification consent.')
+      setBusinessVerifyResult({ ok: false, text: 'Enter your Companies House number and tick the consent box.' })
       return
     }
 
     setTrustActionPending(true)
+    setBusinessVerifyResult(null)
     try {
       const response = await fetch('/api/trust/business', {
         method: 'POST',
@@ -539,15 +541,14 @@ function SettingsClient({ initialProfile }: { initialProfile: Profile | null }) 
         business_verified: Boolean(result.businessVerified),
         seller_verification_level: result.businessVerified ? 'business_verified' : 'business_pending',
       })
-      setMessage(
-        result.businessVerified
-          ? 'Business verified.'
-          : result.needsStripeConnect
-            ? 'Companies House matched. Connect Stripe payouts to complete business verification.'
-            : 'Companies House matched. Verification is pending.'
-      )
+      const successText = result.businessVerified
+        ? `Verified: ${result.businessName}`
+        : result.needsStripeConnect
+          ? `${result.businessName} matched. Connect Stripe payouts to complete business verification.`
+          : `${result.businessName} matched. Verification is pending.`
+      setBusinessVerifyResult({ ok: true, text: successText })
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Could not verify business.')
+      setBusinessVerifyResult({ ok: false, text: error instanceof Error ? error.message : 'Could not verify business.' })
     } finally {
       setTrustActionPending(false)
     }
@@ -894,8 +895,17 @@ function SettingsClient({ initialProfile }: { initialProfile: Profile | null }) 
                   disabled={trustActionPending || Boolean(profile.business_verified)}
                   className="premium-button mt-4 w-full rounded-2xl px-4 py-4 text-sm font-black text-white disabled:opacity-50"
                 >
-                  Check business
+                  {trustActionPending ? 'Checking…' : profile.business_verified ? 'Business verified ✓' : 'Check business'}
                 </button>
+                {businessVerifyResult && (
+                  <p className={`mt-3 rounded-2xl px-4 py-3 text-sm font-bold ${
+                    businessVerifyResult.ok
+                      ? 'border border-green-500/30 bg-green-500/10 text-green-200'
+                      : 'border border-red-500/30 bg-red-500/10 text-red-200'
+                  }`}>
+                    {businessVerifyResult.text}
+                  </p>
+                )}
               </div>
             </div>
           </section>

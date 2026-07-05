@@ -44,7 +44,13 @@ export async function POST(req: NextRequest) {
 
     const company = await response.json().catch(() => ({}))
     if (!response.ok) {
-      return NextResponse.json({ error: "Companies House could not verify this company." }, { status: 400 })
+      if (response.status === 401 || response.status === 403) {
+        return NextResponse.json({ error: "Companies House API key is invalid or unauthorised." }, { status: 400 })
+      }
+      if (response.status === 404) {
+        return NextResponse.json({ error: "Company number not found on Companies House." }, { status: 400 })
+      }
+      return NextResponse.json({ error: `Companies House returned ${response.status}.` }, { status: 400 })
     }
 
     const companyActive = company?.company_status === "active"
