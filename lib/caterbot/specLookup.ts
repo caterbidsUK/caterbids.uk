@@ -711,6 +711,17 @@ export function dimensionsFromText(value: string | null | undefined) {
   )
   if (hwd?.height_cm && hwd.width_cm && hwd.depth_cm) return hwd
 
+  // Bare triplet with a required trailing unit: "25.2 x 50 x 50.2 cm" or "252 x 500 x 502 mm".
+  // The trailing unit (not per-number) is the norm for extracted spec strings like those produced
+  // by dimensionsFromLabeledFields in sourceValidation — the catch-all below would reject these
+  // because only the last number has an attached unit.
+  const trailingUnit = dimensionTripletFromMatch(
+    text.match(/\b(\d+(?:[,.]\d+)?)\s*[x×]\s*(\d+(?:[,.]\d+)?)\s*[x×]\s*(\d+(?:[,.]\d+)?)\s*(mm|cm)\b/i),
+    ["width_cm", "depth_cm", "height_cm"],
+    text
+  )
+  if (trailingUnit?.height_cm && trailingUnit.width_cm && trailingUnit.depth_cm) return trailingUnit
+
   // Catch-all: only accept numbers that carry their OWN attached unit (mm/cm) OR
   // their OWN axis label (W/D/H). Bare numbers from model/serial strings
   // (e.g. XV893 → 89.3) are rejected even when real "mm" values exist elsewhere

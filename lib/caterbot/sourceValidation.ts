@@ -537,7 +537,7 @@ function sanitiseWeight(weightStr: string): string {
   return weightStr
 }
 
-function extractedSpecsFrom(
+export function extractedSpecsFrom(
   text: string,
   modelHint?: string
 ): CaterBotSourceValidationResult["extractedSpecs"] {
@@ -563,12 +563,15 @@ function extractedSpecsFrom(
       /\b(\d{2,4}\s?(?:mm|cm)?\s?[x×]\s?\d{2,4}\s?(?:mm|cm)?\s?[x×]\s?\d{2,4}\s?(?:mm|cm)?)\b/i,
       /\b(\d{2,4}\s*\(\s*[hwd]\s*\)\s?[x×]\s?\d{2,4}\s*\(\s*[hwd]\s*\)\s?[x×]\s?\d{2,4}\s*\(\s*[hwd]\s*\)\s?(?:mm|cm)?)\b/i,
     ])
-  const rawWeight =
-    formatMeasurement(productWeight, "kg") ||
-    firstMatch(text, [
-      /\b(?:weight|net weight|product weight|empty weight)[^\d]{0,40}(\d{1,4}(?:\.\d+)?\s?kg)\b/i,
-      /\b(\d{1,4}(?:\.\d+)?\s?kg)\s*(?:empty\s*)?(?:weight|net)\b/i,
-    ])
+  // Prefer an explicit "X kg" phrase from the page body over a table field that carries
+  // no unit of its own. A label like "Weight: 24 kg" is unambiguous; a table row like
+  // "Weight 25.2" relies on a fallback kg which is less reliable (and on this class of
+  // page the table weight often duplicates another field due to misaligned table columns).
+  const labelled_weight_text = firstMatch(text, [
+    /\b(?:weight|net weight|product weight|empty weight)[^\d]{0,40}(\d{1,4}(?:\.\d+)?\s?kg)\b/i,
+    /\b(\d{1,4}(?:\.\d+)?\s?kg)\s*(?:empty\s*)?(?:weight|net)\b/i,
+  ])
+  const rawWeight = labelled_weight_text || formatMeasurement(productWeight, "kg")
   const rawGrossWeight =
     formatMeasurement(shipWeight, "kg") ||
     firstMatch(text, [
@@ -829,6 +832,7 @@ function decodeHtml(value: string) {
     .replace(/&#039;/g, "'")
     .replace(/&#39;/g, "'")
     .replace(/&nbsp;/g, " ")
+    .replace(/&times;/g, "×")
 }
 
 function plainTextFromHtml(value: string) {
@@ -1119,7 +1123,7 @@ export async function validateCaterBotProductSource({
     if (!contentType.includes("pdf")) {
       const raw = await response.text()
       pageTitle = raw.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.replace(/\s+/g, " ").trim() || ""
-      bodyText = raw
+      bodyText = decodeHtml(raw)
         .replace(/<script[\s\S]*?<\/script>/gi, " ")
         .replace(/<style[\s\S]*?<\/style>/gi, " ")
         .replace(/<[^>]+>/g, " ")
