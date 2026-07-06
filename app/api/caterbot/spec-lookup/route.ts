@@ -10,6 +10,7 @@ import {
   getConfiguredCaterBotSearchProviderName,
   isCaterBotWebSearchConfigured,
 } from "@/lib/caterbot/webSearch"
+import { askGeminiForMissingSpecs } from "@/lib/caterbot/geminiEstimate"
 
 export const runtime = "nodejs"
 
@@ -620,6 +621,38 @@ export async function POST(req: NextRequest) {
     const source = lookup.selected
     const specs = specsFromValidatedSource(source, extraction, dimensionHint || lookup.snippetDimensions || null, lookup.snippetWeightText || null)
 
+    const needsDimensions = !specs.height_cm || !specs.width_cm || !specs.depth_cm
+    const needsWeight = !specs.gross_weight_kg && !specs.net_weight_kg && !specs.weight_kg
+
+    type GeminiEstimates = { weight_kg?: number; height_cm?: number; width_cm?: number; depth_cm?: number }
+    let geminiEstimates: GeminiEstimates | null = null
+
+    if (brand && model && (needsDimensions || needsWeight)) {
+      try {
+        const estimate = await askGeminiForMissingSpecs({
+          brand,
+          model,
+          equipmentType,
+          needsDimensions,
+          needsWeight,
+        })
+        if (estimate) {
+          const pending: GeminiEstimates = {}
+          if (needsDimensions) {
+            if (estimate.height_cm != null) pending.height_cm = estimate.height_cm
+            if (estimate.width_cm != null) pending.width_cm = estimate.width_cm
+            if (estimate.depth_cm != null) pending.depth_cm = estimate.depth_cm
+          }
+          if (needsWeight && estimate.weight_kg != null) {
+            pending.weight_kg = estimate.weight_kg
+          }
+          if (Object.keys(pending).length) geminiEstimates = pending
+        }
+      } catch {
+        // Gemini fallback is best-effort — silent on failure
+      }
+    }
+
     if (!specs.gross_weight_kg && specs.net_weight_kg) warnings.push("Gross weight not found from trusted source.")
     if (!source) warnings.push("CaterBot could not verify an exact manual/spec source. Please add a link manually.")
 
@@ -702,6 +735,7 @@ export async function POST(req: NextRequest) {
         : null,
       confidence_score: source?.confidenceScore || Math.round(extraction.confidence * 100),
       checkedAt,
+      ...(geminiEstimates ? { geminiEstimates } : {}),
       searchProvider: lookup.provider || getConfiguredCaterBotSearchProviderName(),
       debug:
         process.env.NODE_ENV === "development"
