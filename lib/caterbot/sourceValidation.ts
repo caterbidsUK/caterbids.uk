@@ -42,9 +42,34 @@ export type CaterBotSourceValidationResult = {
     gasType?: string
     capacity?: string
   }
+  // Body text snippet used for Gemini fallback when regex extraction is incomplete.
+  // Only set on valid results where dimensions OR weight were not extracted by regex.
+  _bodyText?: string
 }
 
 const NEEDS_SELLER_CHECK = "Needs seller check"
+
+// Returns the most spec-relevant portion of bodyText (up to maxChars) for Gemini fallback.
+// Starts from the first all-caps SPECIFICATIONS heading (skips table-of-contents entries),
+// or falls back to "Net Weight" or dimension-label keywords.
+function extractRelevantSourceSnippet(text: string, maxChars: number): string {
+  const anchors: RegExp[] = [
+    /\bSPECIFICATIONS?\b/,           // all-caps heading — title-case TOC entries won't match
+    /\bNet Weight\b/i,
+    /\bGross Weight\b/i,
+    /\b(?:Width|Height|Depth)\s*[:=]/i,
+  ]
+  for (const anchor of anchors) {
+    const idx = text.search(anchor)
+    if (idx >= 0) {
+      const start = Math.max(0, idx - 200)
+      return text.slice(start, start + maxChars)
+    }
+  }
+  const fallbackIdx = text.toLowerCase().indexOf("specification")
+  const start = fallbackIdx >= 0 ? Math.max(0, fallbackIdx - 200) : 0
+  return text.slice(start, start + maxChars)
+}
 
 const TRUSTED_SOURCE_HINTS = [
   "lincat",
@@ -1397,6 +1422,12 @@ export async function validateCaterBotProductSource({
           : "CaterBot matched the same brand and a close model family. Please check the source carefully.",
       usefulDetails,
       extractedSpecs: specsWithSellerCheckFallback(extractedSpecs),
+      // Populated only when regex extraction missed dims or weight — route.ts uses this
+      // to call Gemini as a fallback reader on the verified source text.
+      _bodyText:
+        !extractedSpecs.dimensions || !extractedSpecs.weight
+          ? extractRelevantSourceSnippet(bodyText, 10000)
+          : undefined,
     }
   } catch {
     console.info("CaterBot rejected source", {

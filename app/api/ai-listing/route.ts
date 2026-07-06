@@ -79,6 +79,7 @@ type QuickListAiSuggestion = {
     source_valid: boolean
     source_url: string
     source_found_dimensions: string
+    source_gemini_dimensions: string
     final_dimensions: string
   }
 }
@@ -123,6 +124,80 @@ const fallbackSuggestion: QuickListAiSuggestion = {
 function safeText(value: unknown) {
   if (typeof value === "number" && Number.isFinite(value)) return String(value)
   return typeof value === "string" ? value.trim() : ""
+}
+
+// Treats "Needs seller check" as absent — prevents it from masking a valid AI image
+// estimate already stored in suggestion.dimensions / suggestion.weight.
+function specVal(s: string | undefined): string {
+  return s && !/^needs seller/i.test(s) ? s : ""
+}
+
+// Sanity-check a dim string returned by Gemini: three values, each 5–350 cm, aspect ratio ≤ 6.
+function isGeminiDimsSane(dims: string): boolean {
+  const m = dims.match(/(\d+(?:\.\d+)?)\s*(?:x|×)\s*(\d+(?:\.\d+)?)\s*(?:x|×)\s*(\d+(?:\.\d+)?)\s*(?:cm|mm)?/i)
+  if (!m) return false
+  const unit = dims.toLowerCase().includes("mm") ? "mm" : "cm"
+  const factor = unit === "mm" ? 0.1 : 1
+  const vals = [Number(m[1]), Number(m[2]), Number(m[3])].map((v) => v * factor)
+  if (vals.some((v) => !Number.isFinite(v) || v < 5 || v > 350)) return false
+  return Math.max(...vals) / Math.min(...vals) <= 6
+}
+
+// Calls Gemini (text-only) to extract dims/weight from a validated source document when
+// regex extraction came up empty. The body text is already a relevant 10 000-char snippet
+// (selected by extractRelevantSourceSnippet in sourceValidation.ts).
+async function geminiExtractFromSourceText(
+  bodyText: string,
+  brand: string,
+  model: string
+): Promise<{ dimensions: string; weight: string; grossWeight: string }> {
+  const empty = { dimensions: "", weight: "", grossWeight: "" }
+  const apiKey = process.env.AI_VISION_API_KEY
+  if (!apiKey?.startsWith("AIza")) return empty
+
+  const prompt = `Extract the external dimensions and net weight for "${brand} ${model}" from this text.
+Return ONLY valid JSON with these fields:
+- "dimensions": external WxDxH in cm, like "42.2 x 46.2 x 22.7 cm". Convert fractional inches (e.g. 16 5/8" = 42.2 cm, multiply by 2.54) or mm ÷ 10 to get cm. null if not found or ambiguous.
+- "weight_net_kg": net/empty weight as a number in kg. Convert lbs × 0.4536. For ${model} specifically; if not listed separately use the closest listed variant. null if not found.
+- "weight_gross_kg": shipping/packed/gross weight as a number in kg. Convert lbs if needed. null if not found.
+
+${bodyText}`
+
+  const fallbackModels = ["gemini-2.5-flash", "gemini-2.5-flash-lite"]
+  for (const geminiModel of fallbackModels) {
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-goog-api-key": apiKey },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
+            generationConfig: { response_mime_type: "application/json", temperature: 0.1 },
+          }),
+          signal: AbortSignal.timeout(12000),
+        }
+      )
+      if (!response.ok) continue
+      const data = await response.json()
+      const content = safeText(data?.candidates?.[0]?.content?.parts?.[0]?.text)
+      if (!content) continue
+
+      const parsed = JSON.parse(content)
+      const dims = typeof parsed.dimensions === "string" ? parsed.dimensions.trim() : ""
+      const netKg = typeof parsed.weight_net_kg === "number" ? parsed.weight_net_kg : null
+      const grossKg = typeof parsed.weight_gross_kg === "number" ? parsed.weight_gross_kg : null
+
+      return {
+        dimensions: dims && isGeminiDimsSane(dims) ? dims : "",
+        weight: netKg != null && netKg >= 0.5 && netKg <= 3000 ? `${formatMeasurementNumber(netKg)} kg` : "",
+        grossWeight: grossKg != null && grossKg >= 0.5 && grossKg <= 3000 ? `${formatMeasurementNumber(grossKg)} kg` : "",
+      }
+    } catch {
+      continue
+    }
+  }
+  return empty
 }
 
 function normaliseImageMimeType(value: string | undefined) {
@@ -701,16 +776,34 @@ async function withValidatedSource(suggestion: QuickListAiSuggestion) {
     } satisfies QuickListAiSuggestion
   }
 
-  // FIX 1: verified source beats the vision-AI's data-plate guess for physical specs
-  // the plate doesn't show (dimensions, weight). Plate remains authority for brand/model/serial.
-  const mergedDimensions = source.extractedSpecs.dimensions || suggestion.dimensions || ""
-  const mergedWeight = source.extractedSpecs.grossWeight || source.extractedSpecs.weight || suggestion.weight || ""
+  // Gemini fallback: when the source is valid but regex found no dims or weight,
+  // ask Gemini to read the source body text directly (source has already been verified
+  // as the right product — Gemini is just a better reader than regex for that format).
+  const sourceGemini =
+    source._bodyText
+      ? await geminiExtractFromSourceText(
+          source._bodyText,
+          suggestion.brand,
+          suggestion.model || suggestion.gc_number
+        )
+      : null
+
+  // specVal() filters "Needs seller check" so it can't mask a valid AI image estimate
+  // already stored in suggestion.dimensions / suggestion.weight (Fix: was || which treats
+  // "Needs seller check" as truthy, hiding Gemini's image-derived value).
+  const sourceDims = specVal(source.extractedSpecs.dimensions) || sourceGemini?.dimensions || ""
+  const sourceNet = specVal(source.extractedSpecs.weight) || sourceGemini?.weight || ""
+  const sourceGross = specVal(source.extractedSpecs.grossWeight) || sourceGemini?.grossWeight || ""
+
+  // Priority: source-derived (regex or Gemini reading the doc) > AI image estimate
+  const mergedDimensions = sourceDims || suggestion.dimensions || ""
+  // Net weight preferred for listing display; gross as fallback (AI image estimates last)
+  const mergedWeight = sourceNet || sourceGross || suggestion.weight || ""
+
   const parsedDimensions = parseDeliveryDimensionsToCm(mergedDimensions)
   const estimatedWeightKg =
     extractWeightKg(suggestion.estimated_weight_kg, { allowBareNumber: true }) || extractWeightKg(mergedWeight)
 
-  // WRITE HOOK: gated until dimension extraction is verified accurate.
-  // Re-enable once dimension extraction is verified accurate.
   if (KB_WRITES_ENABLED) void writeToEquipmentKnowledgeBase(suggestion, source)
 
   return {
@@ -731,17 +824,18 @@ async function withValidatedSource(suggestion: QuickListAiSuggestion) {
     pallet_length_cm: parsedDimensions?.lengthCm || normaliseCmField(suggestion.pallet_length_cm, { allowBareNumber: true }) || "",
     pallet_width_cm: parsedDimensions?.widthCm || normaliseCmField(suggestion.pallet_width_cm, { allowBareNumber: true }) || "",
     pallet_height_cm: parsedDimensions?.heightCm || normaliseCmField(suggestion.pallet_height_cm, { allowBareNumber: true }) || "",
-    voltage: source.extractedSpecs.voltage || suggestion.voltage || "",
-    amps: source.extractedSpecs.amps || suggestion.amps || "",
-    kw_rating: source.extractedSpecs.kwRating || suggestion.kw_rating || "",
-    electrical_phase: source.extractedSpecs.phase || suggestion.electrical_phase || "",
-    gas_type: source.extractedSpecs.gasType || suggestion.gas_type || "",
+    voltage: specVal(source.extractedSpecs.voltage) || suggestion.voltage || "",
+    amps: specVal(source.extractedSpecs.amps) || suggestion.amps || "",
+    kw_rating: specVal(source.extractedSpecs.kwRating) || suggestion.kw_rating || "",
+    electrical_phase: specVal(source.extractedSpecs.phase) || suggestion.electrical_phase || "",
+    gas_type: specVal(source.extractedSpecs.gasType) || suggestion.gas_type || "",
     source_rejected_by_seller: false,
     _diag: {
       ai_dimensions: suggestion.dimensions ?? "",
       source_valid: source.valid,
       source_url: source.url,
-      source_found_dimensions: source.extractedSpecs.dimensions ?? "",
+      source_found_dimensions: specVal(source.extractedSpecs.dimensions),
+      source_gemini_dimensions: sourceGemini?.dimensions ?? "",
       final_dimensions: mergedDimensions,
     },
   } satisfies QuickListAiSuggestion
