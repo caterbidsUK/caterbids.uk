@@ -8,8 +8,9 @@
  */
 
 const TARGET_URL =
+  process.env.TARGET_URL ||
   "https://www.mutbex.com/dito-sama-trs-vegetable-dicing-machine-single-speed-500-kg-hourly-capacity-220-240v1n-340-440v3n"
-const MODEL_HINT = "TRS"
+const MODEL_HINT = process.env.MODEL_HINT || "TRS"
 
 // ─── Helpers inlined from sourceValidation.ts ─────────────────────────────
 
