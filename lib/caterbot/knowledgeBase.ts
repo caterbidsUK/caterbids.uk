@@ -70,14 +70,19 @@ export type KBSuggestionInput = {
 // the key matches what the scoring engine uses for model matching.
 
 function normaliseBrandForKey(brand: string): string {
-  const cleaned = brand
-    .replace(/\b(commercial\s+)?catering\s+equipment\b/gi, " ")
-    .replace(/\b(commercial\s+)?kitchen\s+equipment\b/gi, " ")
-    .replace(/\bequipment\b/gi, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-  const base = cleaned.length >= 3 ? cleaned : brand.trim()
-  return base.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "")
+  return (
+    brand
+      .toLowerCase()
+      // Strip generic catering-industry descriptor words (e.g. "Polar Catering Equipment" → "polar")
+      .replace(/\b(commercial|catering|kitchen|equipment|appliances?)\b/g, " ")
+      // Strip legal entity suffixes — longer forms first to avoid partial stripping
+      .replace(
+        /\b(incorporated|limited|corporation|gmbh|s\.r\.l\.?|b\.v\.?|a\.g\.?|srl|bv|corp|inc\.|ltd\.|llc|inc|ltd|co|ag|the)\b\.?/g,
+        " "
+      )
+      // Collapse to pure alphanumeric — no spaces, dashes, dots, commas, underscores
+      .replace(/[^a-z0-9]+/g, "")
+  )
 }
 
 function compactModelForKey(model: string): string {
