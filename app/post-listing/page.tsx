@@ -212,6 +212,12 @@ type CaterBotSpecLookupResponse = {
   search_queries?: string[]
   confidence_score?: number
   warnings?: string[]
+  geminiEstimates?: {
+    weight_kg?: number
+    height_cm?: number
+    width_cm?: number
+    depth_cm?: number
+  } | null
   debug?: {
     raw_text?: string
     model_candidates?: string[]
@@ -812,6 +818,12 @@ function PostListingPage() {
   const [shippingSpecNotes, setShippingSpecNotes] = useState("")
   const [quickListResult, setQuickListResult] = useState<QuickListAiResponse | null>(null)
   const [pendingSpecLookup, setPendingSpecLookup] = useState<CaterBotSpecLookupResponse | null>(null)
+  const [pendingGeminiEstimates, setPendingGeminiEstimates] = useState<{
+    weight_kg?: number
+    height_cm?: number
+    width_cm?: number
+    depth_cm?: number
+  } | null>(null)
   const [quickListApplied, setQuickListApplied] = useState(false)
   const [publishError, setPublishError] = useState("")
   const [overageRequired, setOverageRequired] = useState(false)
@@ -1040,10 +1052,13 @@ function PostListingPage() {
   }
 
   function resetScanState() {
-    // Clears only state that a previous scan could have written.
-    // Seller-typed fields (title, deliveryNotes, shippingSpec*) are intentionally excluded;
-    // their stale-scan fallbacks are removed in applySuggestionToShippingSpecs instead.
+    // Clears all state written by a previous scan so a new scan starts clean.
+    // Seller-typed fields (title, deliveryNotes, physical measurements) are intentionally excluded.
+    // Brand and model ARE cleared here: they come from OCR, not seller input, and stale values
+    // from a prior scan would contaminate source-matching for the new item.
     setQuickListResult(null)
+    setShippingSpecBrand("")
+    setShippingSpecModel("")
     setPendingSpecLookup(null)
     setQuickListApplied(false)
     setDimensions("")
@@ -1782,7 +1797,7 @@ function PostListingPage() {
   ) {
     const sourceDimensions = source.extractedSpecs?.dimensions || ""
     const sourcePackedDimensions = source.extractedSpecs?.packedDimensions || ""
-    const sourceWeight = source.extractedSpecs?.grossWeight || source.extractedSpecs?.weight || ""
+    const sourceWeight = source.extractedSpecs?.weight || source.extractedSpecs?.grossWeight || ""
     const parsedDimensions = !/needs seller check/i.test(sourceDimensions) ? parseDimensionsToCm(sourceDimensions) : null
     const parsedPackedDimensions = !/needs seller check/i.test(sourcePackedDimensions)
       ? parseDimensionsToCm(sourcePackedDimensions)
@@ -2075,6 +2090,23 @@ function PostListingPage() {
       setSpecConfidence(source.confidence || "medium")
       setSpecsVerifiedBySeller(false)
       setSourceRejectedBySeller(false)
+    }
+
+    // Store Gemini estimates only for fields not already filled by a verified web source
+    const ge = result.geminiEstimates
+    if (ge) {
+      const webHasDims = Boolean(specs?.width_cm && specs.depth_cm && specs.height_cm)
+      const webHasWeight = Boolean(specs?.gross_weight_kg || specs?.net_weight_kg || specs?.weight_kg)
+      const pending: NonNullable<typeof ge> = {}
+      if (!webHasDims) {
+        if (ge.height_cm != null) pending.height_cm = ge.height_cm
+        if (ge.width_cm != null) pending.width_cm = ge.width_cm
+        if (ge.depth_cm != null) pending.depth_cm = ge.depth_cm
+      }
+      if (!webHasWeight && ge.weight_kg != null) pending.weight_kg = ge.weight_kg
+      setPendingGeminiEstimates(Object.keys(pending).length ? pending : null)
+    } else {
+      setPendingGeminiEstimates(null)
     }
 
     if (!options.keepPanel) setPendingSpecLookup(null)
@@ -2861,9 +2893,16 @@ function PostListingPage() {
                 <h3 className="mt-1 text-lg font-black">
                   {pendingSpecLookup.matchType === "exact"
                     ? "Exact match found — confirm before applying."
+                    : pendingSpecLookup.matchType === "approximate"
+                    ? "Possible match found — review before applying."
                     : "No exact match found — enter details manually."}
                 </h3>
-                {pendingSpecLookup.matchType !== "exact" && (
+                {pendingSpecLookup.matchType === "approximate" && (
+                  <p className="mt-1 text-xs font-bold text-amber-700">
+                    CaterBot found a related product source but could not confirm the exact model number. Check the specs against your item&apos;s plate before applying.
+                  </p>
+                )}
+                {pendingSpecLookup.matchType === "no_match" && (
                   <p className="mt-1 text-xs font-bold text-amber-700">
                     CaterBot could not confirm an exact product record for this brand and model. Do not apply specs — please check the model number and enter details from the spec plate.
                   </p>
@@ -2875,6 +2914,14 @@ function PostListingPage() {
                     ✓ Exact Match
                   </span>
                   <p className="text-right text-[10px] font-semibold text-emerald-700">From a verified product source.</p>
+                </div>
+              )}
+              {pendingSpecLookup.matchType === "approximate" && (
+                <div className="flex flex-col items-end gap-1">
+                  <span className="w-fit rounded-full bg-amber-100 px-3 py-1 text-xs font-black text-amber-800">
+                    ~ Possible Match
+                  </span>
+                  <p className="text-right text-[10px] font-semibold text-amber-700">Verify before publishing.</p>
                 </div>
               )}
             </div>
@@ -2899,7 +2946,7 @@ function PostListingPage() {
             </div>
 
             <div className="mt-4 grid gap-2 sm:grid-cols-4">
-              {pendingSpecLookup.matchType === "exact" ? (
+              {pendingSpecLookup.matchType === "exact" || pendingSpecLookup.matchType === "approximate" ? (
                 <>
                   <button
                     type="button"
@@ -2918,7 +2965,7 @@ function PostListingPage() {
                 </>
               ) : (
                 <div className="col-span-2 flex items-center rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-800">
-                  Specs cannot be applied — no exact match. Enter details manually.
+                  Specs cannot be applied — no source found. Enter details manually.
                 </div>
               )}
               <button
@@ -3172,6 +3219,45 @@ function PostListingPage() {
                 />
               </label>
             </div>
+
+            {pendingGeminiEstimates && (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm">
+                <p className="font-black text-amber-900">AI estimate — please confirm before publishing</p>
+                <p className="mt-1 font-semibold text-amber-800">
+                  {[
+                    pendingGeminiEstimates.width_cm && pendingGeminiEstimates.depth_cm && pendingGeminiEstimates.height_cm
+                      ? `Dimensions: ${pendingGeminiEstimates.width_cm}W × ${pendingGeminiEstimates.depth_cm}D × ${pendingGeminiEstimates.height_cm}H cm`
+                      : null,
+                    pendingGeminiEstimates.weight_kg != null
+                      ? `Weight: ${pendingGeminiEstimates.weight_kg} kg`
+                      : null,
+                  ].filter(Boolean).join(" · ")}{" "}
+                  — estimated from CaterBot&apos;s training data, not a verified source. Only confirm if it looks right for your item.
+                </p>
+                <div className="mt-3 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (pendingGeminiEstimates.height_cm != null) setShippingSpecHeight(String(pendingGeminiEstimates.height_cm))
+                      if (pendingGeminiEstimates.width_cm != null) setShippingSpecWidth(String(pendingGeminiEstimates.width_cm))
+                      if (pendingGeminiEstimates.depth_cm != null) setShippingSpecDepth(String(pendingGeminiEstimates.depth_cm))
+                      if (pendingGeminiEstimates.weight_kg != null) setShippingSpecWeight(String(pendingGeminiEstimates.weight_kg))
+                      setPendingGeminiEstimates(null)
+                    }}
+                    className="rounded-xl bg-amber-700 px-4 py-2 text-xs font-black text-white"
+                  >
+                    Confirm estimate
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPendingGeminiEstimates(null)}
+                    className="rounded-xl border border-amber-300 bg-white px-4 py-2 text-xs font-black text-amber-800"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {[
@@ -4184,10 +4270,10 @@ function PostListingPage() {
         <input type="hidden" name="spec_current_a" value={shippingSpecCurrent} />
         {!showGasFields && <input type="hidden" name="spec_gas_type" value="" />}
         <input type="hidden" name="spec_gas_connection" value={shippingSpecGasConnection} />
-        <input type="hidden" name="spec_height_cm" value={heightCm || shippingSpecHeight} />
-        <input type="hidden" name="spec_width_cm" value={widthCm || shippingSpecWidth} />
-        <input type="hidden" name="spec_depth_cm" value={lengthCm || shippingSpecDepth} />
-        <input type="hidden" name="spec_weight_kg" value={weightKg || shippingSpecWeight} />
+        <input type="hidden" name="spec_height_cm" value={shippingSpecHeight} />
+        <input type="hidden" name="spec_width_cm" value={shippingSpecWidth} />
+        <input type="hidden" name="spec_depth_cm" value={shippingSpecDepth} />
+        <input type="hidden" name="spec_weight_kg" value={shippingSpecWeight} />
         <input type="hidden" name="spec_condition_notes" value={shippingSpecNotes} />
         <input type="hidden" name="spec_forklift_required" value={shippingSpecForkliftRequired ? "on" : ""} />
         <input type="hidden" name="manual_source_name" value={manualSourceHasVerifiedUrl ? manualSourceName : ""} />
