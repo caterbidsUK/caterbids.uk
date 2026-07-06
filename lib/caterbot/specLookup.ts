@@ -711,6 +711,14 @@ export function dimensionsFromText(value: string | null | undefined) {
   )
   if (hwd?.height_cm && hwd.width_cm && hwd.depth_cm) return hwd
 
+  // "710mm W x 740mm D x 1450mm H" — axis label after number+unit (common on UK supplier pages).
+  const wdh_after = dimensionTripletFromMatch(
+    text.match(/\b(\d+(?:[,.]\d+)?)\s*(?:mm|cm)\s*[WwLl]\s*[x×]\s*(\d+(?:[,.]\d+)?)\s*(?:mm|cm)\s*[DdLl]\s*[x×]\s*(\d+(?:[,.]\d+)?)\s*(mm|cm)?\s*[Hh]\b/i),
+    ["width_cm", "depth_cm", "height_cm"],
+    text
+  )
+  if (wdh_after?.height_cm && wdh_after.width_cm && wdh_after.depth_cm) return wdh_after
+
   // Bare triplet with a required trailing unit: "25.2 x 50 x 50.2 cm" or "252 x 500 x 502 mm".
   // The trailing unit (not per-number) is the norm for extracted spec strings like those produced
   // by dimensionsFromLabeledFields in sourceValidation — the catch-all below would reject these
@@ -1258,38 +1266,70 @@ export async function findBestSpecSource({
       if (snippetDimensions && snippetWeightText) break
     }
 
-    const validations: CaterBotSourceValidationResult[] = []
+    // Validate up to 18 candidate URLs in parallel so an uncommon model whose
+    // high-priority domains (catering-appliance, manualslib, nisbets) don't carry
+    // it doesn't blow the 28-second overall timeout via serial fetches.
+    // allSettled — a single fetch error or uncaught throw must not abort the batch.
+    const settled = await Promise.allSettled(
+      candidateUrls
+        .sort((a, b) => sourcePriorityRank(a, brand) - sourcePriorityRank(b, brand))
+        .slice(0, 18)
+        .map((url) => {
+          const result = search.results.find((item) => item.url === url)
+          return validateCaterBotProductSource({
+            url,
+            brand,
+            model,
+            equipmentType,
+            fuelType,
+            candidateTitle: result?.title,
+            candidateSnippet: result?.snippet,
+          })
+        })
+    )
 
-    for (const url of candidateUrls
-      .sort((a, b) => sourcePriorityRank(a, brand) - sourcePriorityRank(b, brand))
-      .slice(0, 18)) {
-      const result = search.results.find((item) => item.url === url)
-      const validation = await validateCaterBotProductSource({
-        url,
-        brand,
-        model,
-        equipmentType,
-        fuelType,
-        candidateTitle: result?.title,
-        candidateSnippet: result?.snippet,
-      })
+    const validSources = settled
+      .filter((s): s is PromiseFulfilledResult<CaterBotSourceValidationResult> => s.status === "fulfilled" && s.value.valid)
+      .map((s) => s.value)
+      .sort((a, b) => b.score - a.score || sourcePriorityRank(a.url, brand) - sourcePriorityRank(b.url, brand))
 
-      if (validation.valid) {
-        validations.push(validation)
-        if (validation.confidence === "high") break
+    const selected = validSources[0] || null
+
+    // When the best source is missing a field, fill it from lower-ranked validated sources.
+    // "Needs seller check" is the placeholder inserted by specsWithSellerCheckFallback — treat it
+    // as missing. We only promote a fallback value when the winning source genuinely has nothing,
+    // so we never displace a real value with a guess.
+    const specMissing = (v: string | undefined) => !v || v === "Needs seller check"
+
+    let resolvedSnippetDimensions = snippetDimensions
+    let resolvedSnippetWeightText = snippetWeightText
+
+    if (selected) {
+      for (const src of validSources.slice(1)) {
+        const needsDims  = specMissing(selected.extractedSpecs.dimensions)     && specMissing(resolvedSnippetDimensions ?? undefined)
+        const needsWeight = specMissing(selected.extractedSpecs.weight)          &&
+                            specMissing(selected.extractedSpecs.grossWeight)     &&
+                            !resolvedSnippetWeightText
+        if (!needsDims && !needsWeight) break
+        if (needsDims && !specMissing(src.extractedSpecs.dimensions)) {
+          resolvedSnippetDimensions = src.extractedSpecs.dimensions ?? null
+        }
+        if (needsWeight) {
+          const w = (!specMissing(src.extractedSpecs.weight)      ? src.extractedSpecs.weight      : undefined) ??
+                    (!specMissing(src.extractedSpecs.grossWeight) ? src.extractedSpecs.grossWeight : undefined)
+          // Prefix "net weight " so labelledKgFromText in specsFromValidatedSource can parse
+          // the bare "NNN kg" strings that extractedSpecsFrom produces.
+          if (w) resolvedSnippetWeightText = `net weight ${w}`
+        }
       }
     }
-
-    const selected =
-      validations.sort((a, b) => b.score - a.score || sourcePriorityRank(a.url, brand) - sourcePriorityRank(b.url, brand))[0] ||
-      null
 
     return {
       searchQueries,
       candidateUrls,
       selected,
-      snippetDimensions,
-      snippetWeightText,
+      snippetDimensions: resolvedSnippetDimensions,
+      snippetWeightText: resolvedSnippetWeightText,
       searchErrors: search.errors as string[],
       provider: search.provider as string | null,
     }

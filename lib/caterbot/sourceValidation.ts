@@ -112,7 +112,15 @@ export function sourcePriorityRank(url: string, brand?: string | null) {
   if (host.endsWith("angliacateringequipment.com")) return 7
   if (host.endsWith("cater2.co.uk")) return 7
   if (isManufacturerHost(host)) return 3
-  if (lowerUrl.includes(".pdf") || lowerUrl.includes("/manual") || lowerUrl.includes("spec")) return 8
+
+  // PDFs: rank by how authoritative the source looks.
+  // Manufacturer-domain PDFs tie with manualslib (rank 2). Labeled manual/spec PDFs
+  // from third parties rank 4 (tied with nisbets — authoritative spec data). Generic PDFs rank 6.
+  if (lowerUrl.includes(".pdf")) {
+    if (manufacturerDomain && host.includes(manufacturerDomain)) return 2
+    if (/\b(?:manual|datasheet|spec|installation|user[\s-]?guide)\b/i.test(lowerUrl)) return 4
+    return 6
+  }
 
   return 8
 }
@@ -175,6 +183,18 @@ function compactModel(value: string | null | undefined) {
   return String(value || "")
     .toLowerCase()
     .replace(/[^a-z0-9]/g, "")
+}
+
+// Returns true if pageText contains a prefix of compactSearchModel that is long enough
+// to be a genuine family match (≥ 75% of model length, minimum 8 chars).
+// Handles variant suffixes: "SH120EBTPS" → page has "SH120EBT" → prefix match ✓
+function hasModelPrefixMatch(pageText: string, compactSearchModel: string): boolean {
+  if (compactSearchModel.length < 9) return false
+  const minLen = Math.max(8, Math.ceil(compactSearchModel.length * 0.75))
+  for (let len = compactSearchModel.length - 1; len >= minLen; len--) {
+    if (pageText.includes(compactSearchModel.slice(0, len))) return true
+  }
+  return false
 }
 
 // Returns the 0-based column index of compactModelHint in the first comparison-table
@@ -454,6 +474,18 @@ function dimensionsFromLabeledFields(
   return `${width.value} x ${depth.value} x ${height.value} ${unit}`
 }
 
+// Handles the common UK manufacturer table format: "W: 710 mm D: 740 mm H: 1450 mm"
+// where each dimension is a short letter label rather than a full word.
+function dimensionsFromWDHLabels(text: string): string {
+  const norm = text.replace(/\s+/g, " ")
+  const m = norm.match(
+    /\bW\s*:\s*(\d{2,4})\s*(mm|cm)\s+D\s*:\s*(\d{2,4})\s*(mm|cm)\s+H\s*:\s*(\d{2,4})\s*(mm|cm)/i
+  )
+  if (!m) return ""
+  const unit = normaliseUnit(m[2]) || normaliseUnit(m[4]) || normaliseUnit(m[6]) || "mm"
+  return `${m[1]} x ${m[3]} x ${m[5]} ${unit}`
+}
+
 function textAfterLabelUntilNext(text: string, label: string, nextLabels: string[]) {
   const normalised = text.replace(/\s+/g, " ")
   const nextPattern = nextLabels.map(labelPattern).join("|")
@@ -501,9 +533,10 @@ function kilowattsFromLabels(text: string) {
 }
 
 // Parse "NNN x NNN x NNN mm/cm" → [w, d, h] in mm, or null if unparseable.
+// Tolerates optional single-letter axis labels after each number+unit (e.g. "710mm W x 740mm D x 1450mm H").
 function parseDimStringToMm(dimStr: string): [number, number, number] | null {
   const m = dimStr.match(
-    /(\d+(?:[,.]\d+)?)\s*(?:mm|cm)?\s*[x×]\s*(\d+(?:[,.]\d+)?)\s*(?:mm|cm)?\s*[x×]\s*(\d+(?:[,.]\d+)?)\s*(mm|cm)?/i
+    /(\d+(?:[,.]\d+)?)\s*(?:mm|cm)?\s*(?:[WwDdHhLl])?\s*[x×]\s*(\d+(?:[,.]\d+)?)\s*(?:mm|cm)?\s*(?:[WwDdHhLl])?\s*[x×]\s*(\d+(?:[,.]\d+)?)\s*(mm|cm)?/i
   )
   if (!m) return null
   const unit = (m[4] || "mm").toLowerCase()
@@ -552,14 +585,17 @@ export function extractedSpecsFrom(
   const shipWidth = numberAfterLabel(text, ["Ship Width", "Shipping Width", "Packed Width"])
   const shipDepth = numberAfterLabel(text, ["Ship Depth", "Shipping Depth", "Packed Depth"])
   const shipHeight = numberAfterLabel(text, ["Ship Height", "Shipping Height", "Packed Height"])
-  const productWeight = numberAfterLabel(text, ["Product Weight", "Net Weight", "Weight"])
+  const productWeight = numberAfterLabel(text, ["Product Weight", "Net Weight", "Item Weight", "Unpacked Weight"])
   const shipWeight = numberAfterLabel(text, ["Ship Weight", "Shipping Weight", "Packed Weight", "Gross Weight"])
 
   const rawDimensions =
     dimensionsFromLabeledFields(productWidth, productDepth, productHeight, "mm") ||
+    dimensionsFromWDHLabels(text) ||
     firstMatch(text, [
       /\b(?:dimensions?|size|w\s?x\s?d\s?x\s?h)[^\d]{0,24}(\d{2,4}\s?(?:mm|cm)?\s?[x×]\s?\d{2,4}\s?(?:mm|cm)?\s?[x×]\s?\d{2,4}\s?(?:mm|cm)?)/i,
       /\b(?:dimensions?|size)[^\d]{0,40}(\d{2,4}\s*\(\s*[hwd]\s*\)\s?[x×]\s?\d{2,4}\s*\(\s*[hwd]\s*\)\s?[x×]\s?\d{2,4}\s*\(\s*[hwd]\s*\)\s?(?:mm|cm)?)/i,
+      // "710mm W x 740mm D x 1450mm H" — axis label after number+unit (common on UK supplier pages)
+      /\b(\d{2,4}\s?(?:mm|cm)\s?[WwDdLl]\s?[x×]\s?\d{2,4}\s?(?:mm|cm)\s?[DdLl]\s?[x×]\s?\d{2,4}\s?(?:mm|cm)?\s?[Hh])\b/i,
       /\b(\d{2,4}\s?(?:mm|cm)?\s?[x×]\s?\d{2,4}\s?(?:mm|cm)?\s?[x×]\s?\d{2,4}\s?(?:mm|cm)?)\b/i,
       /\b(\d{2,4}\s*\(\s*[hwd]\s*\)\s?[x×]\s?\d{2,4}\s*\(\s*[hwd]\s*\)\s?[x×]\s?\d{2,4}\s*\(\s*[hwd]\s*\)\s?(?:mm|cm)?)\b/i,
     ])
@@ -567,16 +603,45 @@ export function extractedSpecsFrom(
   // no unit of its own. A label like "Weight: 24 kg" is unambiguous; a table row like
   // "Weight 25.2" relies on a fallback kg which is less reliable (and on this class of
   // page the table weight often duplicates another field due to misaligned table columns).
+  // Lookbehind prevents "Packed Weight", "Gross Weight", "Ship Weight" from matching as net weight.
   const labelled_weight_text = firstMatch(text, [
-    /\b(?:weight|net weight|product weight|empty weight)[^\d]{0,40}(\d{1,4}(?:\.\d+)?\s?kg)\b/i,
+    /(?<!packed |gross |ship |shipping )\b(?:weight|net weight|product weight|empty weight|unpacked weight)[^\d]{0,40}(\d{1,4}(?:\.\d+)?\s?kg)\b/i,
     /\b(\d{1,4}(?:\.\d+)?\s?kg)\s*(?:empty\s*)?(?:weight|net)\b/i,
   ])
-  const rawWeight = labelled_weight_text || formatMeasurement(productWeight, "kg")
-  const rawGrossWeight =
+  let rawWeight = labelled_weight_text || formatMeasurement(productWeight, "kg")
+  let rawGrossWeight =
     formatMeasurement(shipWeight, "kg") ||
     firstMatch(text, [
       /\b(?:gross weight|ship weight|shipping weight|packed weight)[^\d]{0,40}(\d{1,4}(?:\.\d+)?\s?kg)\b/i,
     ])
+
+  // Fallback for pages that label weight as bare "Weight:" without a net/product qualifier.
+  // Skipped when the value equals rawGrossWeight to avoid double-counting "Packed Weight: N kg"
+  // as both net and gross (the packed weight path already set rawGrossWeight above).
+  if (!rawWeight) {
+    const bareWeight = numberAfterLabel(text, ["Weight"])
+    const bareWeightStr = formatMeasurement(bareWeight, "kg")
+    if (bareWeightStr && bareWeightStr !== rawGrossWeight) rawWeight = bareWeightStr
+  }
+
+  // Lenient fallback for table-format spec sheets (PDFs and some HTML) where the weight label
+  // and its value are in separate rows with other content between them.
+  // e.g. Blue Seal manual: "Gross weight  Net weight" header row, "113 kg  139 kg" data row.
+  // Requires at least 2 distinct kg values to distinguish net (smaller) from gross (larger).
+  // A single value with no comparator cannot be reliably identified as net — treat as gross.
+  if (!rawWeight) {
+    const weightSection = text.match(/\b(?:net weight|gross weight|weight)\b[\s\S]{0,600}/i)?.[0] ?? ""
+    const kgVals = [...weightSection.matchAll(/\b(\d{2,4}(?:[,.]\d+)?)\s*kg\b/gi)]
+      .map((m) => parseFloat(m[1].replace(",", ".")))
+      .filter((v) => v >= 1 && v <= 3000)
+    const sorted = [...new Set(kgVals)].sort((a, b) => a - b)
+    if (sorted.length >= 2) {
+      rawWeight = `${sorted[0]} kg`
+      if (!rawGrossWeight) rawGrossWeight = `${sorted[sorted.length - 1]} kg`
+    } else if (sorted.length === 1 && !rawGrossWeight) {
+      rawGrossWeight = `${sorted[0]} kg`
+    }
+  }
 
   return {
     dimensions: sanitiseDimensions(rawDimensions),
@@ -1063,6 +1128,21 @@ function rejectedSourceResult({
   }
 }
 
+// Extracts plain text from a PDF ArrayBuffer using pdf-parse (dynamically imported
+// to avoid loading the PDF worker until a PDF is actually encountered).
+// Returns "" on any failure — a failed PDF just drops the source, allSettled-style.
+async function extractTextFromPdf(arrayBuffer: ArrayBuffer): Promise<string> {
+  if (arrayBuffer.byteLength > 5 * 1024 * 1024) return ""
+  try {
+    const { PDFParse } = await import("pdf-parse")
+    const parser = new PDFParse({ data: new Uint8Array(arrayBuffer) })
+    const result = await parser.getText({ first: 20 })
+    return result.text.replace(/\s+/g, " ").trim().slice(0, 60000)
+  } catch {
+    return ""
+  }
+}
+
 export async function validateCaterBotProductSource({
   url,
   brand,
@@ -1120,7 +1200,16 @@ export async function validateCaterBotProductSource({
     const candidateText = `${candidateTitle || ""} ${candidateSnippet || ""}`.trim()
     let pageTitle = ""
     let bodyText = ""
-    if (!contentType.includes("pdf")) {
+    const isPdf = contentType.includes("pdf") || /\.pdf(\?|$)/i.test(finalUrl)
+    if (isPdf) {
+      const arrayBuffer = await response.arrayBuffer()
+      bodyText = await extractTextFromPdf(arrayBuffer)
+      // Use the filename as a proxy for the page title (PDF metadata is usually empty)
+      const filenamePart = finalUrl.match(/\/([^/?#]+\.pdf[^/?#]*)/i)?.[1]
+      pageTitle = filenamePart
+        ? decodeURIComponent(filenamePart).replace(/\.pdf.*/i, "").replace(/[-_]/g, " ").trim()
+        : ""
+    } else {
       const raw = await response.text()
       pageTitle = raw.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.replace(/\s+/g, " ").trim() || ""
       bodyText = decodeHtml(raw)
@@ -1147,8 +1236,12 @@ export async function validateCaterBotProductSource({
       exactAliases.some(
         (modelText) => compactCombinedText.includes(modelText) || compactModel(finalUrl).includes(modelText)
       )
+    const compactSearchModel = compactModel(model)
+    const modelPrefixMatch = !exactModelMatches && hasModelPrefixMatch(compactCombinedText, compactSearchModel)
+    const titleOrUrlPrefixMatch = !exactModelMatches && hasModelPrefixMatch(compactTitleUrlText, compactSearchModel)
     const closeModelMatches =
       exactModelMatches ||
+      modelPrefixMatch ||
       closeAliases.some(
         (modelText) => compactCombinedText.includes(modelText) || compactModel(finalUrl).includes(modelText)
       )
@@ -1255,16 +1348,21 @@ export async function validateCaterBotProductSource({
       priorityRank,
     })
 
-    // Require exact model in body text AND confirmed by page title/URL (checked
-    // above). Close model-family matches never auto-fill: wrong specs are worse
-    // than no specs.
-    if (!exactModelMatches || confidence === "low") {
+    // Accept exact model match (confirmed by title/URL above) OR a prefix family
+    // match (variant suffix like SH120EBTPS → page has SH120EBT) provided the
+    // prefix also appears in the URL/title and confidence is at least medium.
+    const validByExact = exactModelMatches  // title/URL already confirmed by gate above
+    const validByPrefix = modelPrefixMatch && titleOrUrlPrefixMatch && confidence !== "low"
+
+    if ((!validByExact && !validByPrefix) || confidence === "low") {
       console.info("CaterBot rejected source", {
         url: finalUrl,
-        reason: "low confidence source",
+        reason: validByExact ? "low confidence source" : "model not matched (exact or prefix)",
         score,
         priorityRank,
         matchedFields,
+        modelPrefixMatch,
+        titleOrUrlPrefixMatch,
       })
       return rejectedSourceResult({
         url: finalUrl,

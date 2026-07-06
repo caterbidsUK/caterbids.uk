@@ -211,6 +211,7 @@ function broadEquipmentTerms({
   else if (/\btoast[-\s]?qwik|conveyor\s+toaster|toaster\b/i.test(text)) terms.push("conveyor toaster")
   else if (/\bdishwasher|glasswasher\b/i.test(text)) terms.push("dishwasher")
   else if (/\bwarewashing|hood\s*type|pass\s*through|passthrough\b/i.test(text)) terms.push("hood dishwasher")
+  else if (/\bhot\s+cupboard|heated\s+cupboard|hot\s+holding|bain\s+marie|plate\s+warm|heated\s+gantry|carvery\s+unit|display\s+warm/i.test(text)) terms.push("hot cupboard")
 
   return unique(terms)
 }
