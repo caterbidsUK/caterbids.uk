@@ -42,6 +42,23 @@ type ListingRow = {
   caterbot_admin_verified: boolean | null
 }
 
+// Detect listings that were saved before Fix 1 where pallet dims overwrote item dims.
+// The 100×120 footprint is the universal pallet standard — if both match, these are
+// not item dimensions. The admin UI must not write these through to equipment_models.
+function detectPalletDims(row: ListingRow): {
+  pallet_dims_detected: boolean
+  suggested_height_cm: number | null
+  suggested_weight_kg: number | null
+} {
+  const isPalletFootprint = row.width_cm === 100 && row.length_cm === 120
+  if (!isPalletFootprint) return { pallet_dims_detected: false, suggested_height_cm: null, suggested_weight_kg: null }
+  return {
+    pallet_dims_detected: true,
+    suggested_height_cm: row.height_cm != null ? Math.round((row.height_cm - 15) * 10) / 10 : null,
+    suggested_weight_kg: row.weight_kg  != null ? Math.round((row.weight_kg  - 20) * 10) / 10 : null,
+  }
+}
+
 function computeFlags(row: ListingRow): { is_flagged: boolean; flag_reasons: string[] } {
   const reasons: string[] = []
   const conf = (row.ai_spec_confidence || "").toLowerCase()
@@ -51,6 +68,8 @@ function computeFlags(row: ListingRow): { is_flagged: boolean; flag_reasons: str
   if (!row.manual_source_validated || !row.manual_source_url) reasons.push("source_unvalidated")
   const sourceUrl = row.manual_source_url || row.spec_source_url
   if (isSuspiciousDomain(sourceUrl)) reasons.push("source_domain_mismatch")
+  const { pallet_dims_detected } = detectPalletDims(row)
+  if (pallet_dims_detected) reasons.push("pallet_dims_detected")
   return { is_flagged: reasons.length > 0, flag_reasons: reasons }
 }
 
@@ -74,7 +93,11 @@ export async function GET() {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    const rows = (data as ListingRow[]).map((row) => ({ ...row, ...computeFlags(row) }))
+    const rows = (data as ListingRow[]).map((row) => ({
+      ...row,
+      ...computeFlags(row),
+      ...detectPalletDims(row),
+    }))
     rows.sort((a, b) => {
       if (a.caterbot_admin_verified !== b.caterbot_admin_verified)
         return a.caterbot_admin_verified ? 1 : -1

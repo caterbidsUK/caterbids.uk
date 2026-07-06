@@ -400,12 +400,20 @@ export async function createListing(
 
   const listingId = crypto.randomUUID()
   const usesPalletDelivery = input.delivery_method === 'pallet_delivery'
-  // CaterBot scan results arrive as spec_*-prefixed form fields; fall back to
-  // them when the seller hasn't separately entered bare dimension values.
+  // spec_* fields carry raw item dimensions from CaterBot; weight_kg/height_cm/etc.
+  // carry pallet-adjusted delivery values entered by the seller. Item dims take
+  // priority so the KB and admin review see spec values, not pallet offsets.
+  // Pallet dims fall through when CaterBot found nothing (delivery safety net).
   const resolvedWeightKg = input.spec_weight_kg || input.weight_kg
-  const resolvedLengthCm = input.spec_depth_cm || input.length_cm
-  const resolvedWidthCm = input.spec_width_cm || input.width_cm
+  const resolvedLengthCm = input.spec_depth_cm  || input.length_cm
+  const resolvedWidthCm  = input.spec_width_cm  || input.width_cm
   const resolvedHeightCm = input.spec_height_cm || input.height_cm
+  // Pallet delivery dims (seller-confirmed). Written to pallet_* columns when
+  // those exist in the schema; silently ignored otherwise.
+  const palletWeightKg = input.weight_kg
+  const palletLengthCm = input.length_cm
+  const palletWidthCm  = input.width_cm
+  const palletHeightCm = input.height_cm
   const listingPayload = {
     id: listingId,
     title: input.title,
@@ -434,10 +442,10 @@ export async function createListing(
     length_cm: resolvedLengthCm,
     width_cm: resolvedWidthCm,
     height_cm: resolvedHeightCm,
-    pallet_weight_kg: usesPalletDelivery ? resolvedWeightKg : null,
-    pallet_length_cm: usesPalletDelivery ? resolvedLengthCm : null,
-    pallet_width_cm: usesPalletDelivery ? resolvedWidthCm : null,
-    pallet_height_cm: usesPalletDelivery ? resolvedHeightCm : null,
+    pallet_weight_kg: usesPalletDelivery ? palletWeightKg : null,
+    pallet_length_cm: usesPalletDelivery ? palletLengthCm : null,
+    pallet_width_cm:  usesPalletDelivery ? palletWidthCm  : null,
+    pallet_height_cm: usesPalletDelivery ? palletHeightCm : null,
     pallet_size: usesPalletDelivery ? input.pallet_size : null,
     pallet_count: input.pallet_count,
     pallet_ready: usesPalletDelivery ? input.pallet_ready : false,

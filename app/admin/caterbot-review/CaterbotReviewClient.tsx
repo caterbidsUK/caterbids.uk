@@ -34,6 +34,9 @@ type ReviewListing = {
   is_flagged: boolean
   flag_reasons: string[]
   caterbot_admin_verified: boolean | null
+  pallet_dims_detected: boolean
+  suggested_height_cm: number | null
+  suggested_weight_kg: number | null
 }
 
 type SaveState = {
@@ -50,6 +53,7 @@ const FLAG_LABELS: Record<string, { label: string; colour: string }> = {
   missing_weight:         { label: "Missing weight",          colour: "bg-amber-500/20 text-amber-300 border-amber-500/30" },
   source_unvalidated:     { label: "Unvalidated source",      colour: "bg-amber-500/20 text-amber-300 border-amber-500/30" },
   source_domain_mismatch: { label: "Source domain mismatch",  colour: "bg-red-500/20 text-red-300 border-red-500/30" },
+  pallet_dims_detected:   { label: "Pallet dims — must correct before KB save", colour: "bg-red-500/20 text-red-300 border-red-500/30" },
 }
 
 function confidenceBadge(conf: string | null) {
@@ -73,11 +77,14 @@ function fmt(n: number | null | undefined) {
 function RowCard({ listing, onSaved }: { listing: ReviewListing; onSaved: (id: string, patch: Partial<ReviewListing>) => void }) {
   const hasDomainFlag = listing.flag_reasons.includes("source_domain_mismatch")
 
+  // When pallet dims are detected, pre-fill H and Weight with corrected item values
+  // (-15 cm / -20 kg). W and D are left blank because the 100×120 footprint tells
+  // us nothing about the item's actual width and depth — admin must enter those.
   const [edit, setEdit] = useState({
-    width_cm:   fmt(listing.width_cm),
-    height_cm:  fmt(listing.height_cm),
-    depth_cm:   fmt(listing.length_cm),
-    weight_kg:  fmt(listing.weight_kg),
+    width_cm:   listing.pallet_dims_detected ? "" : fmt(listing.width_cm),
+    height_cm:  listing.pallet_dims_detected ? fmt(listing.suggested_height_cm) : fmt(listing.height_cm),
+    depth_cm:   listing.pallet_dims_detected ? "" : fmt(listing.length_cm),
+    weight_kg:  listing.pallet_dims_detected ? fmt(listing.suggested_weight_kg) : fmt(listing.weight_kg),
     source_url: listing.manual_source_url ?? "",
   })
   const [save, setSave] = useState<SaveState>({ status: "idle", listing_updated: false, kb_updated: false, kb_error: null, http_error: null })
@@ -180,6 +187,17 @@ function RowCard({ listing, onSaved }: { listing: ReviewListing; onSaved: (id: s
               </span>
             )
           })}
+        </div>
+      )}
+
+      {/* Pallet dims warning */}
+      {listing.pallet_dims_detected && (
+        <div className="mt-3 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+          <span className="font-black">Pallet dims detected.</span>{" "}
+          W and D are the standard pallet footprint (100×120 cm) and have been cleared.
+          H corrected to <span className="font-black">{listing.suggested_height_cm ?? "?"} cm</span> (stored {listing.height_cm} − 15)
+          and Weight to <span className="font-black">{listing.suggested_weight_kg ?? "?"} kg</span> (stored {listing.weight_kg} − 20).
+          Look up true W×D from the source before saving to KB.
         </div>
       )}
 
