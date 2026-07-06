@@ -1322,8 +1322,7 @@ function PostListingPage() {
   }
 
   function formatMeasurementNumber(value: number) {
-    const rounded = Math.round(value * 10) / 10
-    return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1).replace(/\.0$/, "")
+    return String(Math.ceil(value))
   }
 
   function normaliseCmValue(value: unknown, options: { allowBareNumber?: boolean } = {}) {
@@ -1725,7 +1724,7 @@ function PostListingPage() {
     }
 
     if (aiWeight) {
-      setWeightKg(String(Math.round(Number(aiWeight) + 20)))
+      setWeightKg(String(Math.ceil(Number(aiWeight) + 20)))
       setDeliverySizeUnknown(false)
     }
 
@@ -1821,14 +1820,14 @@ function PostListingPage() {
         setLengthCm(String(pallet.palletLengthCm))
         setWidthCm(String(pallet.palletWidthCm))
         setHeightCm(String(pallet.palletHeightCm))
-        if (itemWeightKg > 0) setWeightKg(String(Math.round(pallet.palletWeightKg)))
+        if (itemWeightKg > 0) setWeightKg(String(Math.ceil(pallet.palletWeightKg)))
         setDeliverySizeUnknown(false)
       }
     }
 
     if (parsedWeight) {
       setShippingSpecWeight(parsedWeight)
-      if (!deliveryDimensions) setWeightKg(String(Math.round(itemWeightKg + 20)))
+      if (!deliveryDimensions) setWeightKg(String(Math.ceil(itemWeightKg + 20)))
       setDeliverySizeUnknown(false)
     }
 
@@ -1917,7 +1916,7 @@ function PostListingPage() {
     const itemWeightKg = positiveNumber(weight)
     const itemHeightCm = positiveNumber(height)
 
-    const palletWeight = weight ? String(Math.round(Number(weight) + 20)) : ""
+    const palletWeight = weight ? String(Math.ceil(Number(weight) + 20)) : ""
     if (weight) setWeightKg((current) => (replace || !current.trim() ? palletWeight : current))
 
     if (itemHeightCm > 0) {
@@ -2033,8 +2032,8 @@ function PostListingPage() {
       setPalletTooBig(false)
       setPalletSize(pallet.tier.slug)
       const hM = (pallet.palletHeightCm / 100).toFixed(1)
-      const wTotal = Math.round(pallet.palletWeightKg)
-      const wItem = Math.round(itemWeightKg)
+      const wTotal = Math.ceil(pallet.palletWeightKg)
+      const wItem = Math.ceil(itemWeightKg)
       setPalletSizeNote(
         `CaterBot suggests ${pallet.tier.label} based on ~${hM}m height and ~${wTotal} kg (${wItem} kg item + 20 kg pallet) — please confirm before publishing.`
       )

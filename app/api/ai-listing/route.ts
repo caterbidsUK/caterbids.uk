@@ -249,8 +249,7 @@ function normaliseWeightText(weight: unknown, estimatedWeight: unknown) {
 }
 
 function formatMeasurementNumber(value: number) {
-  const rounded = Math.round(value * 10) / 10
-  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1).replace(/\.0$/, "")
+  return String(Math.ceil(value))
 }
 
 function normaliseCmField(value: unknown, options: { allowBareNumber?: boolean } = {}) {
@@ -605,9 +604,11 @@ function normaliseQuickListSuggestion(value: Partial<QuickListAiSuggestion>) {
   const parsedDimensions = parseDeliveryDimensionsToCm(dimensionsText)
   const estimatedWeightKg =
     extractWeightKg(value.estimated_weight_kg, { allowBareNumber: true }) || extractWeightKg(normalisedWeight)
-  const palletLengthCm = normaliseCmField(value.pallet_length_cm, { allowBareNumber: true }) || parsedDimensions?.lengthCm || ""
-  const palletWidthCm = normaliseCmField(value.pallet_width_cm, { allowBareNumber: true }) || parsedDimensions?.widthCm || ""
-  const palletHeightCm = normaliseCmField(value.pallet_height_cm, { allowBareNumber: true }) || parsedDimensions?.heightCm || ""
+  const palletLengthCm = (parsedDimensions ? "120" : normaliseCmField(value.pallet_length_cm, { allowBareNumber: true })) || ""
+  const palletWidthCm = (parsedDimensions ? "100" : normaliseCmField(value.pallet_width_cm, { allowBareNumber: true })) || ""
+  const palletHeightCm = (parsedDimensions?.heightCm
+    ? String(Number(parsedDimensions.heightCm) + 15)
+    : normaliseCmField(value.pallet_height_cm, { allowBareNumber: true })) || ""
   const deliveryNotes = safeText(value.delivery_notes)
 
   return {
@@ -687,19 +688,18 @@ function mergeFromCache(
     weight: mergedWeight,
     estimated_weight_kg: estimatedWeightKg || safeText(suggestion.estimated_weight_kg),
     pallet_length_cm:
-      parsedDimensions?.lengthCm ||
       normaliseCmField(cached.suggested_pallet_l_cm) ||
-      normaliseCmField(suggestion.pallet_length_cm, { allowBareNumber: true }) ||
+      (parsedDimensions ? "120" : normaliseCmField(suggestion.pallet_length_cm, { allowBareNumber: true })) ||
       "",
     pallet_width_cm:
-      parsedDimensions?.widthCm ||
       normaliseCmField(cached.suggested_pallet_w_cm) ||
-      normaliseCmField(suggestion.pallet_width_cm, { allowBareNumber: true }) ||
+      (parsedDimensions ? "100" : normaliseCmField(suggestion.pallet_width_cm, { allowBareNumber: true })) ||
       "",
     pallet_height_cm:
-      parsedDimensions?.heightCm ||
       normaliseCmField(cached.suggested_pallet_h_cm) ||
-      normaliseCmField(suggestion.pallet_height_cm, { allowBareNumber: true }) ||
+      (parsedDimensions?.heightCm
+        ? String(Number(parsedDimensions.heightCm) + 15)
+        : normaliseCmField(suggestion.pallet_height_cm, { allowBareNumber: true })) ||
       "",
     voltage: cached.voltage || suggestion.voltage || "",
     amps: cached.amps || suggestion.amps || "",
@@ -821,9 +821,11 @@ async function withValidatedSource(suggestion: QuickListAiSuggestion) {
     dimensions: mergedDimensions,
     weight: mergedWeight,
     estimated_weight_kg: estimatedWeightKg || safeText(suggestion.estimated_weight_kg),
-    pallet_length_cm: parsedDimensions?.lengthCm || normaliseCmField(suggestion.pallet_length_cm, { allowBareNumber: true }) || "",
-    pallet_width_cm: parsedDimensions?.widthCm || normaliseCmField(suggestion.pallet_width_cm, { allowBareNumber: true }) || "",
-    pallet_height_cm: parsedDimensions?.heightCm || normaliseCmField(suggestion.pallet_height_cm, { allowBareNumber: true }) || "",
+    pallet_length_cm: (parsedDimensions ? "120" : normaliseCmField(suggestion.pallet_length_cm, { allowBareNumber: true })) || "",
+    pallet_width_cm: (parsedDimensions ? "100" : normaliseCmField(suggestion.pallet_width_cm, { allowBareNumber: true })) || "",
+    pallet_height_cm: (parsedDimensions?.heightCm
+      ? String(Number(parsedDimensions.heightCm) + 15)
+      : normaliseCmField(suggestion.pallet_height_cm, { allowBareNumber: true })) || "",
     voltage: specVal(source.extractedSpecs.voltage) || suggestion.voltage || "",
     amps: specVal(source.extractedSpecs.amps) || suggestion.amps || "",
     kw_rating: specVal(source.extractedSpecs.kwRating) || suggestion.kw_rating || "",
