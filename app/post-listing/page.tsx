@@ -1086,7 +1086,8 @@ function PostListingPage() {
   async function handleImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files || [])
     const allowed = files.filter((file) =>
-      ["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(file.type)
+      ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/heic", "image/heif"].includes(file.type) ||
+      file.type === ""
     )
     const remainingSlots = 6 - imageFiles.length
     const selected = allowed.slice(0, remainingSlots)
@@ -1160,7 +1161,8 @@ function PostListingPage() {
 
   async function handleSpecPlateSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = Array.from(e.target.files || []).find((selectedFile) =>
-      ["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(selectedFile.type)
+      ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/heic", "image/heif"].includes(selectedFile.type) ||
+      selectedFile.type === ""
     )
     if (!file) return
 
@@ -2768,7 +2770,7 @@ function PostListingPage() {
             <span className="text-xs font-semibold text-white/68">Add up to 6 photos</span>
             <input
               type="file"
-              accept="image/jpeg,image/jpg,image/png,image/webp"
+              accept="image/jpeg,image/jpg,image/png,image/webp,image/heic,image/heif"
               multiple
               onChange={handleImageSelect}
               className="hidden"
@@ -2781,7 +2783,7 @@ function PostListingPage() {
             <span className="text-xs font-semibold text-white/68">JPG or PNG</span>
             <input
               type="file"
-              accept="image/jpeg,image/jpg,image/png,image/webp"
+              accept="image/jpeg,image/jpg,image/png,image/webp,image/heic,image/heif"
               onChange={handleSpecPlateSelect}
               className="hidden"
             />
@@ -2868,7 +2870,7 @@ function PostListingPage() {
         </p>
         </div>
 
-        <aside className="rounded-[1.35rem] border border-white/12 bg-white/[0.055] p-4 shadow-[0_18px_60px_rgba(0,0,0,0.18)]">
+        <aside className="order-first lg:order-none rounded-[1.35rem] border border-white/12 bg-white/[0.055] p-4 shadow-[0_18px_60px_rgba(0,0,0,0.18)]">
         <div className="flex items-start gap-3">
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#FF6B00]/18 text-[#FF6B00]">
             <ScanSearch size={23} aria-hidden="true" />

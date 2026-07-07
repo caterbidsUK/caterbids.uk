@@ -254,7 +254,7 @@ Return ONLY valid JSON: {"dimensions": "W x D x H cm", "weight_net_kg": number o
 function normaliseImageMimeType(value: string | undefined) {
   const mimeType = safeText(value).toLowerCase()
   if (mimeType === "image/jpg") return "image/jpeg"
-  if (["image/jpeg", "image/png", "image/webp"].includes(mimeType)) return mimeType
+  if (["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"].includes(mimeType)) return mimeType
   return "image/jpeg"
 }
 
