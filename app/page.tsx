@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import SiteFooter from "@/components/SiteFooter"
 import SiteLogo from "@/components/SiteLogo"
+import MobileMenu from "@/components/MobileMenu"
 import Image from "next/image"
 import Link from "next/link"
 import { redirect } from "next/navigation"
@@ -9,9 +10,7 @@ import {
   ArrowRight,
   BadgeCheck,
   Bot,
-  ChevronRight,
   MapPin,
-  Menu,
   PackageCheck,
   Percent,
   Search,
@@ -341,36 +340,16 @@ function SiteHeader({ accountHref, accountLabel }: { accountHref: string; accoun
         </Link>
       </nav>
 
-      <details className="relative lg:hidden">
-        <summary className="flex h-16 w-16 cursor-pointer list-none items-center justify-center rounded-full border border-white/22 bg-white/8 text-white shadow-xl backdrop-blur-md [&::-webkit-details-marker]:hidden">
-          <Menu className="h-8 w-8" strokeWidth={2.2} />
-        </summary>
-        <div className="absolute right-0 top-20 z-30 w-72 rounded-3xl border border-white/14 bg-[#001a34]/96 p-3 shadow-2xl backdrop-blur-xl">
-          <MobileMenuLink href="/">Home</MobileMenuLink>
-          <MobileMenuLink href={searchAllHref}>Marketplace</MobileMenuLink>
-          <MobileMenuLink href="/blog">Blog</MobileMenuLink>
-          <MobileMenuLink href={sellHref}>Sell an Item</MobileMenuLink>
-          <MobileMenuLink href="/pricing">Pricing</MobileMenuLink>
-          <MobileMenuLink href={accountHref}>{accountLabel}</MobileMenuLink>
-          <MobileMenuLink href="/about">About</MobileMenuLink>
-          <MobileMenuLink href="/contact">Contact</MobileMenuLink>
-        </div>
-      </details>
+      <MobileMenu
+        accountHref={accountHref}
+        accountLabel={accountLabel}
+        sellHref={sellHref}
+        searchAllHref={searchAllHref}
+      />
     </header>
   )
 }
 
-function MobileMenuLink({ href, children }: { href: string; children: ReactNode }) {
-  return (
-    <Link
-      href={href}
-      className="flex items-center justify-between rounded-2xl px-4 py-3 text-sm font-black text-white transition hover:bg-white/8 hover:text-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/45"
-    >
-      {children}
-      <ChevronRight className="h-4 w-4" strokeWidth={2.4} />
-    </Link>
-  )
-}
 
 function SearchPanel() {
   return (
