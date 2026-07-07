@@ -28,7 +28,9 @@ function logCallbackError(message: string, details: Record<string, unknown>) {
 }
 
 export async function GET(request: NextRequest) {
-  const { searchParams, origin } = new URL(request.url)
+  const { searchParams } = new URL(request.url)
+  // request.nextUrl.origin respects x-forwarded-host; new URL(request.url).origin gives the internal DO address.
+  const origin = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") || request.nextUrl.origin
   const code = searchParams.get("code")
   const requestedNext = searchParams.get("next")
   let next = safeNext(requestedNext)
