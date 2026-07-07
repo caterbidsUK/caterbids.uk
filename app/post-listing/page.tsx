@@ -1601,9 +1601,11 @@ function PostListingPage() {
     setQuickListApplied(false)
 
     try {
+      // Use 1600px for AI scanning (vs 900px display previews) so Gemini can
+      // read spec-plate text in a full-equipment phone camera shot.
       const itemImages = await Promise.all(
-        activeImageFiles.map(async (file, index) => {
-          const dataUrl = imagePreviews[index] || (await fileToDataUrl(file))
+        activeImageFiles.map(async (file) => {
+          const dataUrl = await resizeImage(file, 1600, 0.88).catch(() => fileToDataUrl(file))
           return {
             imageBase64: getBase64Payload(dataUrl),
             fileType: getDataUrlFileType(dataUrl, file.type),
@@ -2885,30 +2887,28 @@ function PostListingPage() {
           </div>
         </div>
 
-        {!pendingSpecLookup && (
-          <div className="mt-5 grid gap-3">
-            <button
-              type="button"
-              onClick={scanQuickListAi}
-              disabled={caterBotSearching}
-              className="flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[#FF6B00] px-5 py-3 text-base font-black text-white shadow-[0_18px_45px_rgba(255,107,0,0.28)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {caterBotSearching
-                ? <Loader2 className="h-[18px] w-[18px] animate-spin" aria-hidden="true" />
-                : <ScanSearch size={18} aria-hidden="true" />}
-              {caterBotSearching ? "CaterBot checking..." : "CaterBot check & auto-fill"}
-            </button>
-            <button
-              type="button"
-              onClick={() => lookupSpecsWithCaterBot({ autoApplyEmpty: false, suggestion: quickListResult ?? undefined })}
-              disabled={caterBotSearching}
-              className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-white/18 bg-white/7 px-5 py-3 text-sm font-black text-white transition hover:border-[#FF6B00]/60 hover:bg-white/11 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <ScanSearch size={17} aria-hidden="true" />
-              Find specs
-            </button>
-          </div>
-        )}
+        <div className="mt-5 grid gap-3">
+          <button
+            type="button"
+            onClick={scanQuickListAi}
+            disabled={caterBotSearching}
+            className="flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[#FF6B00] px-5 py-3 text-base font-black text-white shadow-[0_18px_45px_rgba(255,107,0,0.28)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {caterBotSearching
+              ? <Loader2 className="h-[18px] w-[18px] animate-spin" aria-hidden="true" />
+              : <ScanSearch size={18} aria-hidden="true" />}
+            {caterBotSearching ? "CaterBot checking..." : "CaterBot check & auto-fill"}
+          </button>
+          <button
+            type="button"
+            onClick={() => lookupSpecsWithCaterBot({ autoApplyEmpty: false, suggestion: quickListResult ?? undefined })}
+            disabled={caterBotSearching}
+            className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-white/18 bg-white/7 px-5 py-3 text-sm font-black text-white transition hover:border-[#FF6B00]/60 hover:bg-white/11 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <ScanSearch size={17} aria-hidden="true" />
+            Find specs
+          </button>
+        </div>
 
         {imageFiles.length === 0 && !specPlateFile && !aiError && (
           <p className="mt-3 rounded-2xl border border-[#FF6B00]/30 bg-[#FF6B00]/10 px-4 py-3 text-sm font-bold text-orange-100">
