@@ -248,14 +248,24 @@ export function isCaterBotWebSearchConfigured() {
 function configuredProvider() {
   const configured = process.env.CATERBOT_SEARCH_PROVIDER?.toLowerCase().trim()
   const provider = configured || "you"
+  const youKey = process.env.YOU_API_KEY
 
-  if (provider === "you" && process.env.YOU_API_KEY) return "you"
+  // Diagnostic: always logged so it appears in production (DO) logs
+  console.warn("[CaterBot DIAG] configuredProvider", {
+    CATERBOT_SEARCH_PROVIDER_raw: JSON.stringify(process.env.CATERBOT_SEARCH_PROVIDER),
+    provider_resolved: provider,
+    YOU_API_KEY_present: Boolean(youKey),
+    YOU_API_KEY_length: youKey?.length ?? 0,
+    YOU_API_KEY_prefix: youKey ? youKey.slice(0, 6) + "..." : "MISSING",
+  })
+
+  if (provider === "you" && youKey) return "you"
   if (provider === "google_cse" && process.env.GOOGLE_CSE_API_KEY && process.env.GOOGLE_CSE_CX) return "google_cse"
   if ((provider === "serper" || provider === "serpapi") && process.env.SERPER_API_KEY) return "serper"
   if (provider === "dataforseo" && process.env.DATAFORSEO_LOGIN && process.env.DATAFORSEO_PASSWORD) {
     return "dataforseo"
   }
-  if (provider === "existing" && process.env.YOU_API_KEY) return "existing"
+  if (provider === "existing" && youKey) return "existing"
 
   return null
 }
@@ -561,6 +571,13 @@ export async function searchYouComQuery(query: string, maxResults: number): Prom
   }).finally(() => clearTimeout(youTimeout))
 
   if (!response.ok) {
+    let errorBody = ""
+    try { errorBody = await response.text() } catch {}
+    console.warn("[CaterBot DIAG] You.com HTTP error", {
+      status: response.status,
+      url: url.toString().replace(apiKey, "***"),
+      body: errorBody.slice(0, 400),
+    })
     return {
       status: response.status,
       results: [],
@@ -570,6 +587,14 @@ export async function searchYouComQuery(query: string, maxResults: number): Prom
 
   const data = await response.json()
   const items = youResultItems(data)
+
+  // Always log so it appears in production (DO) logs for diagnostics
+  console.warn("[CaterBot DIAG] You.com response", {
+    status: response.status,
+    itemCount: items.length,
+    topLevelKeys: Object.keys(data || {}),
+    firstItem: items[0] ? { title: items[0].title, url: items[0].url } : null,
+  })
 
   const results = items
     .map((item: any) => ({
