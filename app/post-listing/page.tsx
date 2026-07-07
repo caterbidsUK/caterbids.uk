@@ -62,6 +62,8 @@ type QuickListAiResponse = {
   manual_source_useful_details?: string[]
   ai_spec_confidence?: string | number
   source_rejected_by_seller?: boolean
+  ai_dimensions?: string
+  ai_weight_kg?: number | null
   shipping_class: string
   delivery_warning: string
   confidence_score: number
@@ -2105,7 +2107,25 @@ function PostListingPage() {
       if (!webHasWeight && ge.weight_kg != null) pending.weight_kg = ge.weight_kg
       setPendingGeminiEstimates(Object.keys(pending).length ? pending : null)
     } else {
-      setPendingGeminiEstimates(null)
+      // No Gemini estimates from spec-lookup — fall back to AI knowledge estimates
+      // from the original scan (ai_dimensions / ai_weight_kg) when no web source was found
+      const webSourceFound = Boolean(result.source?.url)
+      if (!webSourceFound && quickListResult && (quickListResult.ai_dimensions || quickListResult.ai_weight_kg != null)) {
+        const dims = quickListResult.dimensions || quickListResult.ai_dimensions
+        const dimMatch = dims?.match(/(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)/)
+        const pending: NonNullable<typeof pendingGeminiEstimates> = {}
+        if (dimMatch) {
+          pending.width_cm = Math.ceil(Number(dimMatch[1]))
+          pending.depth_cm = Math.ceil(Number(dimMatch[2]))
+          pending.height_cm = Math.ceil(Number(dimMatch[3]))
+        }
+        if (quickListResult.ai_weight_kg != null && quickListResult.ai_weight_kg > 0) {
+          pending.weight_kg = Math.ceil(quickListResult.ai_weight_kg)
+        }
+        setPendingGeminiEstimates(Object.keys(pending).length ? pending : null)
+      } else {
+        setPendingGeminiEstimates(null)
+      }
     }
 
     if (!options.keepPanel) setPendingSpecLookup(null)
@@ -2221,10 +2241,33 @@ function PostListingPage() {
         setManualSourceValidated(prev => { console.log("[DIAG specLookup updater approximate] prev =", prev); return prev ? prev : false })
         setAiNotice(message)
       } else {
-        const message = "No verified information found — please enter specs from the item's spec plate or manufacturer documentation."
-        setManualSourceMatchNotes(message)
+        const currentNotes = manualSourceMatchNotes
+        // Don't overwrite an "AI estimate…" message the scan already set — it's more
+        // informative than the generic no-source message.
+        if (!/^AI estimate/i.test(currentNotes)) {
+          const message = "No verified information found — please enter specs from the item's spec plate or manufacturer documentation."
+          setManualSourceMatchNotes(message)
+          setAiNotice(message)
+        }
         setManualSourceValidated(prev => { console.log("[DIAG specLookup updater no_match] prev =", prev); return prev ? prev : false })
-        setAiNotice(message)
+
+        // No spec-lookup source and no geminiEstimates — immediately populate the amber
+        // "AI estimate" banner from the original scan result so the seller sees them.
+        if (!data.geminiEstimates && quickListResult &&
+          (quickListResult.ai_dimensions || quickListResult.ai_weight_kg != null)) {
+          const dims = quickListResult.dimensions || quickListResult.ai_dimensions
+          const dimMatch = dims?.match(/(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)/)
+          const pending: NonNullable<typeof pendingGeminiEstimates> = {}
+          if (dimMatch) {
+            pending.width_cm = Math.ceil(Number(dimMatch[1]))
+            pending.depth_cm = Math.ceil(Number(dimMatch[2]))
+            pending.height_cm = Math.ceil(Number(dimMatch[3]))
+          }
+          if (quickListResult.ai_weight_kg != null && quickListResult.ai_weight_kg > 0) {
+            pending.weight_kg = Math.ceil(quickListResult.ai_weight_kg)
+          }
+          if (Object.keys(pending).length) setPendingGeminiEstimates(pending)
+        }
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "CaterBot could not complete the spec lookup."
@@ -2606,9 +2649,11 @@ function PostListingPage() {
       ? "Not connected"
       : /failed|could not complete/i.test(manualSourceMatchNotes)
         ? "Search failed"
-        : manualSourceLastCheckedAt
-          ? "Search completed — no reliable match"
-          : "No reliable match"
+        : /^AI estimate/i.test(manualSourceMatchNotes)
+          ? "AI estimate — confirm"
+          : manualSourceLastCheckedAt
+            ? "Search completed — no reliable match"
+            : "No reliable match"
   console.log("[DIAG render sourceStatus]", { manualSourceValidated, manualSourceUrl, specSourceUrl, sourceRejectedBySeller, manualSourceHasVerifiedUrl, sourceStatusText })
   const showCaterBotProductMatch =
     Boolean(quickListResult) || manualSourceHasVerifiedUrl || Boolean(manualSourceMatchNotes) || sourceRejectedBySeller
@@ -2931,8 +2976,26 @@ function PostListingPage() {
                 ["Brand", pendingSpecLookup!.specs?.brand || pendingSpecLookup!.extracted?.brand || shippingSpecBrand || "Needs seller check"],
                 ["Model", pendingSpecLookup!.specs?.model || pendingSpecLookup!.extracted?.model || shippingSpecModel || "Needs seller check"],
                 ["Type", pendingSpecLookup!.specs?.type || pendingSpecLookup!.image_analysis?.main_image?.equipment_type || shippingSpecCategory || "Needs seller check"],
-                ["Dimensions", caterBotDimensionsSummary(pendingSpecLookup!.specs)],
-                ["Weight", caterBotWeightSummary(pendingSpecLookup!.specs)],
+                ["Dimensions", (() => {
+                  const fromSpecs = caterBotDimensionsSummary(pendingSpecLookup!.specs)
+                  if (fromSpecs !== "Needs seller check") return fromSpecs
+                  // Fall back to AI estimate from scan result
+                  const aiDims = quickListResult?.dimensions || quickListResult?.ai_dimensions
+                  if (aiDims) {
+                    const m = aiDims.match(/(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)/)
+                    if (m) return `${Math.ceil(Number(m[1]))} × ${Math.ceil(Number(m[2]))} × ${Math.ceil(Number(m[3]))} cm (AI estimate — confirm)`
+                  }
+                  return fromSpecs
+                })()],
+                ["Weight", (() => {
+                  const fromSpecs = caterBotWeightSummary(pendingSpecLookup!.specs)
+                  if (fromSpecs !== "Needs seller check") return fromSpecs
+                  // Fall back to AI estimate from scan result
+                  if (quickListResult?.ai_weight_kg != null && quickListResult.ai_weight_kg > 0) {
+                    return `${Math.ceil(quickListResult.ai_weight_kg)} kg (AI estimate — confirm)`
+                  }
+                  return fromSpecs
+                })()],
                 ["Power", caterBotPowerSummary(pendingSpecLookup!.specs, pendingSpecLookup!.extracted)],
                 ["Delivery", pendingSpecLookup!.specs?.suggested_pallet_size || deliveryRecommendation.recommendation || "Needs seller check"],
                 ["Source status", manualSourceHasVerifiedUrl ? "Product source found" : "Manual/spec source not verified yet"],

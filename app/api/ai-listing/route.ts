@@ -203,6 +203,54 @@ ${bodyText}`
   return empty
 }
 
+// Grounded dims lookup: Gemini with Google Search enabled — pulls real spec data
+// like the Gemini app does. Run in parallel with web source search (no added latency).
+async function geminiGroundedDimsLookup(
+  brand: string,
+  model: string
+): Promise<{ dimensions: string; weight: string }> {
+  const empty = { dimensions: "", weight: "" }
+  const apiKey = process.env.AI_VISION_API_KEY
+  if (!apiKey?.startsWith("AIza") || !brand || !model) return empty
+
+  const prompt = `What are the manufacturer's published external dimensions (W×D×H in cm) and net weight (kg) for the "${brand} ${model}" commercial catering equipment? Find the official spec sheet.
+
+Return ONLY valid JSON: {"dimensions": "W x D x H cm", "weight_net_kg": number or null}`
+
+  try {
+    const response = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-goog-api-key": apiKey },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          tools: [{ google_search: {} }],
+          generationConfig: { temperature: 0.1 },
+        }),
+        signal: AbortSignal.timeout(15000),
+      }
+    )
+    if (!response.ok) return empty
+    const data = await response.json()
+    // Grounding responses may have multiple parts; find the one with JSON
+    const parts: unknown[] = data?.candidates?.[0]?.content?.parts ?? []
+    const content = parts
+      .map((p) => (typeof (p as { text?: string }).text === "string" ? (p as { text: string }).text : ""))
+      .join("")
+    if (!content) return empty
+    const jsonMatch = content.match(/\{[^]*?\}/)
+    if (!jsonMatch) return empty
+    const parsed = JSON.parse(jsonMatch[0])
+    const dims = typeof parsed.dimensions === "string" ? parsed.dimensions.trim() : ""
+    const netKg = typeof parsed.weight_net_kg === "number" ? parsed.weight_net_kg : null
+    return {
+      dimensions: dims && isGeminiDimsSane(dims) ? dims : "",
+      weight: netKg != null && netKg >= 0.5 && netKg <= 3000 ? `${Math.ceil(netKg)} kg` : "",
+    }
+  } catch { return empty }
+}
+
 function normaliseImageMimeType(value: string | undefined) {
   const mimeType = safeText(value).toLowerCase()
   if (mimeType === "image/jpg") return "image/jpeg"
@@ -752,19 +800,29 @@ async function withValidatedSource(suggestion: QuickListAiSuggestion) {
     .filter(Boolean)
     .join(" ")
 
-  const source = await findValidatedCaterBotSource({
-    brand: suggestion.brand,
-    model: plateIdentifier,
-    productTitle: suggestion.suggested_title || suggestion.title,
-    category: suggestion.category,
-    equipmentType: equipmentSearchText || suggestion.subcategory || suggestion.category,
-    fuelType: suggestion.gas_type || suggestion.power_type || suggestion.gas_or_electric,
-    voltage: suggestion.voltage,
-    phase: suggestion.electrical_phase,
-    amps: suggestion.amps,
-    powerRating: suggestion.kw_rating,
-    candidateUrls,
-  })
+  const [source, groundedDims] = await Promise.all([
+    findValidatedCaterBotSource({
+      brand: suggestion.brand,
+      model: plateIdentifier,
+      productTitle: suggestion.suggested_title || suggestion.title,
+      category: suggestion.category,
+      equipmentType: equipmentSearchText || suggestion.subcategory || suggestion.category,
+      fuelType: suggestion.gas_type || suggestion.power_type || suggestion.gas_or_electric,
+      voltage: suggestion.voltage,
+      phase: suggestion.electrical_phase,
+      amps: suggestion.amps,
+      powerRating: suggestion.kw_rating,
+      candidateUrls,
+    }),
+    geminiGroundedDimsLookup(suggestion.brand, suggestion.model),
+  ])
+
+  // Upgrade the knowledge estimate with grounded result when better
+  if (groundedDims.dimensions) suggestion = { ...suggestion, ai_dimensions: groundedDims.dimensions }
+  if (groundedDims.weight) {
+    const groundedKg = Number(groundedDims.weight.replace(/[^0-9.]/g, ""))
+    if (groundedKg > 0) suggestion = { ...suggestion, ai_weight_kg: groundedKg }
+  }
 
   if (!source) {
     const aiKnowledgeDims = safeText(suggestion.ai_dimensions)
@@ -1180,7 +1238,7 @@ Tasks:
 - For gas or electric catering equipment, treat ManualsLib as the first manual database for exact dimensions, weight, power and gas/electrical information.
 - Use the exact model number first, or the exact GC number if no model is visible, for the ManualsLib manual lookup.
 - Extract dimensions and weight only when visible in photos, visible on the plate, or certain from a manufacturer manual/spec sheet. Put these in "dimensions" and "weight".
-- From your own training knowledge, provide the typical external dimensions (W×D×H in cm) and net weight (kg) for the identified brand+model. Put these in "ai_dimensions" and "ai_weight_kg". This is the primary source — fill it in even when not readable in the photos. Use "" / null only if you genuinely do not recognise the model.
+- From your own training knowledge, provide the manufacturer's actual published external dimensions (W×D×H in cm) and net weight (kg) for this exact brand+model. Put these in "ai_dimensions" and "ai_weight_kg". Be precise — these feed a delivery quote. Use the spec sheet values, not a rough estimate. Leave "" / null only if you genuinely do not know the specific model.
 - Suggest delivery/shipping class for a UK catering equipment buyer.
 - Generate an editable listing title, category and short description.
 - The short description must be seller-friendly, 1-3 short sentences max.
@@ -1248,7 +1306,7 @@ Rules:
 - Do not invent or estimate a model, serial number, GC number, voltage, amps, kW rating, dimensions or weight.
 - Do not copy a model number from a guessed product name. The model or GC number must come from the data plate/label text. If the plate is blurry or ambiguous, use "" and leave manual_url empty.
 - Use "" for "dimensions" and "weight" if not directly readable in photos. These fields are for confirmed/readable values only.
-- "ai_dimensions" and "ai_weight_kg" are your knowledge-based estimate — fill these in whenever you recognise the brand+model. Format ai_dimensions as "W x D x H cm" (e.g. "41 x 35 x 21 cm"). Leave "" / null only if you genuinely do not know the model.
+- "ai_dimensions" and "ai_weight_kg" are for manufacturer's published specs from your training data — fill these in whenever you recognise the brand+model. Format ai_dimensions as "W x D x H cm" (e.g. "41 x 35 x 21 cm"). Be as precise as possible for the exact model number. Leave "" / null only if you genuinely do not know the model.
 - For pallet_length_cm, pallet_width_cm, pallet_height_cm and estimated_weight_kg, use the exact readable/spec-sheet value when present. If only an estimate is possible, put "Needs seller confirmation" instead of a number.
 - delivery_notes must mention "Needs seller confirmation" for any estimated pallet, weight, dimension, phone, collection or access detail.
 - manual_url should be a direct ManualsLib /manual/ page URL only when it matches the exact visible model number or GC number. If no exact identifier match is known, use "". Do not use ManualsLib search pages, Google, generic search URLs, or generic brand phrases.
