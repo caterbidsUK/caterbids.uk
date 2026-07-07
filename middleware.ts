@@ -18,6 +18,13 @@ function productionGate(request: NextRequest) {
 
   if (isDev) return null
 
+  // Bypass: set cookie caterbids_preview=<PREVIEW_SECRET> in your browser to
+  // access the full site before public launch. Secret is set via env var.
+  const previewSecret = process.env.PREVIEW_SECRET
+  if (previewSecret && request.cookies.get("caterbids_preview")?.value === previewSecret) {
+    return null
+  }
+
   const blogApiRoute = "/api/admin/blog/create"
   const publicRoutes = ["/", "/about", "/privacy", "/privacy-policy", "/terms", "/contact", "/marketplace", "/blog"]
   const isPublicPage = publicRoutes.includes(pathname) || pathname.startsWith("/blog/")
