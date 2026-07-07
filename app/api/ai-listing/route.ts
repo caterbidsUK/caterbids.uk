@@ -74,6 +74,9 @@ type QuickListAiSuggestion = {
   confidence_score: number
   confidence?: string | number
   condition?: (typeof CONDITIONS)[number]
+  // Gemini's knowledge-based estimate — populated even when not readable on plate/source
+  ai_dimensions?: string
+  ai_weight_kg?: number | null
   _diag?: {
     ai_dimensions: string
     source_valid: boolean
@@ -651,6 +654,10 @@ function normaliseQuickListSuggestion(value: Partial<QuickListAiSuggestion>) {
       ? value.manual_source_useful_details.filter((item): item is string => typeof item === "string")
       : [],
     ai_spec_confidence: confidenceLabel(confidenceScore),
+    ai_dimensions: specVal(safeText(value.ai_dimensions)),
+    ai_weight_kg: typeof value.ai_weight_kg === "number" && Number.isFinite(value.ai_weight_kg) && value.ai_weight_kg > 0
+      ? value.ai_weight_kg
+      : null,
     source_rejected_by_seller: false,
     shipping_class: safeText(value.shipping_class) || inferShippingClass("", estimatedWeightKg ? `${estimatedWeightKg}kg` : normalisedWeight, dimensionsText),
     delivery_warning: QUICKLIST_AI_WARNING,
@@ -664,8 +671,12 @@ function mergeFromCache(
   cached: EquipmentModelRow
 ): QuickListAiSuggestion {
   // Verified-source values beat the vision-AI's data-plate guess (FIX 1).
-  const mergedDimensions = cached.dimensions || suggestion.dimensions || ""
-  const mergedWeight = cached.weight_gross || cached.weight_net || suggestion.weight || ""
+  const aiKnowledgeDims = safeText(suggestion.ai_dimensions)
+  const aiKnowledgeWeight = suggestion.ai_weight_kg != null && suggestion.ai_weight_kg > 0
+    ? `${Math.ceil(suggestion.ai_weight_kg)} kg`
+    : ""
+  const mergedDimensions = cached.dimensions || suggestion.dimensions || aiKnowledgeDims || ""
+  const mergedWeight = cached.weight_gross || cached.weight_net || suggestion.weight || aiKnowledgeWeight || ""
   const parsedDimensions = parseDeliveryDimensionsToCm(mergedDimensions)
   const estimatedWeightKg =
     extractWeightKg(suggestion.estimated_weight_kg, { allowBareNumber: true }) ||
@@ -756,8 +767,31 @@ async function withValidatedSource(suggestion: QuickListAiSuggestion) {
   })
 
   if (!source) {
+    const aiKnowledgeDims = safeText(suggestion.ai_dimensions)
+    const aiKnowledgeWeight = suggestion.ai_weight_kg != null && suggestion.ai_weight_kg > 0
+      ? `${Math.ceil(suggestion.ai_weight_kg)} kg`
+      : ""
+    const hasAiEstimate = Boolean(aiKnowledgeDims || aiKnowledgeWeight)
+    const noSourceNote = !isCaterBotWebSearchConfigured()
+      ? "CaterBot source search is not connected yet. You can still list using plate details."
+      : plateIdentifier
+        ? "CaterBot could not verify an exact manual/spec source. Please add a link manually."
+        : "CaterBot needs a clear model or GC number from the data plate before it can verify a manual/spec source."
+    const dimsForListing = suggestion.dimensions || aiKnowledgeDims || ""
+    const weightForListing = suggestion.weight || aiKnowledgeWeight || ""
+    const parsedNoSourceDims = parseDeliveryDimensionsToCm(dimsForListing)
     return {
       ...suggestion,
+      dimensions: dimsForListing,
+      weight: weightForListing,
+      estimated_weight_kg:
+        extractWeightKg(suggestion.estimated_weight_kg, { allowBareNumber: true }) ||
+        extractWeightKg(weightForListing),
+      pallet_length_cm: (parsedNoSourceDims ? "120" : normaliseCmField(suggestion.pallet_length_cm, { allowBareNumber: true })) || "",
+      pallet_width_cm: (parsedNoSourceDims ? "100" : normaliseCmField(suggestion.pallet_width_cm, { allowBareNumber: true })) || "",
+      pallet_height_cm: (parsedNoSourceDims?.heightCm
+        ? String(Number(parsedNoSourceDims.heightCm) + 15)
+        : normaliseCmField(suggestion.pallet_height_cm, { allowBareNumber: true })) || "",
       manual_url: "",
       manual_source_url: "",
       spec_source_url: "",
@@ -765,13 +799,11 @@ async function withValidatedSource(suggestion: QuickListAiSuggestion) {
       manual_source_type: "",
       manual_source_validated: false,
       manual_source_last_checked_at: new Date().toISOString(),
-      manual_source_match_notes: !isCaterBotWebSearchConfigured()
-        ? "CaterBot source search is not connected yet. You can still list using plate details."
-        : plateIdentifier
-          ? "CaterBot could not verify an exact manual/spec source. Please add a link manually."
-          : "CaterBot needs a clear model or GC number from the data plate before it can verify a manual/spec source.",
+      manual_source_match_notes: hasAiEstimate
+        ? `AI estimate — dimensions and weight are from Gemini's training knowledge, not a verified spec sheet. ${noSourceNote}`
+        : noSourceNote,
       manual_source_useful_details: [],
-      ai_spec_confidence: "low",
+      ai_spec_confidence: hasAiEstimate ? "medium" : "low",
       source_rejected_by_seller: false,
     } satisfies QuickListAiSuggestion
   }
@@ -795,10 +827,14 @@ async function withValidatedSource(suggestion: QuickListAiSuggestion) {
   const sourceNet = specVal(source.extractedSpecs.weight) || sourceGemini?.weight || ""
   const sourceGross = specVal(source.extractedSpecs.grossWeight) || sourceGemini?.grossWeight || ""
 
-  // Priority: source-derived (regex or Gemini reading the doc) > AI image estimate
-  const mergedDimensions = sourceDims || suggestion.dimensions || ""
-  // Net weight preferred for listing display; gross as fallback (AI image estimates last)
-  const mergedWeight = sourceNet || sourceGross || suggestion.weight || ""
+  // Priority: source-derived > AI image estimate > Gemini knowledge estimate
+  const aiKnowledgeDims = safeText(suggestion.ai_dimensions)
+  const aiKnowledgeWeight = suggestion.ai_weight_kg != null && suggestion.ai_weight_kg > 0
+    ? `${Math.ceil(suggestion.ai_weight_kg)} kg`
+    : ""
+  const mergedDimensions = sourceDims || sourceGemini?.dimensions || suggestion.dimensions || aiKnowledgeDims || ""
+  // Net weight preferred; gross as fallback; Gemini knowledge estimate last
+  const mergedWeight = sourceNet || sourceGross || suggestion.weight || aiKnowledgeWeight || ""
 
   const parsedDimensions = parseDeliveryDimensionsToCm(mergedDimensions)
   const estimatedWeightKg =
@@ -1143,7 +1179,8 @@ Tasks:
 - Do not use generic phrases such as "Catering Equipment", "Commercial Catering Equipment" or the equipment type as the brand. If the maker is unclear, use "" for brand.
 - For gas or electric catering equipment, treat ManualsLib as the first manual database for exact dimensions, weight, power and gas/electrical information.
 - Use the exact model number first, or the exact GC number if no model is visible, for the ManualsLib manual lookup.
-- Extract dimensions and weight only when visible in photos, visible on the plate, or certain from a manufacturer manual/spec sheet.
+- Extract dimensions and weight only when visible in photos, visible on the plate, or certain from a manufacturer manual/spec sheet. Put these in "dimensions" and "weight".
+- From your own training knowledge, provide the typical external dimensions (W×D×H in cm) and net weight (kg) for the identified brand+model. Put these in "ai_dimensions" and "ai_weight_kg". This is the primary source — fill it in even when not readable in the photos. Use "" / null only if you genuinely do not recognise the model.
 - Suggest delivery/shipping class for a UK catering equipment buyer.
 - Generate an editable listing title, category and short description.
 - The short description must be seller-friendly, 1-3 short sentences max.
@@ -1167,6 +1204,8 @@ Return strict JSON only with exactly these keys:
   "dimensions": string,
   "weight": string,
   "estimated_weight_kg": string,
+  "ai_dimensions": string,
+  "ai_weight_kg": number | null,
   "pallet_length_cm": string,
   "pallet_width_cm": string,
   "pallet_height_cm": string,
@@ -1208,7 +1247,8 @@ Rules:
 - brand must be the maker/manufacturer only, not a category or supplier phrase.
 - Do not invent or estimate a model, serial number, GC number, voltage, amps, kW rating, dimensions or weight.
 - Do not copy a model number from a guessed product name. The model or GC number must come from the data plate/label text. If the plate is blurry or ambiguous, use "" and leave manual_url empty.
-- Use "" for dimensions and weight if they are not readable or not certain. Never guess from item type.
+- Use "" for "dimensions" and "weight" if not directly readable in photos. These fields are for confirmed/readable values only.
+- "ai_dimensions" and "ai_weight_kg" are your knowledge-based estimate — fill these in whenever you recognise the brand+model. Format ai_dimensions as "W x D x H cm" (e.g. "41 x 35 x 21 cm"). Leave "" / null only if you genuinely do not know the model.
 - For pallet_length_cm, pallet_width_cm, pallet_height_cm and estimated_weight_kg, use the exact readable/spec-sheet value when present. If only an estimate is possible, put "Needs seller confirmation" instead of a number.
 - delivery_notes must mention "Needs seller confirmation" for any estimated pallet, weight, dimension, phone, collection or access detail.
 - manual_url should be a direct ManualsLib /manual/ page URL only when it matches the exact visible model number or GC number. If no exact identifier match is known, use "". Do not use ManualsLib search pages, Google, generic search URLs, or generic brand phrases.
