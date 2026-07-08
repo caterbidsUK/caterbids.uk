@@ -1028,36 +1028,45 @@ async function analyseWithGemini({
   const errors: string[] = []
 
   for (const model of modelCandidates) {
-    const aiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-goog-api-key": apiKey,
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              role: "user",
-              parts: [
-                { text: prompt },
-                ...images.map((image) => ({
-                  inline_data: {
-                    mime_type: normaliseImageMimeType(image.fileType),
-                    data: image.imageBase64,
-                  },
-                })),
-              ],
-            },
-          ],
-          generationConfig: {
-            response_mime_type: "application/json",
-            temperature: 0.05,
+    console.log('[CaterBot DIAG] vision call START', model, new Date().toISOString())
+    let aiResponse: Response
+    try {
+      aiResponse = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-goog-api-key": apiKey,
           },
-        }),
-      }
-    )
+          body: JSON.stringify({
+            contents: [
+              {
+                role: "user",
+                parts: [
+                  { text: prompt },
+                  ...images.map((image) => ({
+                    inline_data: {
+                      mime_type: normaliseImageMimeType(image.fileType),
+                      data: image.imageBase64,
+                    },
+                  })),
+                ],
+              },
+            ],
+            generationConfig: {
+              response_mime_type: "application/json",
+              temperature: 0.05,
+            },
+          }),
+        }
+      )
+    } catch (err: unknown) {
+      console.log('[CaterBot DIAG] vision call ERROR:', err instanceof Error ? err.message : err)
+      errors.push(`${model}: fetch threw ${err instanceof Error ? err.message : String(err)}`)
+      continue
+    }
+    console.log('[CaterBot DIAG] vision call END', model, aiResponse.status, new Date().toISOString())
     const data = await aiResponse.json()
 
     if (!aiResponse.ok) {
@@ -1170,6 +1179,7 @@ export async function POST(req: Request) {
       YOU_API_KEY_present: Boolean(process.env.YOU_API_KEY),
       CATERBOT_SEARCH_PROVIDER: process.env.CATERBOT_SEARCH_PROVIDER || "(unset)",
     })
+    console.log('[CaterBot DIAG] AI_VISION_API_KEY present:', !!process.env.AI_VISION_API_KEY)
     const images = [
       ...itemImages,
       body.specPlate || undefined,
