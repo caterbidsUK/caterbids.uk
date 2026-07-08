@@ -2204,8 +2204,6 @@ function PostListingPage() {
       const data = (await res.json()) as CaterBotSpecLookupResponse
       const checkedAt = data.source?.checkedAt || data.checkedAt || new Date().toISOString()
       setManualSourceLastCheckedAt(checkedAt)
-      console.log("[DIAG specLookup response]", { httpStatus: res.status, ok: res.ok, success: data.success, matchType: data.matchType, sourceUrl: data.source?.url || "" })
-
       if (data.extracted?.brand && !shippingSpecBrand) setShippingSpecBrand(data.extracted.brand)
       if (data.extracted?.model && !shippingSpecModel) setShippingSpecModel(data.extracted.model)
 
@@ -2216,7 +2214,6 @@ function PostListingPage() {
           ? "CaterBot is temporarily unavailable — please fill in details manually or try again later."
           : rawMessage || "CaterBot could not complete the spec lookup."
         setManualSourceMatchNotes(message)
-        console.log("[DIAG specLookup ERROR PATH] unconditional setManualSourceValidated(false). status:", res.status, "success:", data.success, "error:", rawMessage)
         setManualSourceValidated(false)
         setSpecConfidence("low")
         setManualLinkError(message)
@@ -2242,7 +2239,7 @@ function PostListingPage() {
       } else if (data.source?.url) {
         const message = "CaterBot found a partial match only — no exact product record. Check the model number and enter details manually."
         setManualSourceMatchNotes(message)
-        setManualSourceValidated(prev => { console.log("[DIAG specLookup updater approximate] prev =", prev); return prev ? prev : false })
+        setManualSourceValidated(prev => prev ? prev : false)
         setAiNotice(message)
       } else {
         const currentNotes = manualSourceMatchNotes
@@ -2253,7 +2250,7 @@ function PostListingPage() {
           setManualSourceMatchNotes(message)
           setAiNotice(message)
         }
-        setManualSourceValidated(prev => { console.log("[DIAG specLookup updater no_match] prev =", prev); return prev ? prev : false })
+        setManualSourceValidated(prev => prev ? prev : false)
 
         // No spec-lookup source and no geminiEstimates — immediately populate the amber
         // "AI estimate" banner from the original scan result so the seller sees them.
@@ -2658,7 +2655,6 @@ function PostListingPage() {
           : manualSourceLastCheckedAt
             ? "Search completed — no reliable match"
             : "No reliable match"
-  console.log("[DIAG render sourceStatus]", { manualSourceValidated, manualSourceUrl, specSourceUrl, sourceRejectedBySeller, manualSourceHasVerifiedUrl, sourceStatusText })
   const showCaterBotProductMatch =
     Boolean(quickListResult) || manualSourceHasVerifiedUrl || Boolean(manualSourceMatchNotes) || sourceRejectedBySeller
   const deliveryMeasurementsReady = Boolean(weightKg && lengthCm && widthCm && heightCm)

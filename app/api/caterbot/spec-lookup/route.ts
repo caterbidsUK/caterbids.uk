@@ -488,14 +488,6 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json()
     const checkedAt = new Date().toISOString()
-    console.warn("[CaterBot DIAG] spec-lookup POST reached", {
-      brandHint: String(body.brandHint || body.brand || "").slice(0, 40),
-      modelHint: String(body.modelHint || body.model || "").slice(0, 40),
-      hasImageInputs: Array.isArray(body.imageInputs) && body.imageInputs.length > 0,
-      hasSpecPlate: Boolean(body.specPlateImageBase64),
-      YOU_API_KEY_present: Boolean(process.env.YOU_API_KEY),
-      CATERBOT_SEARCH_PROVIDER: process.env.CATERBOT_SEARCH_PROVIDER || "(unset)",
-    })
     const manualText = clean(body.manualText || body.manual_text)
     const dimensionHint = clean(body.dimensionHint || body.dimension_hint)
     const imageUrls = Array.isArray(body.imageUrls) ? body.imageUrls.filter((url: unknown): url is string => typeof url === "string") : []

@@ -1028,7 +1028,6 @@ async function analyseWithGemini({
   const errors: string[] = []
 
   for (const model of modelCandidates) {
-    console.log('[CaterBot DIAG] vision call START', model, new Date().toISOString())
     let aiResponse: Response
     try {
       aiResponse = await fetch(
@@ -1062,11 +1061,9 @@ async function analyseWithGemini({
         }
       )
     } catch (err: unknown) {
-      console.log('[CaterBot DIAG] vision call ERROR:', err instanceof Error ? err.message : err)
       errors.push(`${model}: fetch threw ${err instanceof Error ? err.message : String(err)}`)
       continue
     }
-    console.log('[CaterBot DIAG] vision call END', model, aiResponse.status, new Date().toISOString())
     const data = await aiResponse.json()
 
     if (!aiResponse.ok) {
@@ -1172,14 +1169,6 @@ export async function POST(req: Request) {
     }
 
     const itemImages = Array.isArray(body.itemImages) ? body.itemImages : []
-    console.warn("[CaterBot DIAG] ai-listing POST reached", {
-      itemImageCount: itemImages.length,
-      hasSpecPlate: Boolean(body.specPlate),
-      AI_VISION_API_KEY_present: Boolean(process.env.AI_VISION_API_KEY),
-      YOU_API_KEY_present: Boolean(process.env.YOU_API_KEY),
-      CATERBOT_SEARCH_PROVIDER: process.env.CATERBOT_SEARCH_PROVIDER || "(unset)",
-    })
-    console.log('[CaterBot DIAG] AI_VISION_API_KEY present:', !!process.env.AI_VISION_API_KEY)
     const images = [
       ...itemImages,
       body.specPlate || undefined,
