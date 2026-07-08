@@ -1163,6 +1163,13 @@ export async function POST(req: Request) {
     }
 
     const itemImages = Array.isArray(body.itemImages) ? body.itemImages : []
+    console.warn("[CaterBot DIAG] ai-listing POST reached", {
+      itemImageCount: itemImages.length,
+      hasSpecPlate: Boolean(body.specPlate),
+      AI_VISION_API_KEY_present: Boolean(process.env.AI_VISION_API_KEY),
+      YOU_API_KEY_present: Boolean(process.env.YOU_API_KEY),
+      CATERBOT_SEARCH_PROVIDER: process.env.CATERBOT_SEARCH_PROVIDER || "(unset)",
+    })
     const images = [
       ...itemImages,
       body.specPlate || undefined,
