@@ -383,7 +383,6 @@ function titleFuelType(suggestion: QuickListAiResponse) {
     suggestion.voltage,
     suggestion.electrical_phase,
     suggestion.kw_rating,
-    suggestion.amps,
     suggestion.suggested_title,
     suggestion.title,
   ].filter(Boolean).join(" ").toLowerCase()
