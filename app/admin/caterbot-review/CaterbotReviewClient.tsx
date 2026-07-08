@@ -74,7 +74,7 @@ function fmt(n: number | null | undefined) {
   return n != null ? String(n) : ""
 }
 
-function RowCard({ listing, onSaved }: { listing: ReviewListing; onSaved: (id: string, patch: Partial<ReviewListing>) => void }) {
+function RowCard({ listing, onSaved, onDeleted }: { listing: ReviewListing; onSaved: (id: string, patch: Partial<ReviewListing>) => void; onDeleted: (id: string) => void }) {
   const hasDomainFlag = listing.flag_reasons.includes("source_domain_mismatch")
 
   // When pallet dims are detected, pre-fill H and Weight with corrected item values
@@ -88,7 +88,31 @@ function RowCard({ listing, onSaved }: { listing: ReviewListing; onSaved: (id: s
     source_url: listing.manual_source_url ?? "",
   })
   const [save, setSave] = useState<SaveState>({ status: "idle", listing_updated: false, kb_updated: false, kb_error: null, http_error: null })
+  const [deleteState, setDeleteState] = useState<"idle" | "confirm" | "deleting" | "error">("idle")
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const [showNotes, setShowNotes] = useState(false)
+
+  async function handleDelete() {
+    setDeleteState("deleting")
+    setDeleteError(null)
+    try {
+      const res = await fetch("/api/admin/caterbot-review", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ listing_id: listing.id }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setDeleteState("error")
+        setDeleteError(data.error || `HTTP ${res.status}`)
+        return
+      }
+      onDeleted(listing.id)
+    } catch (err) {
+      setDeleteState("error")
+      setDeleteError(String(err))
+    }
+  }
 
   async function handleSave() {
     setSave({ status: "saving", listing_updated: false, kb_updated: false, kb_error: null, http_error: null })
@@ -298,6 +322,38 @@ function RowCard({ listing, onSaved }: { listing: ReviewListing; onSaved: (id: s
               Raw notes
             </button>
           )}
+
+          {/* Delete — two-tap to prevent mis-tap on mobile */}
+          {deleteState === "idle" && (
+            <button
+              onClick={() => setDeleteState("confirm")}
+              className="rounded-xl border border-red-500/40 px-3 py-2 text-xs font-black text-red-400 transition hover:bg-red-500/10"
+            >
+              Delete
+            </button>
+          )}
+          {deleteState === "confirm" && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleDelete}
+                className="rounded-xl border border-red-500/60 bg-red-500/15 px-3 py-2 text-xs font-black text-red-300 transition hover:bg-red-500/25"
+              >
+                Confirm delete
+              </button>
+              <button
+                onClick={() => { setDeleteState("idle"); setDeleteError(null) }}
+                className="text-xs font-bold text-white/40 hover:text-white/70"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+          {deleteState === "deleting" && (
+            <span className="flex items-center gap-1.5 text-xs font-bold text-white/40">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Deleting…
+            </span>
+          )}
         </div>
 
         {/* Save result */}
@@ -321,6 +377,22 @@ function RowCard({ listing, onSaved }: { listing: ReviewListing; onSaved: (id: s
           </span>
         )}
       </div>
+
+      {/* Delete error — full-width row so it's unmissable on mobile */}
+      {deleteState === "error" && (
+        <div className="mt-2 flex items-center justify-between gap-3 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2">
+          <span className="flex items-center gap-1.5 text-xs font-bold text-red-300">
+            <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+            Delete failed: {deleteError}
+          </span>
+          <button
+            onClick={() => setDeleteState("idle")}
+            className="shrink-0 text-xs font-bold text-white/50 hover:text-white/80"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Raw notes expander */}
       {showNotes && listing.manual_source_match_notes && (
@@ -360,6 +432,10 @@ export default function CaterbotReviewClient() {
     setListings((prev) =>
       prev.map((l) => (l.id === id ? { ...l, ...patch } : l))
     )
+  }
+
+  function handleDeleted(id: string) {
+    setListings((prev) => prev.filter((l) => l.id !== id))
   }
 
   const flaggedCount = listings.filter((l) => l.is_flagged).length
@@ -453,7 +529,7 @@ export default function CaterbotReviewClient() {
         {!loading && !error && visible.length > 0 && (
           <div className="space-y-3">
             {visible.map((listing) => (
-              <RowCard key={listing.id} listing={listing} onSaved={handleSaved} />
+              <RowCard key={listing.id} listing={listing} onSaved={handleSaved} onDeleted={handleDeleted} />
             ))}
           </div>
         )}

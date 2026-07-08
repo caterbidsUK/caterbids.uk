@@ -252,3 +252,59 @@ export async function PATCH(req: NextRequest) {
 
   return NextResponse.json({ listing_updated: true, kb_updated: kbUpdated, kb_error: kbError })
 }
+
+export async function DELETE(req: NextRequest) {
+  const context = await getAdminContext()
+  if (!context) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+
+  let body: { listing_id?: string }
+  try {
+    body = await req.json()
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
+  }
+
+  const { listing_id } = body
+  if (!listing_id) return NextResponse.json({ error: "listing_id required" }, { status: 400 })
+
+  const admin = createAdminClient()
+
+  const { data: listing, error: fetchErr } = await (admin as any)
+    .from("listings")
+    .select("id, spec_brand")
+    .eq("id", listing_id)
+    .maybeSingle()
+
+  if (fetchErr || !listing) return NextResponse.json({ error: "Listing not found" }, { status: 404 })
+
+  // Clear only CaterBot-specific fields. The listing record itself (title, price,
+  // description, images, status, user_id, dimensions, etc.) is NOT touched.
+  const { error: updateErr } = await (admin as any)
+    .from("listings")
+    .update({
+      spec_brand:                null,
+      spec_model:                null,
+      ai_spec_confidence:        null,
+      manual_source_validated:   null,
+      manual_source_url:         null,
+      spec_source_url:           null,
+      manual_source_name:        null,
+      manual_source_type:        null,
+      manual_source_match_notes: null,
+      caterbot_admin_verified:   false,
+    })
+    .eq("id", listing_id)
+
+  if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 })
+
+  await writeAdminAuditLog({
+    adminUserId: context.userId,
+    adminEmail: context.email,
+    action: "caterbot_data_cleared",
+    entityType: "listing",
+    entityId: listing_id,
+    metadata: { cleared_spec_brand: listing.spec_brand },
+  })
+
+  return NextResponse.json({ deleted: true })
+}
