@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
+import BottomNav from "@/components/BottomNav";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -53,6 +54,9 @@ export default function RootLayout({
     >
       <body className="flex min-h-full flex-col bg-[#001633] font-sans text-white">
         {children}
+        {/* Spacer so fixed bottom nav never covers page content — hidden on desktop */}
+        <div className="lg:hidden shrink-0" style={{ height: "calc(8.5rem + env(safe-area-inset-bottom))" }} aria-hidden="true" />
+        <BottomNav />
         {gaId && (
           <>
             <Script
