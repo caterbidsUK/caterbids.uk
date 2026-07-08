@@ -440,6 +440,8 @@ export interface Database {
           is_featured: boolean | null
           featured_until: string | null
           featured_type: string | null
+          featured_at: string | null
+          featured_by: string | null
           sold_at: string | null
         }
         Insert: {
@@ -543,6 +545,8 @@ export interface Database {
           is_featured?: boolean | null
           featured_until?: string | null
           featured_type?: string | null
+          featured_at?: string | null
+          featured_by?: string | null
           sold_at?: string | null
         }
         Update: {
@@ -646,6 +650,8 @@ export interface Database {
           is_featured?: boolean | null
           featured_until?: string | null
           featured_type?: string | null
+          featured_at?: string | null
+          featured_by?: string | null
           sold_at?: string | null
         }
         Relationships: [
