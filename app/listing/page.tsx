@@ -1,6 +1,7 @@
 "use client"
 
 import Image from "next/image"
+import Link from "next/link"
 import SiteLogo from "@/components/SiteLogo"
 import { createClient } from '@/lib/supabase/client'
 import { getCurrentUser } from '@/lib/supabase/auth'
@@ -1756,6 +1757,19 @@ function ListingContent() {
 
             <SiteLogo size="sm" priority />
 
+            {/* Desktop nav — hidden on mobile (bottom nav handles mobile) */}
+            <nav className="ml-auto hidden items-center gap-5 text-sm font-bold text-white/80 lg:flex" aria-label="Primary">
+              <Link href="/search" className="transition hover:text-[#FF6B00]">Marketplace</Link>
+              <Link href="/post-listing" className="transition hover:text-[#FF6B00]">Sell</Link>
+              <Link href={currentUserId ? "/account" : "/login"} className="transition hover:text-[#FF6B00]">Account</Link>
+              <Link
+                href="/post-listing"
+                className="rounded-2xl bg-[#FF6B00] px-4 py-2.5 font-black text-white shadow-[0_8px_24px_rgba(255,107,0,0.28)] transition hover:brightness-110"
+              >
+                Start Free Listing
+              </Link>
+            </nav>
+
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -1792,6 +1806,13 @@ function ListingContent() {
                     Featured until {new Date(String((listing as any).featured_until)).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}
                   </p>
                 )}
+                <Link
+                  href="/account"
+                  className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-white/20 px-3 py-2 text-sm font-black text-white transition hover:bg-white/30"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  Back to my listings
+                </Link>
               </div>
               <button
                 type="button"
