@@ -116,6 +116,55 @@ async function prepareEmailEvent(supabase: SupabaseAdmin, input: EmailEventInput
   }
 }
 
+export async function sendFoundingMemberWelcomeEmail({
+  supabase,
+  sessionId,
+  recipientEmail,
+  recipientName,
+  recipientUserId,
+}: {
+  supabase: SupabaseAdmin
+  sessionId: string
+  recipientEmail?: string | null
+  recipientName?: string | null
+  recipientUserId?: string | null
+}) {
+  if (!recipientEmail) return
+
+  const dedupeKey = `${sessionId}:founding-member-welcome`
+  const existing = await supabase
+    .from("email_events")
+    .select("id")
+    .eq("dedupe_key", dedupeKey)
+    .maybeSingle()
+
+  if (existing.data) return
+  if (existing.error && !isMissingEmailEventsTable(existing.error)) {
+    console.warn("Could not check founding member email event:", existing.error.message)
+  }
+
+  const { foundingMemberWelcome } = await import("@/lib/email/templates/foundingMemberWelcome")
+  const { subject, text, html } = foundingMemberWelcome({ name: recipientName })
+
+  const result = await sendEmail({ to: recipientEmail, subject, text, html })
+  const status = result.ok ? "sent" : result.status === "not_configured" ? "prepared" : "failed"
+  const now = new Date().toISOString()
+
+  await supabase.from("email_events").insert({
+    dedupe_key: dedupeKey,
+    recipient_user_id: recipientUserId || null,
+    recipient_email: recipientEmail,
+    template: "founding_member_welcome",
+    subject,
+    body: text,
+    status,
+    provider: result.ok || result.status === "not_configured" ? (result as any).provider || "local" : (result as any).provider || "unknown",
+    sent_at: status === "sent" ? now : null,
+    error: result.ok ? null : (result as any).error || null,
+    updated_at: now,
+  })
+}
+
 export async function sendPaymentSuccessEmails({
   supabase,
   order,

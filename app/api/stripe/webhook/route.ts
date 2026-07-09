@@ -9,7 +9,7 @@ import {
   upsertDeliveryOrderAfterPayment,
 } from "@/lib/delivery/deliveryOrders"
 import { resolveFullUkPostcode } from "@/lib/delivery/postcodes"
-import { sendPaymentSuccessEmails } from "@/lib/email/orderNotifications"
+import { sendPaymentSuccessEmails, sendFoundingMemberWelcomeEmail } from "@/lib/email/orderNotifications"
 
 export const runtime = "nodejs"
 
@@ -220,6 +220,17 @@ export async function POST(req: NextRequest) {
       await (supabase.from("profiles") as any)
         .update({ is_founding_member: true, updated_at: new Date().toISOString() })
         .eq("id", sellerId)
+      try {
+        await sendFoundingMemberWelcomeEmail({
+          supabase,
+          sessionId: session.id,
+          recipientEmail: session.customer_email,
+          recipientName: session.customer_details?.name,
+          recipientUserId: sellerId,
+        })
+      } catch (emailError) {
+        console.warn("Founding member welcome email failed (non-fatal):", emailError)
+      }
       return NextResponse.json({ received: true, foundingMember: true })
     } catch (error) {
       Sentry.captureException(error, { tags: { webhook_stage: "founding_member" } })

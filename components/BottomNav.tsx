@@ -16,7 +16,13 @@ export default function BottomNav() {
   const pathname = usePathname()
   const isActive = useIsActive(pathname)
 
+  // Hide nav (and its spacer) on the listing-creation flow
+  if (pathname === "/post-listing" || pathname.startsWith("/post-listing/")) return null
+
   return (
+    <>
+    {/* In-flow spacer: reserves space so the fixed nav never overlaps page content */}
+    <div className="lg:hidden shrink-0" style={{ height: "calc(8.5rem + env(safe-area-inset-bottom))" }} aria-hidden="true" />
     <nav
       className="fixed bottom-0 left-0 right-0 z-50 lg:hidden"
       aria-label="Mobile navigation"
@@ -113,5 +119,6 @@ export default function BottomNav() {
         </div>
       </div>
     </nav>
+    </>
   )
 }

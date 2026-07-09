@@ -107,7 +107,10 @@ export async function POST(req: NextRequest) {
       durationDays: String(plan.duration_days || 30),
       monthly: String(plan.monthly),
     },
-    success_url: `${siteUrl}/post-listing?seller_plan=success`,
+    success_url:
+      plan.type === "founding_member"
+        ? `${siteUrl}/founding-member/welcome?checkout=success`
+        : `${siteUrl}/post-listing?seller_plan=success`,
     cancel_url: `${siteUrl}/pricing?seller_plan=cancelled`,
   })
 
