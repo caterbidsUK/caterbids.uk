@@ -282,6 +282,7 @@ function defaultProfile(user: DashboardUser, emailVerified: boolean): Profile {
     stripe_identity_status: null,
     government_id_verified: false,
     business_verified: false,
+    is_founding_member: false,
     companies_house_number: null,
     vat_number: null,
     trust_notes: null,

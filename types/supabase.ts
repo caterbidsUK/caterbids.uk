@@ -116,6 +116,7 @@ export interface Database {
           stripe_identity_status: string | null
           government_id_verified: boolean
           business_verified: boolean
+          is_founding_member: boolean
           companies_house_number: string | null
           vat_number: string | null
           trust_notes: string | null
@@ -164,6 +165,7 @@ export interface Database {
           stripe_identity_status?: string | null
           government_id_verified?: boolean
           business_verified?: boolean
+          is_founding_member?: boolean
           companies_house_number?: string | null
           vat_number?: string | null
           trust_notes?: string | null
@@ -212,6 +214,7 @@ export interface Database {
           stripe_identity_status?: string | null
           government_id_verified?: boolean
           business_verified?: boolean
+          is_founding_member?: boolean
           companies_house_number?: string | null
           vat_number?: string | null
           trust_notes?: string | null

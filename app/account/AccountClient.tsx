@@ -26,6 +26,7 @@ import type { Database } from "@/types/supabase"
 import { createClient } from "@/lib/supabase/client"
 import { buildSellerTrustSummary } from "@/lib/trust/badges"
 import { isFeaturedAndActive } from "@/lib/featured"
+import FoundingMemberBadge from "@/components/FoundingMemberBadge"
 
 type Profile = Database["public"]["Tables"]["profiles"]["Row"]
 const LOCAL_PROFILE_KEY = "caterbids_profile"
@@ -463,6 +464,12 @@ export default function AccountClient({
               <p className="truncate text-sm text-white/60">
                 {displayProfile.business || "No business name"}
               </p>
+
+              {(displayProfile as any).is_founding_member && (
+                <div className="mt-2">
+                  <FoundingMemberBadge />
+                </div>
+              )}
 
               <div
                 className="premium-badge mt-3 inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-bold"

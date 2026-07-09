@@ -44,6 +44,7 @@ import SellerTrustCard from "@/components/trust/SellerTrustCard"
 import SocialShareButtons from "@/components/social/SocialShareButtons"
 import SellerSocialLinks, { type SellerSocialLinksValue } from "@/components/social/SellerSocialLinks"
 import FeaturedBoostButton from "@/components/FeaturedBoostButton"
+import FoundingMemberBadge from "@/components/FoundingMemberBadge"
 import SellerReviewsList from "@/components/SellerReviewsList"
 import { isFeaturedAndActive } from "@/lib/featured"
 import type { DeliveryQuote } from "@/components/DeliveryQuoteBox"
@@ -75,6 +76,7 @@ type SellerProfile = Pick<
   | 'business_verified'
   | 'government_id_verified'
   | 'stripe_connect_onboarding_complete'
+  | 'is_founding_member'
   | 'created_at'
   | 'name'
   | 'full_name'
@@ -936,14 +938,14 @@ function ListingContent() {
         const supabase = createClient()
         let publicProfileResult = await supabase
           .from("seller_public_profiles" as "profiles")
-          .select("verified,email_verified,is_email_verified,phone_verified,is_phone_verified,verified_user_badge,seller_verification_level,business_verified,government_id_verified,stripe_connect_onboarding_complete,created_at,name,full_name,business,social_links")
+          .select("verified,email_verified,is_email_verified,phone_verified,is_phone_verified,verified_user_badge,seller_verification_level,business_verified,government_id_verified,stripe_connect_onboarding_complete,is_founding_member,created_at,name,full_name,business,social_links")
           .eq("id", sellerId)
           .maybeSingle()
 
         if (publicProfileResult.error && /full_name|social_links|schema cache|column|does not exist/i.test(publicProfileResult.error.message || "")) {
           publicProfileResult = await supabase
             .from("seller_public_profiles" as "profiles")
-            .select("verified,email_verified,is_email_verified,phone_verified,is_phone_verified,verified_user_badge,seller_verification_level,business_verified,government_id_verified,stripe_connect_onboarding_complete,created_at,name,business")
+            .select("verified,email_verified,is_email_verified,phone_verified,is_phone_verified,verified_user_badge,seller_verification_level,business_verified,government_id_verified,stripe_connect_onboarding_complete,is_founding_member,created_at,name,business")
             .eq("id", sellerId)
             .maybeSingle()
         }
@@ -968,14 +970,14 @@ function ListingContent() {
 
         let fallback = await supabase
           .from("profiles")
-          .select("verified,email_verified,phone_verified,badge,seller_verification_level,business_verified,government_id_verified,stripe_connect_onboarding_complete,created_at,name,full_name,business,social_links")
+          .select("verified,email_verified,phone_verified,badge,seller_verification_level,business_verified,government_id_verified,stripe_connect_onboarding_complete,is_founding_member,created_at,name,full_name,business,social_links")
           .eq("id", sellerId)
           .maybeSingle()
 
         if (fallback.error && /social_links|schema cache|column|does not exist/i.test(fallback.error.message || "")) {
           fallback = await supabase
             .from("profiles")
-            .select("verified,email_verified,phone_verified,badge,seller_verification_level,business_verified,government_id_verified,stripe_connect_onboarding_complete,created_at,name,full_name,business")
+            .select("verified,email_verified,phone_verified,badge,seller_verification_level,business_verified,government_id_verified,stripe_connect_onboarding_complete,is_founding_member,created_at,name,full_name,business")
             .eq("id", sellerId)
             .maybeSingle()
         }
@@ -992,6 +994,7 @@ function ListingContent() {
                 business_verified: Boolean(fallbackProfile.business_verified),
                 government_id_verified: Boolean(fallbackProfile.government_id_verified),
                 stripe_connect_onboarding_complete: Boolean(fallbackProfile.stripe_connect_onboarding_complete),
+                is_founding_member: Boolean((fallbackProfile as any).is_founding_member),
                 created_at: fallbackProfile.created_at || null,
                 name: fallbackProfile.name || null,
                 full_name: fallbackProfile.full_name || null,
@@ -2386,6 +2389,11 @@ function ListingContent() {
                     {sellerFullyVerified ? "Verified Seller" : "Seller Profile"}
                   </p>
                   <h2 className="mt-1 text-xl font-black text-white">{sellerDisplayName}</h2>
+                  {sellerProfile?.is_founding_member && (
+                    <div className="mt-1.5">
+                      <FoundingMemberBadge />
+                    </div>
+                  )}
                   {sellerJoinedDate && (
                     <p className="mt-1 text-sm font-semibold text-white/55">Joined {formatUKDate(sellerJoinedDate)}</p>
                   )}
