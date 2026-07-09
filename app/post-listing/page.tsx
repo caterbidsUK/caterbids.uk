@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import NextImage from "next/image"
 import SiteLogo from "@/components/SiteLogo"
 import { useEffect, useState, useTransition, type Dispatch, type SetStateAction } from "react"
-import { Bell, CheckCircle2, ClipboardCheck, ImagePlus, Loader2, PackageCheck, ScanSearch, UploadCloud, X } from "lucide-react"
+import { Bell, CheckCircle2, ClipboardCheck, ImagePlus, Loader2, PackageCheck, ScanSearch, Star, UploadCloud, X } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { getCurrentUser } from "@/lib/supabase/auth"
 import { createListing } from "./actions"
@@ -758,6 +758,11 @@ function PostListingPage() {
     featured_price_7d: number
     featured_price_30d: number
   } | null>(null)
+  const [foundingMemberData, setFoundingMemberData] = useState<{
+    isFoundingMember: boolean
+    hasFoundingFreeFeature: boolean
+  } | null>(null)
+  const [foundingFreeFeatureSelected, setFoundingFreeFeatureSelected] = useState(false)
   const [accessRestrictions, setAccessRestrictions] = useState("")
   const [deliveryNotes, setDeliveryNotes] = useState("")
   const [deliveryDetailsConfirmed, setDeliveryDetailsConfirmed] = useState(false)
@@ -967,7 +972,7 @@ function PostListingPage() {
   useEffect(() => {
     fetch("/api/payment-settings")
       .then((r) => r.json())
-      .then((data: { settings?: Record<string, unknown> }) => {
+      .then((data: { settings?: Record<string, unknown>; isFoundingMember?: boolean; hasFoundingFreeFeature?: boolean }) => {
         const s = data?.settings
         if (s) {
           setBoostSettings({
@@ -976,8 +981,14 @@ function PostListingPage() {
             featured_price_30d: Number(s.featured_price_30d) || 14.99,
           })
         }
+        setFoundingMemberData({
+          isFoundingMember: Boolean(data?.isFoundingMember),
+          hasFoundingFreeFeature: Boolean(data?.hasFoundingFreeFeature),
+        })
       })
-      .catch(() => {})
+      .catch(() => {
+        setFoundingMemberData({ isFoundingMember: false, hasFoundingFreeFeature: false })
+      })
   }, [])
 
   function requireLogin() {
@@ -2511,11 +2522,17 @@ function PostListingPage() {
         }
       }
 
+      // Signal to actions.ts whether to apply the founding free feature at creation
+      if (foundingFreeFeatureSelected) {
+        formData.set("founding_free_feature", "on")
+      }
+
       const result = await createListing(formData)
       if (!result) return
 
       if (result.success) {
-        if (featureBoostDays) {
+        // Founding free feature is applied server-side — skip Stripe checkout
+        if (!foundingFreeFeatureSelected && featureBoostDays) {
           try {
             const featRes = await fetch("/api/stripe/create-featured-checkout-session", {
               method: "POST",
@@ -4195,7 +4212,64 @@ function PostListingPage() {
           </div>
           </div>
 
-          {boostSettings?.featured_boosts_enabled && (
+          {/* ── Feature at creation ── */}
+          {foundingMemberData?.isFoundingMember && !foundingMemberData.hasFoundingFreeFeature ? (
+            /* Case A: Founding member, free slot available */
+            <div className="mt-6 rounded-2xl border border-[#FF6B00]/30 bg-[#0a2a4a] p-4">
+              <div className="mb-2 flex items-center gap-2">
+                <Star className="h-4 w-4 fill-[#FF6B00] text-[#FF6B00]" />
+                <p className="text-sm font-black text-white">Founding Member free feature</p>
+              </div>
+              <p className="mb-4 text-xs font-semibold text-white/55">
+                As a Founding Member you have one free featured listing slot. Apply it here — no payment needed.
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setFoundingFreeFeatureSelected(false)}
+                  className={`rounded-xl border px-3 py-3 text-center transition ${
+                    !foundingFreeFeatureSelected
+                      ? "border-white/35 bg-white/10 text-white"
+                      : "border-white/12 bg-white/5 text-white/45 hover:border-white/25 hover:text-white/70"
+                  }`}
+                >
+                  <p className="text-[11px] font-black">No thanks</p>
+                  <p className="text-[10px] font-semibold text-white/40">Skip for now</p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFoundingFreeFeatureSelected(true)}
+                  className={`rounded-xl border px-3 py-3 text-center transition ${
+                    foundingFreeFeatureSelected
+                      ? "border-[#FF6B00] bg-[#FF6B00]/15 text-white"
+                      : "border-white/12 bg-white/5 text-white/45 hover:border-white/25 hover:text-white/70"
+                  }`}
+                >
+                  <p className="text-[11px] font-black">Feature for free</p>
+                  <p className={`text-[10px] font-semibold ${foundingFreeFeatureSelected ? "text-[#FF6B00]" : "text-white/40"}`}>
+                    Founding perk
+                  </p>
+                </button>
+              </div>
+              {foundingFreeFeatureSelected && (
+                <p className="mt-3 text-center text-[10px] font-semibold text-white/40">
+                  Applied instantly at publish — no Stripe checkout.
+                </p>
+              )}
+            </div>
+          ) : foundingMemberData?.isFoundingMember && foundingMemberData.hasFoundingFreeFeature ? (
+            /* Case B: Founding member, slot taken by another listing */
+            <div className="mt-6 rounded-2xl border border-white/10 bg-[#0a2a4a] p-4">
+              <div className="mb-2 flex items-center gap-2">
+                <Star className="h-4 w-4 text-[#FF6B00]" />
+                <p className="text-sm font-black text-white">Founding Member feature slot in use</p>
+              </div>
+              <p className="text-xs font-semibold text-white/55">
+                Your free founding feature is applied to another listing. You can move it from your account dashboard after publishing.
+              </p>
+            </div>
+          ) : boostSettings?.featured_boosts_enabled ? (
+            /* Case C: Non-founding member — paid feature boost */
             <div className="mt-6 rounded-2xl border border-[#FF6B00]/20 bg-[#0a2a4a] p-4">
               <div className="mb-2 flex items-center gap-2">
                 <Bell className="h-4 w-4 text-[#FF6B00]" />
@@ -4250,7 +4324,7 @@ function PostListingPage() {
                 </p>
               )}
             </div>
-          )}
+          ) : null}
 
           {publishError && (
             <p className="mt-4 rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-bold text-orange-800">

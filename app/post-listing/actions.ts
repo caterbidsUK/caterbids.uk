@@ -315,21 +315,27 @@ export async function createListing(
   }
 
   let paidEntitlementToUse: SellerListingEntitlement | null = null
+  let isFoundingMember = false
 
   try {
     const admin = createAdminClient()
-    const [{ data: paymentSettingsRow }, { count: sellerLiveListingCount }] = await Promise.all([
+    const [{ data: paymentSettingsRow }, { count: sellerLiveListingCount }, { data: profileForEntitlement }] = await Promise.all([
       admin.from('payment_settings' as never).select('*').limit(1).maybeSingle(),
       admin
         .from('listings')
         .select('id', { count: 'exact', head: true })
         .eq('user_id', user.id)
         .in('status', ['live', 'active', 'pending_payment']),
+      admin.from('profiles').select('is_founding_member').eq('id', user.id).maybeSingle(),
     ])
     const paymentSettings = normalisePaymentSettings(paymentSettingsRow as Record<string, unknown> | null)
     const currentLiveListings = sellerLiveListingCount || 0
+    isFoundingMember = Boolean((profileForEntitlement as any)?.is_founding_member)
 
-    if (!sellerCanPublishForFree(paymentSettings, currentLiveListings)) {
+    if (isFoundingMember && currentLiveListings < 30) {
+      // Founding Trade Member fast-path: up to 30 concurrent live listings, free.
+      // paidEntitlementToUse stays null — no entitlement consumed.
+    } else if (!sellerCanPublishForFree(paymentSettings, currentLiveListings)) {
       const { data: entitlements } = await admin
         .from('seller_listing_entitlements')
         .select('*')
@@ -542,6 +548,32 @@ export async function createListing(
         .eq('id', paidEntitlementToUse.id)
     } catch (entitlementError) {
       console.warn('Listing published but paid seller allowance was not updated:', entitlementError)
+    }
+  }
+
+  // PART 2: Founding Member free feature — apply inline at creation if requested.
+  // Non-fatal: listing is already live; a failed feature is recoverable from the dashboard.
+  if (createdListing?.id && isFoundingMember && formData.get('founding_free_feature') === 'on') {
+    try {
+      const admin = createAdminClient()
+      // Re-check that no other listing already holds the slot (race-safe within reason).
+      const { count: existingSlotCount } = await admin
+        .from('listings')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('featured_type', 'founding_free')
+      if ((existingSlotCount || 0) === 0) {
+        await admin
+          .from('listings')
+          .update({
+            featured: true,
+            featured_type: 'founding_free',
+            featured_at: new Date().toISOString(),
+          } as never)
+          .eq('id', createdListing.id)
+      }
+    } catch (featureError) {
+      console.warn('Founding free feature could not be applied at creation:', featureError)
     }
   }
 

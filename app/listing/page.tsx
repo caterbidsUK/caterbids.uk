@@ -2374,6 +2374,7 @@ function ListingContent() {
                 listingId={safeListingId(listing.id)}
                 isFeatured={Boolean((listing as any).featured || (listing as any).is_featured)}
                 featuredUntil={(listing as any).featured_until ?? null}
+                featuredType={listing.featured_type ?? null}
               />
             )}
 
