@@ -9,7 +9,7 @@ import {
   upsertDeliveryOrderAfterPayment,
 } from "@/lib/delivery/deliveryOrders"
 import { resolveFullUkPostcode } from "@/lib/delivery/postcodes"
-import { sendPaymentSuccessEmails, sendFoundingMemberWelcomeEmail } from "@/lib/email/orderNotifications"
+import { sendPaymentSuccessEmails, sendFoundingMemberWelcomeEmail, sendSubscriptionPaymentFailedEmail } from "@/lib/email/orderNotifications"
 
 export const runtime = "nodejs"
 
@@ -131,10 +131,113 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid Stripe webhook signature" }, { status: 400 })
   }
 
-  if (event.type !== "checkout.session.completed") {
+  const HANDLED_EVENTS = new Set([
+    "checkout.session.completed",
+    "invoice.paid",
+    "invoice.payment_failed",
+    "customer.subscription.deleted",
+  ])
+
+  if (!HANDLED_EVENTS.has(event.type)) {
     return NextResponse.json({ received: true })
   }
 
+  // ── invoice.paid (subscription renewal) ──────────────────────────────────
+  if (event.type === "invoice.paid") {
+    const invoice = event.data.object as Stripe.Invoice
+    // Only act on monthly renewals — 'subscription_create' is handled by checkout.session.completed
+    if (invoice.billing_reason !== "subscription_cycle") {
+      return NextResponse.json({ received: true })
+    }
+    const rawSub = invoice.subscription
+    const subId = typeof rawSub === "string" ? rawSub : (rawSub as Stripe.Subscription | null)?.id ?? null
+    if (!subId) {
+      console.warn("invoice.paid (cycle): no subscription ID on invoice", invoice.id)
+      return NextResponse.json({ received: true })
+    }
+    // period_end on the invoice is identical to current_period_end on the subscription — no extra API call needed
+    const expiresAt = new Date(invoice.period_end * 1000).toISOString()
+    try {
+      const supabase = createAdminClient()
+      const { error } = await (supabase.from("seller_listing_entitlements") as any)
+        .update({
+          listing_count_used: 0,
+          expires_at: expiresAt,
+          active: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("stripe_subscription_id", subId)
+      if (error) throw error
+      console.log("invoice.paid: renewed entitlement for subscription", subId, "expires", expiresAt)
+      return NextResponse.json({ received: true, renewed: true })
+    } catch (error) {
+      Sentry.captureException(error, { tags: { webhook_stage: "invoice_paid" } })
+      console.error("invoice.paid renewal failed:", error)
+      return NextResponse.json({ error: "Could not renew entitlement" }, { status: 500 })
+    }
+  }
+
+  // ── invoice.payment_failed (failed renewal) ───────────────────────────────
+  if (event.type === "invoice.payment_failed") {
+    const invoice = event.data.object as Stripe.Invoice
+    const rawSub = invoice.subscription
+    const subId = typeof rawSub === "string" ? rawSub : (rawSub as Stripe.Subscription | null)?.id ?? null
+    if (!subId) {
+      console.warn("invoice.payment_failed: no subscription ID on invoice", invoice.id)
+      return NextResponse.json({ received: true })
+    }
+    try {
+      const supabase = createAdminClient()
+      // Fetch plan details before suspending, for the email
+      const { data: ent } = await (supabase.from("seller_listing_entitlements") as any)
+        .select("seller_id, plan_name")
+        .eq("stripe_subscription_id", subId)
+        .maybeSingle()
+      const { error } = await (supabase.from("seller_listing_entitlements") as any)
+        .update({ active: false, updated_at: new Date().toISOString() })
+        .eq("stripe_subscription_id", subId)
+      if (error) throw error
+      console.log("invoice.payment_failed: suspended entitlement for subscription", subId)
+      if (invoice.customer_email) {
+        try {
+          await sendSubscriptionPaymentFailedEmail({
+            supabase,
+            invoiceId: invoice.id ?? subId,
+            recipientEmail: invoice.customer_email,
+            recipientUserId: ent?.seller_id ?? null,
+            planName: ent?.plan_name ?? null,
+          })
+        } catch (emailError) {
+          console.warn("Payment failed email non-fatal:", emailError)
+        }
+      }
+      return NextResponse.json({ received: true, suspended: true })
+    } catch (error) {
+      Sentry.captureException(error, { tags: { webhook_stage: "invoice_payment_failed" } })
+      console.error("invoice.payment_failed handling failed:", error)
+      return NextResponse.json({ error: "Could not suspend entitlement" }, { status: 500 })
+    }
+  }
+
+  // ── customer.subscription.deleted (cancellation) ──────────────────────────
+  if (event.type === "customer.subscription.deleted") {
+    const subscription = event.data.object as Stripe.Subscription
+    try {
+      const supabase = createAdminClient()
+      const { error } = await (supabase.from("seller_listing_entitlements") as any)
+        .update({ active: false, updated_at: new Date().toISOString() })
+        .eq("stripe_subscription_id", subscription.id)
+      if (error) throw error
+      console.log("customer.subscription.deleted: deactivated entitlement for subscription", subscription.id)
+      return NextResponse.json({ received: true, cancelled: true })
+    } catch (error) {
+      Sentry.captureException(error, { tags: { webhook_stage: "subscription_deleted" } })
+      console.error("customer.subscription.deleted handling failed:", error)
+      return NextResponse.json({ error: "Could not cancel entitlement" }, { status: 500 })
+    }
+  }
+
+  // ── checkout.session.completed ────────────────────────────────────────────
   console.log("checkout.session.completed received")
 
   const session = event.data.object as Stripe.Checkout.Session
