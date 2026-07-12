@@ -2298,7 +2298,7 @@ function ListingContent() {
                   </span>
                 )}
                 {trustBadges
-                  .filter((badge) => !/delivery available|manuals/i.test(badge))
+                  .filter((badge) => !/delivery available|manuals/i.test(badge) && badge !== listing.power_type)
                   .map((badge) => (
                     <span
                       key={badge}
