@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="currentColor" role="img" aria-labelledby="t">
+  <title id="t">Cooking equipment</title>
+  <path fill-rule="evenodd" d="M116 64h280c15 0 28 11 31 26l17 78H68l17-78c3-15 16-26 31-26Zm42 34a14 14 0 0 0 0 28h66a14 14 0 0 0 0-28h-66Zm130 0a14 14 0 0 0 0 28h66a14 14 0 0 0 0-28h-66Z"/>
+  <path fill-rule="evenodd" d="M88 184h336c13 0 24 11 24 24v48c0 13-11 24-24 24H88c-13 0-24-11-24-24v-48c0-13 11-24 24-24Zm88 24a16 16 0 1 0 0 32 16 16 0 1 0 0-32Zm80 0a16 16 0 1 0 0 32 16 16 0 1 0 0-32Zm80 0a16 16 0 1 0 0 32 16 16 0 1 0 0-32Z"/>
+  <path fill-rule="evenodd" d="M96 296h320v128c0 18-14 32-32 32H128c-18 0-32-14-32-32V296Zm72 40c-9 0-16 7-16 16v56c0 9 7 16 16 16h176c9 0 16-7 16-16v-56c0-9-7-16-16-16H168Z"/>
+</svg>

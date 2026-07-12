@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="currentColor" role="img" aria-labelledby="t">
+  <title id="t">Food preparation</title>
+  <path d="M160 64h192c18 0 32 14 32 32v40H160V64Z"/>
+  <path d="M160 152h224v28H160v-28Z"/>
+  <path d="M328 180h32v96h-32v-96Z"/>
+  <path d="M240 180h32v40h-32v-40Zm10 40h12v44h-12v-44Z"/>
+  <path fill-rule="evenodd" d="M136 276h240v40c0 66-54 120-120 120s-120-54-120-120v-40Zm40 40v40c0 44 36 80 80 80s80-36 80-80v-40H176Z"/>
+  <path d="M96 448h320v32H96v-32Z"/>
+</svg>

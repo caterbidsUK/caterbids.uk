@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="currentColor" role="img" aria-labelledby="t">
+  <title id="t">Coffee and bar equipment</title>
+  <path fill-rule="evenodd" d="M120 64h272c18 0 32 14 32 32v72c0 18-14 32-32 32H120c-18 0-32-14-32-32V96c0-18 14-32 32-32Zm40 44a18 18 0 1 0 0 36 18 18 0 0 0 0-36Zm96-8a26 26 0 1 0 0 52 26 26 0 0 0 0-52Zm96 8a18 18 0 1 0 0 36 18 18 0 0 0 0-36Z"/>
+  <path d="M148 200h32v56h-32v-56Zm76 0h64l-16 40h-32l-16-40Zm20 48h24v24h-24v-24Z"/>
+  <path fill-rule="evenodd" d="M212 280h88c0 24-20 44-44 44s-44-20-44-44Z"/>
+  <path d="M352 200h20c14 0 24 11 24 24v40c0 9-7 16-16 16h-12v-32h4v-24h-20v-24Z"/>
+  <path d="M96 336h320v56H96v-56Z"/>
+</svg>

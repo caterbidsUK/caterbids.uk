@@ -23,14 +23,6 @@ import {
   X,
   UserCircle,
   Bell,
-  CookingPot,
-  Refrigerator,
-  Blend,
-  WashingMachine,
-  Coffee,
-  Store,
-  Archive,
-  Wrench,
   Shield,
   CheckCircle,
   Star,
@@ -86,15 +78,30 @@ const GENERIC_MARKETPLACE_TERMS = new Set([
   "for",
 ])
 
+const maskStyle = (slug: string): React.CSSProperties => ({
+  display: "block",
+  width: "2rem",
+  height: "2rem",
+  backgroundColor: "currentColor",
+  WebkitMaskImage: `url('/icons/categories/${slug}.svg')`,
+  maskImage: `url('/icons/categories/${slug}.svg')`,
+  WebkitMaskSize: "contain",
+  maskSize: "contain",
+  WebkitMaskRepeat: "no-repeat",
+  maskRepeat: "no-repeat",
+  WebkitMaskPosition: "center",
+  maskPosition: "center",
+})
+
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
-  "cooking-equipment":       <CookingPot className="h-8 w-8" />,
-  "refrigeration":           <Refrigerator className="h-8 w-8" />,
-  "food-preparation":        <Blend className="h-8 w-8" />,
-  "warewashing-sinks":       <WashingMachine className="h-8 w-8" />,
-  "coffee-bar-equipment":    <Coffee className="h-8 w-8" />,
-  "display-serving":         <Store className="h-8 w-8" />,
-  "stainless-steel-storage": <Archive className="h-8 w-8" />,
-  "parts-spares":            <Wrench className="h-8 w-8" />,
+  "cooking-equipment":       <span style={maskStyle("cooking-equipment")} />,
+  "refrigeration":           <span style={maskStyle("refrigeration")} />,
+  "food-preparation":        <span style={maskStyle("food-preparation")} />,
+  "warewashing-sinks":       <span style={maskStyle("warewashing-sinks")} />,
+  "coffee-bar-equipment":    <span style={maskStyle("coffee-bar-equipment")} />,
+  "display-serving":         <span style={maskStyle("display-serving")} />,
+  "stainless-steel-storage": <span style={maskStyle("stainless-steel-storage")} />,
+  "parts-spares":            <span style={maskStyle("parts-spares")} />,
 }
 
 const conditionFilters: { key: ConditionFilter; label: string }[] = [

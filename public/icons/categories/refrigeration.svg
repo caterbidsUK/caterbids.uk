@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="currentColor" role="img" aria-labelledby="t">
+  <title id="t">Refrigeration and cold storage</title>
+  <path fill-rule="evenodd" d="M172 48h168c22 0 40 18 40 40v152H132V88c0-22 18-40 40-40Zm22 46a12 12 0 0 0-12 12v56a12 12 0 0 0 24 0v-56a12 12 0 0 0-12-12Z"/>
+  <path fill-rule="evenodd" d="M132 272h248v152c0 22-18 40-40 40H172c-22 0-40-18-40-40V272Zm62 44a12 12 0 0 0-12 12v56a12 12 0 0 0 24 0v-56a12 12 0 0 0-12-12Z"/>
+</svg>

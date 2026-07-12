@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="currentColor" role="img" aria-labelledby="t">
+  <title id="t">Warewashing and sinks</title>
+  <path fill-rule="evenodd" d="M232 56c-31 0-56 25-56 56v20h32v-20c0-13 11-24 24-24s24 11 24 24v16h-16v40h64v-40h-16v-16c0-31-25-56-56-56Z"/>
+  <path d="M64 176h384v40H64v-40Z"/>
+  <path fill-rule="evenodd" d="M88 240h160v168H88V240Zm28 24a10 10 0 0 0-10 10v40a10 10 0 0 0 20 0v-40a10 10 0 0 0-10-10Z"/>
+  <path fill-rule="evenodd" d="M264 240h160v168H264V240Zm80 32a52 52 0 1 0 0 104 52 52 0 0 0 0-104Zm0 30a22 22 0 1 1 0 44 22 22 0 0 1 0-44Z"/>
+</svg>
