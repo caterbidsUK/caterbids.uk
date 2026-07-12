@@ -138,8 +138,8 @@ export default async function AdminPage({
   // Pattern: keep row when column IS NULL (not a user row) OR column NOT IN testIds.
   const tf = testUserIds.length > 0 ? testUserIds.join(",") : null
   const listingUserFilter  = tf ? `user_id.is.null,user_id.not.in.(${tf})` : null
-  const orderBuyerFilter   = tf ? `buyer_id.is.null,buyer_id.not.in.(${tf})` : null
-  const orderSellerFilter  = tf ? `seller_id.is.null,seller_id.not.in.(${tf})` : null
+  const orderBuyerFilter   = tf ? `buyer_id.not.in.(${tf})` : null
+  const orderSellerFilter  = tf ? `seller_id.not.in.(${tf})` : null
   const msgSenderFilter    = tf ? `sender_id.is.null,sender_id.not.in.(${tf})` : null
   const msgRecipFilter     = tf ? `recipient_id.is.null,recipient_id.not.in.(${tf})` : null
 
