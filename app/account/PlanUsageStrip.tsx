@@ -27,15 +27,13 @@ function Skeleton() {
 }
 
 function PlanPill({ planType, planName }: { planType: PlanUsageResponse["planType"]; planName: string }) {
-  const isFoundingOrSubscription = planType === "founding" || planType === "subscription"
-  const isNone = planType === "none"
+  if (planType === "none") return null
 
-  if (isNone) return null
-
+  const isAccented = planType === "founding" || planType === "subscription"
   return (
     <span
       className={
-        isFoundingOrSubscription
+        isAccented
           ? "inline-flex items-center rounded-full border border-[#FF6B00]/40 bg-[#002E5D] px-3 py-1 text-xs font-black uppercase tracking-wide text-[#FF6B00]"
           : "inline-flex items-center rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-black uppercase tracking-wide text-white/60"
       }
@@ -58,7 +56,7 @@ export default function PlanUsageStrip() {
   if (state.status === "loading") return <Skeleton />
   if (state.status === "error") return null
 
-  const { planType, planName, remainingLabel, expiryLabel, buyMoreHref } = state.data
+  const { planType, planName, remainingLabel, expiryLabel, buyMoreHref, extraCredits } = state.data
 
   if (planType === "none") {
     return (
@@ -79,17 +77,27 @@ export default function PlanUsageStrip() {
     )
   }
 
+  const extraLabel =
+    extraCredits.count > 0
+      ? `+${extraCredits.count} listing ${extraCredits.count === 1 ? "credit" : "credits"}${
+          extraCredits.expiryDays !== null ? ` (${extraCredits.expiryDays} days left)` : ""
+        }`
+      : null
+
   return (
     <div className="rounded-2xl border border-white/10 bg-[#062747]/60 px-5 py-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        {/* Left: pill + remaining */}
-        <div className="flex flex-wrap items-center gap-2.5">
+        {/* Left: pill + primary remaining + extra credits */}
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
           <PlanPill planType={planType} planName={planName} />
           <span className="text-sm font-bold text-white">{remainingLabel}</span>
+          {extraLabel && (
+            <span className="text-xs font-semibold text-white/45">· {extraLabel}</span>
+          )}
         </div>
 
         {/* Right: expiry + action */}
-        <div className="flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-3">
           {expiryLabel && (
             <span className="text-xs font-semibold text-white/40">{expiryLabel}</span>
           )}

@@ -20,6 +20,11 @@ export type PlanUsageResponse = {
   expiryDays: number | null
   buyMoreHref: string
   extra: Record<string, unknown> | null
+  extraCredits: {
+    count: number
+    expiresAt: string | null
+    expiryDays: number | null
+  }
 }
 
 export async function GET() {
@@ -49,6 +54,8 @@ export async function GET() {
       packCreditsRemaining,
       packSoonestExpiresAt,
       freeFeatureSlotInUse,
+      extraPackCredits,
+      extraPackExpiresAt,
     } = credits
 
     let remainingLabel: string
@@ -96,6 +103,12 @@ export async function GET() {
     const extra: Record<string, unknown> | null =
       planType === "founding" ? { freeFeatureSlotInUse: Boolean(freeFeatureSlotInUse) } : null
 
+    const extraCredits = {
+      count: extraPackCredits,
+      expiresAt: extraPackExpiresAt,
+      expiryDays: extraPackExpiresAt ? daysUntil(extraPackExpiresAt) : null,
+    }
+
     const body: PlanUsageResponse = {
       planType,
       planName,
@@ -107,6 +120,7 @@ export async function GET() {
       expiryDays,
       buyMoreHref,
       extra,
+      extraCredits,
     }
 
     return NextResponse.json(body)

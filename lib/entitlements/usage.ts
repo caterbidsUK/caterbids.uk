@@ -11,6 +11,10 @@ export type SellerCreditsResult = {
   packCreditsRemaining: number | null
   packSoonestExpiresAt: string | null
   freeFeatureSlotInUse: boolean | null
+  // Pack credits that exist alongside a founding/subscription primary plan.
+  // 0 when planType === "pack" (already the primary) or when no packs exist.
+  extraPackCredits: number
+  extraPackExpiresAt: string | null
 }
 
 export async function countLiveListings(admin: AdminClient, userId: string): Promise<number> {
@@ -37,6 +41,33 @@ export async function getSellerCredits(admin: AdminClient, userId: string): Prom
 
   const isFoundingMember = Boolean((profileData as any)?.is_founding_member)
 
+  type EntRow = {
+    id: string
+    plan_name: string
+    listing_count_total: number
+    listing_count_used: number
+    monthly: boolean
+    expires_at: string | null
+    active: boolean
+  }
+
+  const rows = (entitlements ?? []) as EntRow[]
+
+  // Compute pack rows once, before all branching, so every primary plan type
+  // can carry the extra credits alongside it.
+  const packRows = rows.filter(
+    (r) =>
+      r.monthly === false &&
+      (!r.expires_at || new Date(r.expires_at) > now) &&
+      r.listing_count_used < r.listing_count_total,
+  )
+  const totalPackCredits = packRows.reduce((sum, r) => sum + (r.listing_count_total - r.listing_count_used), 0)
+  const packSoonestExpiry =
+    packRows
+      .map((r) => r.expires_at)
+      .filter((d): d is string => d !== null)
+      .sort()[0] ?? null
+
   if (isFoundingMember) {
     const { data: featureSlot } = await admin
       .from("listings")
@@ -54,20 +85,10 @@ export async function getSellerCredits(admin: AdminClient, userId: string): Prom
       packCreditsRemaining: null,
       packSoonestExpiresAt: null,
       freeFeatureSlotInUse: Boolean(featureSlot),
+      extraPackCredits: totalPackCredits,
+      extraPackExpiresAt: packSoonestExpiry,
     }
   }
-
-  type EntRow = {
-    id: string
-    plan_name: string
-    listing_count_total: number
-    listing_count_used: number
-    monthly: boolean
-    expires_at: string | null
-    active: boolean
-  }
-
-  const rows = (entitlements ?? []) as EntRow[]
 
   const subscriptionRow = rows.find(
     (r) => r.monthly === true && (!r.expires_at || new Date(r.expires_at) > now),
@@ -83,23 +104,12 @@ export async function getSellerCredits(admin: AdminClient, userId: string): Prom
       packCreditsRemaining: null,
       packSoonestExpiresAt: null,
       freeFeatureSlotInUse: null,
+      extraPackCredits: totalPackCredits,
+      extraPackExpiresAt: packSoonestExpiry,
     }
   }
 
-  const packRows = rows.filter(
-    (r) =>
-      r.monthly === false &&
-      (!r.expires_at || new Date(r.expires_at) > now) &&
-      r.listing_count_used < r.listing_count_total,
-  )
-
   if (packRows.length > 0) {
-    const totalRemaining = packRows.reduce((sum, r) => sum + (r.listing_count_total - r.listing_count_used), 0)
-    const soonestExpiry =
-      packRows
-        .map((r) => r.expires_at)
-        .filter((d): d is string => d !== null)
-        .sort()[0] ?? null
     const planName =
       packRows.length === 1 ? packRows[0].plan_name : `${packRows.length} listing packs`
 
@@ -109,9 +119,11 @@ export async function getSellerCredits(admin: AdminClient, userId: string): Prom
       subscriptionUsed: null,
       subscriptionTotal: null,
       subscriptionExpiresAt: null,
-      packCreditsRemaining: totalRemaining,
-      packSoonestExpiresAt: soonestExpiry,
+      packCreditsRemaining: totalPackCredits,
+      packSoonestExpiresAt: packSoonestExpiry,
       freeFeatureSlotInUse: null,
+      extraPackCredits: 0,
+      extraPackExpiresAt: null,
     }
   }
 
@@ -128,6 +140,8 @@ export async function getSellerCredits(admin: AdminClient, userId: string): Prom
       packCreditsRemaining: null,
       packSoonestExpiresAt: null,
       freeFeatureSlotInUse: null,
+      extraPackCredits: 0,
+      extraPackExpiresAt: null,
     }
   }
 
@@ -140,5 +154,7 @@ export async function getSellerCredits(admin: AdminClient, userId: string): Prom
     packCreditsRemaining: null,
     packSoonestExpiresAt: null,
     freeFeatureSlotInUse: null,
+    extraPackCredits: 0,
+    extraPackExpiresAt: null,
   }
 }
