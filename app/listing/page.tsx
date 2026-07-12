@@ -571,7 +571,6 @@ function ListingContent() {
         ground_floor_collection: updatedListing.ground_floor_collection,
         commercial_premises: updatedListing.commercial_premises,
         delivery_available: updatedListing.delivery_available,
-        caterbids_delivery_available: updatedListing.caterbids_delivery_available,
         description: updatedListing.description,
         image_url: updatedListing.image_url,
         images: updatedListing.images,
