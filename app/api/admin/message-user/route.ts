@@ -85,7 +85,8 @@ export async function POST(request: NextRequest) {
   }
 
   const trimmedMessage = message.trim().slice(0, MESSAGE_MAX_LENGTH)
-  const emailSubject = typeof subject === "string" && subject.trim() ? subject.trim() : "A message from CaterBids"
+  const messageSubject = typeof subject === "string" && subject.trim() ? subject.trim() : null
+  const emailSubject = messageSubject ?? "A message from CaterBids"
 
   const admin = createAdminClient()
   const now = new Date().toISOString()
@@ -146,6 +147,7 @@ export async function POST(request: NextRequest) {
       sender_id: context.userId,
       recipient_id: targetUserId,
       sender_name: ADMIN_THREAD_LABEL,
+      subject: messageSubject,
       body: trimmedMessage,
       message_text: trimmedMessage,
       platform: "caterbids",

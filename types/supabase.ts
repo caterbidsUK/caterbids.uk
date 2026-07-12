@@ -721,6 +721,7 @@ export interface Database {
           sender_id: string | null
           recipient_id: string | null
           sender_name: string | null
+          subject: string | null
           body: string | null
           message_text: string | null
           platform: string
@@ -733,6 +734,7 @@ export interface Database {
           sender_id?: string | null
           recipient_id?: string | null
           sender_name?: string | null
+          subject?: string | null
           body?: string | null
           message_text?: string | null
           platform?: string
@@ -745,6 +747,7 @@ export interface Database {
           sender_id?: string | null
           recipient_id?: string | null
           sender_name?: string | null
+          subject?: string | null
           body?: string | null
           message_text?: string | null
           platform?: string

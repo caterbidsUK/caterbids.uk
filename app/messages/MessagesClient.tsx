@@ -804,7 +804,7 @@ function ThreadPanel({
             <p className="mt-1 text-sm text-blue-100/70">{conversationTitle(conversation)}</p>
           </div>
         </div>
-        <ListingMiniCard conversation={conversation} />
+        {conversation.listing_id ? <ListingMiniCard conversation={conversation} /> : null}
       </div>
 
       <div className="flex-1 space-y-4 overflow-y-auto p-4 sm:p-5">
@@ -823,6 +823,11 @@ function ThreadPanel({
                     mine ? "bg-[#FF6B00] text-white" : "border border-white/10 bg-white/[0.08] text-white"
                   }`}
                 >
+                  {message.subject ? (
+                    <p className={`mb-1.5 text-[11px] font-black uppercase tracking-wider ${mine ? "text-white/80" : "text-white/60"}`}>
+                      {message.subject}
+                    </p>
+                  ) : null}
                   <p className="whitespace-pre-wrap text-sm leading-6">{messageText(message)}</p>
                   <p className={`mt-2 text-[11px] ${mine ? "text-white/75" : "text-blue-100/60"}`}>
                     {formatFullTime(message.created_at)}
