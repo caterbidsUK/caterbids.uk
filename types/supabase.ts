@@ -117,6 +117,7 @@ export interface Database {
           government_id_verified: boolean
           business_verified: boolean
           is_founding_member: boolean
+          is_test: boolean
           companies_house_number: string | null
           vat_number: string | null
           trust_notes: string | null
@@ -166,6 +167,7 @@ export interface Database {
           government_id_verified?: boolean
           business_verified?: boolean
           is_founding_member?: boolean
+          is_test?: boolean
           companies_house_number?: string | null
           vat_number?: string | null
           trust_notes?: string | null
@@ -215,6 +217,7 @@ export interface Database {
           government_id_verified?: boolean
           business_verified?: boolean
           is_founding_member?: boolean
+          is_test?: boolean
           companies_house_number?: string | null
           vat_number?: string | null
           trust_notes?: string | null

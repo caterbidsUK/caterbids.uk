@@ -514,6 +514,33 @@ export async function updateSellerPlan(
   return { success: true }
 }
 
+export async function setUserTestFlag(formData: FormData) {
+  const context = await requireAdmin()
+  const userId = formString(formData, "user_id")
+  const isTest = formData.get("is_test") === "true"
+
+  if (!userId) throw new Error("User ID missing.")
+
+  const admin = createAdminClient()
+  const { error } = await admin
+    .from("profiles")
+    .update({ is_test: isTest, updated_at: new Date().toISOString() } as any)
+    .eq("id", userId)
+
+  if (error) throw new Error(error.message)
+
+  await writeAdminAuditLog({
+    adminUserId: context.userId,
+    adminEmail: context.email,
+    action: isTest ? "user.mark_test" : "user.unmark_test",
+    entityType: "profile",
+    entityId: userId,
+    metadata: { is_test: isTest },
+  })
+
+  revalidatePath("/admin")
+}
+
 export async function deleteBlogPost(formData: FormData) {
   const context = await requireAdmin()
   const postId = formString(formData, "post_id")

@@ -13,6 +13,7 @@ import {
   ClipboardList,
   FileText,
   Flag,
+  FlaskConical,
   Globe2,
   Eye,
   EyeOff,
@@ -40,6 +41,7 @@ import {
 import {
   deleteBlogPost,
   setPhoneVerificationStatus,
+  setUserTestFlag,
   setUserVerificationFlag,
   setUserVerified,
   toggleListingFeatured,
@@ -102,6 +104,7 @@ export type AdminUser = {
   phone_verification_status?: string | null
   verified_user_badge?: boolean | null
   verified_dealer?: boolean | null
+  is_test?: boolean | null
   created_at?: string | null
   active_listings_count?: number
 }
@@ -1056,6 +1059,9 @@ function UserCard({ user, adminEmail, adminId, compact = false }: { user: AdminU
             {user.verified_dealer && <Badge label="Verified dealer" orange />}
             {user.email_verified || user.is_email_verified ? <Badge label="Email verified" orange /> : <Badge label="Email pending" />}
             {user.phone_verified || user.is_phone_verified ? <Badge label="Phone verified" orange /> : <Badge label={phoneVerificationStatus === "rejected" ? "Phone rejected" : "Phone pending"} />}
+            {user.is_test && (
+              <span className="rounded-full bg-amber-400/20 px-3 py-1 text-[11px] font-black text-amber-300">TEST</span>
+            )}
             {protectedSuperAdmin && <Badge label="Protected super admin" orange />}
           </div>
         </div>
@@ -1086,6 +1092,7 @@ function UserCard({ user, adminEmail, adminId, compact = false }: { user: AdminU
               Role
             </button>
           </form>
+          <MarkTestButton userId={user.id} isTest={Boolean(user.is_test)} />
           <ToggleUserButton userId={user.id} verified={verified} label={verified ? "Mark unverified" : "Mark verified"} />
           <ToggleVerificationButton userId={user.id} field="email_verified" verified={Boolean(user.email_verified || user.is_email_verified)} label={user.email_verified || user.is_email_verified ? "Email unverified" : "Email verified"} icon={<MailCheck className="h-4 w-4" />} />
           <SetPhoneStatusButton userId={user.id} status="verified" label="Mark phone verified" icon={<PhoneCall className="h-4 w-4" />} />
@@ -1114,6 +1121,19 @@ function UserCard({ user, adminEmail, adminId, compact = false }: { user: AdminU
         </div>
       )}
     </article>
+  )
+}
+
+function MarkTestButton({ userId, isTest }: { userId: string; isTest: boolean }) {
+  return (
+    <form action={setUserTestFlag}>
+      <input type="hidden" name="user_id" value={userId} />
+      <input type="hidden" name="is_test" value={isTest ? "false" : "true"} />
+      <button className={ADMIN_ACTION_BUTTON}>
+        <FlaskConical className="h-4 w-4" />
+        {isTest ? "Unmark test" : "Mark as test"}
+      </button>
+    </form>
   )
 }
 
