@@ -497,7 +497,7 @@ function SearchContent() {
       if (query && !isBroadMarketplaceQuery(query)) {
         const words = meaningfulSearchWords(query)
         const orConditions = words.map(word =>
-          `title.ilike.%${word}%,price.ilike.%${word}%,location.ilike.%${word}%,description.ilike.%${word}%`
+          `title.ilike.%${word}%,price.ilike.%${word}%,location.ilike.%${word}%,description.ilike.%${word}%,subcategory.ilike.%${word}%`
         ).join(',')
         if (orConditions) queryBuilder = queryBuilder.or(orConditions)
       }

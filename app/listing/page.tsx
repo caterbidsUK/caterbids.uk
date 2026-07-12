@@ -1915,6 +1915,12 @@ function ListingContent() {
                     {listing.category}
                   </span>
                 )}
+                {listing.subcategory && (
+                  <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.08] px-3 py-2 text-xs font-bold text-white/78">
+                    <Tag className="h-4 w-4 text-white/45" />
+                    {listing.subcategory}
+                  </span>
+                )}
                 {listing.condition && (
                   <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.08] px-3 py-2 text-xs font-bold text-white/78">
                     <Package className="h-4 w-4 text-white/70" />
@@ -2264,6 +2270,12 @@ function ListingContent() {
                   <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.08] px-3 py-2 text-xs font-bold text-white/78">
                     <Tag className="h-4 w-4 text-[#FF6B00]" />
                     {listing.category}
+                  </span>
+                )}
+                {listing.subcategory && (
+                  <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.08] px-3 py-2 text-xs font-bold text-white/78">
+                    <Tag className="h-4 w-4 text-white/45" />
+                    {listing.subcategory}
                   </span>
                 )}
                 {listing.condition && (
