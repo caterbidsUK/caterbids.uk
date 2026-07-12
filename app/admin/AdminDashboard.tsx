@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import SiteLogo from "@/components/SiteLogo"
-import { useActionState, useState, useTransition, type ReactNode } from "react"
+import { useActionState, useEffect, useState, useTransition, type ReactNode } from "react"
 import {
   Activity,
   BadgeCheck,
@@ -23,6 +23,7 @@ import {
   Menu,
   MessageSquare,
   PauseCircle,
+  Pencil,
   PhoneCall,
   PieChart,
   PoundSterling,
@@ -39,6 +40,7 @@ import {
   Users,
 } from "lucide-react"
 import {
+  adminSaveListingEdits,
   deleteBlogPost,
   setPhoneVerificationStatus,
   setUserTestFlag,
@@ -53,6 +55,8 @@ import {
   updateUserRole,
 } from "./actions"
 import { type PaymentSettings, type SellerPlan, formatPlanPrice, paymentStatusLabel } from "@/lib/pricing"
+import { CONDITION_OPTIONS, DELIVERY_OPTION_OPTIONS, POWER_TYPE_OPTIONS, TESTED_STATUS_OPTIONS, WARRANTY_TYPE_OPTIONS } from "@/lib/listing-trust"
+import { MARKETPLACE_CATEGORY_TITLES, subcategoriesForCategory } from "@/lib/categories"
 
 export type AdminTab = "overview" | "listings" | "users" | "orders" | "blog" | "verification" | "settings" | "audit"
 
@@ -83,6 +87,28 @@ export type AdminListing = {
   is_urgent?: boolean | null
   created_at?: string | null
   seller_email?: string | null
+  condition?: string | null
+  power_type?: string | null
+  dimensions?: string | null
+  service_history?: string | null
+  warranty_type?: string | null
+  manuals_available?: boolean | null
+  tested_status?: string | null
+  delivery_option?: string | null
+  collection_postcode?: string | null
+  vat_included?: boolean | null
+  weight_kg?: number | null
+  length_cm?: number | null
+  width_cm?: number | null
+  height_cm?: number | null
+  pallet_ready?: boolean | null
+  tail_lift_required?: boolean | null
+  forklift_available?: boolean | null
+  ground_floor_collection?: boolean | null
+  commercial_premises?: boolean | null
+  delivery_available?: boolean | null
+  caterbids_delivery_available?: boolean | null
+  description?: string | null
 }
 
 export type AdminUser = {
@@ -919,6 +945,223 @@ function ListingsPanel({
   )
 }
 
+function AdminListingEditModal({ listing, onClose }: { listing: AdminListing; onClose: () => void }) {
+  const [state, action, pending] = useActionState(adminSaveListingEdits, null)
+  const [selectedCategory, setSelectedCategory] = useState(listing.category || "Catering Equipment")
+
+  useEffect(() => {
+    if (state?.success) {
+      const timer = setTimeout(onClose, 800)
+      return () => clearTimeout(timer)
+    }
+  }, [state?.success, onClose])
+
+  const subcategories = subcategoriesForCategory(selectedCategory)
+  const inp = "w-full rounded-2xl border border-white/10 bg-[#001A35] px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-[#FF6B00]/50 focus:outline-none"
+  const lbl = "mb-1 block text-xs font-black uppercase tracking-wide text-white/45"
+  const sec = "space-y-3 rounded-3xl border border-white/10 bg-[#002448]/60 p-4"
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4 pt-8 backdrop-blur-sm"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div className="mb-8 w-full max-w-2xl rounded-3xl border border-white/10 bg-[#001A35] p-6 shadow-2xl">
+        <div className="mb-5 flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-black text-white">Edit listing — admin</h2>
+            <p className="mt-0.5 text-xs text-white/40">Bypasses owner check · writes audit log</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-2xl border border-white/10 bg-white/8 px-4 py-2 text-xs font-black text-white/75 transition hover:bg-white/12">
+            ✕ Close
+          </button>
+        </div>
+
+        {state?.error && (
+          <div className="mb-4 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-300">
+            {state.error}
+          </div>
+        )}
+        {state?.success && (
+          <div className="mb-4 rounded-2xl border border-green-500/20 bg-green-500/10 px-4 py-3 text-sm font-semibold text-green-300">
+            Saved — closing…
+          </div>
+        )}
+
+        <form action={action} className="space-y-4">
+          <input type="hidden" name="listing_id" value={listing.id} />
+          <input type="hidden" name="image_url" value={listing.image_url || ""} />
+          <input type="hidden" name="images_json" value={listing.images ? JSON.stringify(listing.images) : ""} />
+
+          <div className={sec}>
+            <p className="text-xs font-black uppercase tracking-widest text-white/40">Basic info</p>
+            <div>
+              <label className={lbl}>Title</label>
+              <input name="title" defaultValue={listing.title || ""} required className={inp} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={lbl}>Price</label>
+                <input name="price" defaultValue={String(listing.price || "")} required placeholder="£1500" className={inp} />
+              </div>
+              <div>
+                <label className={lbl}>VAT included?</label>
+                <label className="flex h-9 items-center gap-2 text-sm text-white">
+                  <input type="checkbox" name="vat_included" defaultChecked={Boolean(listing.vat_included)} className="h-4 w-4 accent-[#FF6B00]" />
+                  VAT included
+                </label>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={lbl}>Location</label>
+                <input name="location" defaultValue={listing.location || ""} required className={inp} />
+              </div>
+              <div>
+                <label className={lbl}>City</label>
+                <input name="city" defaultValue={listing.city || ""} className={inp} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={lbl}>Category</label>
+                <select name="category" value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)} className={inp}>
+                  {MARKETPLACE_CATEGORY_TITLES.map((opt) => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={lbl}>Subcategory</label>
+                <select
+                  name="subcategory"
+                  key={selectedCategory}
+                  defaultValue={selectedCategory === listing.category ? (listing.subcategory || "") : ""}
+                  className={inp}
+                >
+                  <option value="">— None —</option>
+                  {subcategories.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div className={sec}>
+            <p className="text-xs font-black uppercase tracking-widest text-white/40">Item details</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={lbl}>Condition</label>
+                <select name="condition" defaultValue={listing.condition || "Used"} className={inp}>
+                  {CONDITION_OPTIONS.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className={lbl}>Power type</label>
+                <select name="power_type" defaultValue={listing.power_type || "Unknown"} className={inp}>
+                  {POWER_TYPE_OPTIONS.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={lbl}>Tested status</label>
+                <select name="tested_status" defaultValue={listing.tested_status || "Untested"} className={inp}>
+                  {TESTED_STATUS_OPTIONS.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className={lbl}>Warranty</label>
+                <select name="warranty_type" defaultValue={listing.warranty_type || "No warranty"} className={inp}>
+                  {WARRANTY_TYPE_OPTIONS.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className={lbl}>Dimensions (H × W × D)</label>
+              <input name="dimensions" defaultValue={listing.dimensions || ""} placeholder="e.g. 90cm × 60cm × 60cm" className={inp} />
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+              <div>
+                <label className={lbl}>Weight kg</label>
+                <input name="weight_kg" type="number" step="0.1" min="0" defaultValue={listing.weight_kg ?? ""} className={inp} />
+              </div>
+              <div>
+                <label className={lbl}>Length cm</label>
+                <input name="length_cm" type="number" step="1" min="0" defaultValue={listing.length_cm ?? ""} className={inp} />
+              </div>
+              <div>
+                <label className={lbl}>Width cm</label>
+                <input name="width_cm" type="number" step="1" min="0" defaultValue={listing.width_cm ?? ""} className={inp} />
+              </div>
+              <div>
+                <label className={lbl}>Height cm</label>
+                <input name="height_cm" type="number" step="1" min="0" defaultValue={listing.height_cm ?? ""} className={inp} />
+              </div>
+            </div>
+            <div>
+              <label className={lbl}>Service history</label>
+              <input name="service_history" defaultValue={listing.service_history || ""} className={inp} />
+            </div>
+            <label className="flex items-center gap-2 text-sm text-white">
+              <input type="checkbox" name="manuals_available" defaultChecked={Boolean(listing.manuals_available)} className="h-4 w-4 accent-[#FF6B00]" />
+              Manuals available
+            </label>
+          </div>
+
+          <div className={sec}>
+            <p className="text-xs font-black uppercase tracking-widest text-white/40">Delivery</p>
+            <div>
+              <label className={lbl}>Delivery option</label>
+              <select name="delivery_option" defaultValue={listing.delivery_option || "Collection Only"} className={inp}>
+                {DELIVERY_OPTION_OPTIONS.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={lbl}>Collection postcode</label>
+              <input name="collection_postcode" defaultValue={listing.collection_postcode || ""} placeholder="e.g. M1 1AA" className={inp} />
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-sm text-white">
+              <label className="flex items-center gap-2">
+                <input type="checkbox" name="pallet_ready" defaultChecked={Boolean(listing.pallet_ready)} className="h-4 w-4 accent-[#FF6B00]" />
+                Pallet ready
+              </label>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" name="tail_lift_required" defaultChecked={Boolean(listing.tail_lift_required)} className="h-4 w-4 accent-[#FF6B00]" />
+                Tail lift required
+              </label>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" name="forklift_available" defaultChecked={Boolean(listing.forklift_available)} className="h-4 w-4 accent-[#FF6B00]" />
+                Forklift available
+              </label>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" name="ground_floor_collection" defaultChecked={Boolean(listing.ground_floor_collection)} className="h-4 w-4 accent-[#FF6B00]" />
+                Ground floor
+              </label>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" name="commercial_premises" defaultChecked={Boolean(listing.commercial_premises)} className="h-4 w-4 accent-[#FF6B00]" />
+                Commercial premises
+              </label>
+            </div>
+          </div>
+
+          <div className={sec}>
+            <p className="text-xs font-black uppercase tracking-widest text-white/40">Description</p>
+            <textarea name="description" rows={8} defaultValue={listing.description || ""} className={`${inp} resize-y`} />
+          </div>
+
+          <button
+            type="submit"
+            disabled={pending || Boolean(state?.success)}
+            className="w-full rounded-2xl bg-[#FF6B00] px-4 py-3 text-sm font-black text-white transition hover:bg-[#e55f00] disabled:opacity-55"
+          >
+            {pending ? "Saving…" : state?.success ? "Saved!" : "Save listing changes"}
+          </button>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 function ListingCard({
   listing,
   listingFeatureControlsReady,
@@ -928,6 +1171,7 @@ function ListingCard({
   listingFeatureControlsReady: boolean
   listingUrgentControlsReady: boolean
 }) {
+  const [editOpen, setEditOpen] = useState(false)
   const image = listingImage(listing)
   const featured = Boolean(listing.featured || listing.is_featured)
   const urgent = Boolean(listing.urgent || listing.is_urgent || listing.featured_type === "urgent")
@@ -960,8 +1204,9 @@ function ListingCard({
               <Link href={`/listing?id=${encodeURIComponent(listing.id)}`} className="rounded-2xl border border-white/10 bg-white/8 px-3 py-2 text-center text-xs font-black">
                 View listing
               </Link>
-              <button disabled className="cursor-not-allowed rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-black text-white/45">
-                Edit route missing
+              <button type="button" onClick={() => setEditOpen(true)} className={ADMIN_ACTION_BUTTON}>
+                <Pencil className="h-3.5 w-3.5" />
+                Edit listing
               </button>
             </div>
           </div>
@@ -1005,6 +1250,7 @@ function ListingCard({
           </div>
         </div>
       </div>
+      {editOpen && <AdminListingEditModal listing={listing} onClose={() => setEditOpen(false)} />}
     </article>
   )
 }

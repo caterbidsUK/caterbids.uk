@@ -35,6 +35,12 @@ function formBoolean(formData: FormData, key: string) {
   return value === "on" || value === "true"
 }
 
+function formOptionalNumber(formData: FormData, key: string) {
+  const raw = String(formData.get(key) || "").trim()
+  const num = Number(raw)
+  return raw && Number.isFinite(num) ? num : null
+}
+
 function isAllowed(value: string, allowed: readonly string[]) {
   return allowed.includes(value)
 }
@@ -539,6 +545,112 @@ export async function setUserTestFlag(formData: FormData) {
   })
 
   revalidatePath("/admin")
+}
+
+export async function adminSaveListingEdits(
+  _prevState: { success?: boolean; error?: string } | null,
+  formData: FormData
+): Promise<{ success?: boolean; error?: string }> {
+  const context = await requireAdmin()
+
+  const listingId = formString(formData, "listing_id")
+  if (!listingId) return { error: "Listing ID missing." }
+
+  const title = formString(formData, "title")
+  const price = formString(formData, "price")
+  const location = formString(formData, "location")
+  if (!title || !price || !location) {
+    return { error: "Title, price and location are required." }
+  }
+
+  const admin = createAdminClient()
+
+  const { data: before } = await (admin.from("listings") as any)
+    .select("title,price,location,city,category,subcategory,condition,power_type,dimensions,service_history,warranty_type,manuals_available,tested_status,delivery_option,collection_postcode,vat_included,weight_kg,length_cm,width_cm,height_cm,pallet_ready,tail_lift_required,forklift_available,ground_floor_collection,commercial_premises,delivery_available,caterbids_delivery_available,description,image_url,images")
+    .eq("id", listingId)
+    .maybeSingle()
+
+  const editedDeliveryOption = formString(formData, "delivery_option") || "Collection Only"
+  const usesPalletDelivery = /pallet/i.test(editedDeliveryOption)
+
+  const normalisedPrice = price.startsWith("£") ? price : `£${price}`
+
+  const imagesJson = formString(formData, "images_json")
+  let images: string[] | null = (before?.images as string[] | null) ?? null
+  if (imagesJson) {
+    try {
+      const parsed = JSON.parse(imagesJson)
+      if (Array.isArray(parsed)) images = parsed as string[]
+    } catch {}
+  }
+
+  const update = {
+    title,
+    price: normalisedPrice,
+    location,
+    city: formString(formData, "city") || null,
+    category: formString(formData, "category") || "Catering Equipment",
+    subcategory: formString(formData, "subcategory") || null,
+    condition: formString(formData, "condition") || "Used",
+    power_type: formString(formData, "power_type") || "Unknown",
+    dimensions: formString(formData, "dimensions") || null,
+    service_history: formString(formData, "service_history") || null,
+    warranty_type: formString(formData, "warranty_type") || "No warranty",
+    manuals_available: formBoolean(formData, "manuals_available"),
+    tested_status: formString(formData, "tested_status") || "Untested",
+    delivery_option: usesPalletDelivery ? "CaterBids Pallet Delivery" : "Collection Only",
+    collection_postcode: usesPalletDelivery ? formString(formData, "collection_postcode") || null : null,
+    vat_included: formBoolean(formData, "vat_included"),
+    weight_kg: formOptionalNumber(formData, "weight_kg"),
+    length_cm: formOptionalNumber(formData, "length_cm"),
+    width_cm: formOptionalNumber(formData, "width_cm"),
+    height_cm: formOptionalNumber(formData, "height_cm"),
+    pallet_ready: usesPalletDelivery ? formBoolean(formData, "pallet_ready") : false,
+    tail_lift_required: usesPalletDelivery ? formBoolean(formData, "tail_lift_required") : false,
+    forklift_available: usesPalletDelivery ? formBoolean(formData, "forklift_available") : false,
+    ground_floor_collection: usesPalletDelivery ? formBoolean(formData, "ground_floor_collection") : false,
+    commercial_premises: usesPalletDelivery ? formBoolean(formData, "commercial_premises") : false,
+    delivery_available: usesPalletDelivery,
+    caterbids_delivery_available: usesPalletDelivery,
+    description: formString(formData, "description"),
+    image_url: formString(formData, "image_url") || (before?.image_url as string | null) || null,
+    images,
+    updated_at: new Date().toISOString(),
+  }
+
+  const { error } = await (admin.from("listings") as any).update(update).eq("id", listingId)
+  if (error) return { error: error.message || "Could not save listing changes." }
+
+  const changed: Record<string, { before: unknown; after: unknown }> = {}
+  if (before) {
+    for (const key of Object.keys(update) as Array<keyof typeof update>) {
+      if (key === "updated_at") continue
+      const bVal = (before as Record<string, unknown>)[key]
+      const aVal = update[key]
+      if (JSON.stringify(bVal) !== JSON.stringify(aVal)) {
+        changed[key] = { before: bVal, after: aVal }
+      }
+    }
+  }
+
+  await writeAdminAuditLog({
+    adminUserId: context.userId,
+    adminEmail: context.email,
+    action: "listing.admin_edit",
+    entityType: "listing",
+    entityId: listingId,
+    metadata: {
+      listing_title: update.title,
+      fields_changed: Object.keys(changed),
+      changed,
+    },
+  })
+
+  revalidatePath("/admin")
+  revalidatePath("/search")
+  revalidatePath("/listing")
+
+  return { success: true }
 }
 
 export async function deleteBlogPost(formData: FormData) {
