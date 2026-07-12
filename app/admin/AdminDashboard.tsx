@@ -1095,6 +1095,7 @@ function UserCard({ user, adminEmail, adminId, compact = false }: { user: AdminU
             <ListChecks className="h-4 w-4" />
             View user listings
           </Link>
+          <MessageUserButton userId={user.id} />
           <details className="md:col-span-2 xl:col-span-3">
             <summary className={`${ADMIN_ACTION_LINK} cursor-pointer list-none`}>
               <UserCog className="h-4 w-4" />
@@ -1140,6 +1141,143 @@ function ToggleVerificationButton({ userId, field, verified, label, icon }: { us
         {label}
       </button>
     </form>
+  )
+}
+
+function MessageUserButton({ userId }: { userId: string }) {
+  const [open, setOpen] = useState(false)
+  const [subject, setSubject] = useState("")
+  const [messageText, setMessageText] = useState("")
+  const [withEmail, setWithEmail] = useState(true)
+  const [sending, setSending] = useState(false)
+  const [sent, setSent] = useState(false)
+  const [sendError, setSendError] = useState<string | null>(null)
+  const [emailSent, setEmailSent] = useState(false)
+  const [emailError, setEmailError] = useState<string | null>(null)
+
+  function reset() {
+    setSending(false)
+    setSent(false)
+    setSendError(null)
+    setEmailSent(false)
+    setEmailError(null)
+    setMessageText("")
+    setSubject("")
+  }
+
+  async function handleSend() {
+    if (!messageText.trim() || sending) return
+    setSending(true)
+    setSendError(null)
+    try {
+      const res = await fetch("/api/admin/message-user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetUserId: userId,
+          subject,
+          message: messageText,
+          sendEmailFlag: withEmail,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setSendError((data as { error?: string }).error ?? "Failed to send.")
+        return
+      }
+      const typed = data as { emailSent?: boolean; emailError?: string | null }
+      setEmailSent(Boolean(typed.emailSent))
+      setEmailError(typed.emailError ?? null)
+      setSent(true)
+    } catch (err) {
+      setSendError(err instanceof Error ? err.message : "Network error.")
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return (
+    <div className={open ? "md:col-span-2 xl:col-span-3" : ""}>
+      {!open ? (
+        <button onClick={() => setOpen(true)} className={ADMIN_ACTION_BUTTON}>
+          <MessageSquare className="h-4 w-4" />
+          Message user
+        </button>
+      ) : (
+        <div className="rounded-2xl border border-white/10 bg-[#001633] p-4 flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-black text-white flex items-center gap-2">
+              <MessageSquare className="h-4 w-4 text-[#FF6B00]" />
+              Message user
+            </p>
+            <button
+              onClick={() => { setOpen(false); reset() }}
+              className="text-white/40 hover:text-white/70 text-xs font-bold"
+            >
+              Cancel
+            </button>
+          </div>
+
+          {sent ? (
+            <div className="text-sm font-bold">
+              <p className="text-green-400 flex items-center gap-1.5">
+                <CheckCircle2 className="h-4 w-4" />
+                Message saved.
+              </p>
+              {emailSent && (
+                <p className="mt-1 text-white/50 flex items-center gap-1.5">
+                  <MailCheck className="h-3.5 w-3.5" />
+                  Email also sent.
+                </p>
+              )}
+              {emailError && (
+                <p className="mt-1 text-amber-400/80 text-xs">Email failed: {emailError}</p>
+              )}
+              <button
+                onClick={() => { setSent(false); reset() }}
+                className="mt-3 text-xs text-white/40 hover:text-white/70 underline"
+              >
+                Send another
+              </button>
+            </div>
+          ) : (
+            <>
+              <input
+                type="text"
+                placeholder="Subject (optional)"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                className="rounded-xl border border-white/10 bg-[#002E5D] px-3 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-[#FF6B00]/50"
+              />
+              <textarea
+                placeholder="Message…"
+                rows={4}
+                value={messageText}
+                onChange={(e) => setMessageText(e.target.value)}
+                className="rounded-xl border border-white/10 bg-[#002E5D] px-3 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-[#FF6B00]/50 resize-none"
+              />
+              <label className="flex items-center gap-2 cursor-pointer text-sm text-white/60">
+                <input
+                  type="checkbox"
+                  checked={withEmail}
+                  onChange={(e) => setWithEmail(e.target.checked)}
+                  className="accent-[#FF6B00]"
+                />
+                Also send by email
+              </label>
+              {sendError && <p className="text-red-400 text-xs">{sendError}</p>}
+              <button
+                onClick={handleSend}
+                disabled={!messageText.trim() || sending}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#FF6B00] px-4 py-2.5 text-sm font-black text-white transition hover:bg-[#e85f00] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {sending ? "Sending…" : "Send message"}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
   )
 }
 
