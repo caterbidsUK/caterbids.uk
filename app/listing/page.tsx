@@ -945,7 +945,7 @@ function ListingContent() {
         if (publicProfileResult.error && /full_name|social_links|schema cache|column|does not exist/i.test(publicProfileResult.error.message || "")) {
           publicProfileResult = await supabase
             .from("seller_public_profiles" as "profiles")
-            .select("verified,email_verified,is_email_verified,phone_verified,is_phone_verified,verified_user_badge,seller_verification_level,business_verified,government_id_verified,stripe_connect_onboarding_complete,is_founding_member,created_at,name,business")
+            .select("verified,email_verified,is_email_verified,phone_verified,is_phone_verified,verified_user_badge,seller_verification_level,business_verified,government_id_verified,stripe_connect_onboarding_complete,created_at,name,business")
             .eq("id", sellerId)
             .maybeSingle()
         }
