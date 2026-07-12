@@ -37,6 +37,8 @@ import { createClient } from "@/lib/supabase/server"
 import { getCurrentUser } from "@/lib/supabase/auth"
 import { isProtectedSuperAdminEmail } from "@/lib/admin-access"
 import SiteFooter from "@/components/SiteFooter"
+import PlanUsageStrip from "@/app/account/PlanUsageStrip"
+import { countLiveListings } from "@/lib/entitlements/usage"
 
 type Profile = Database["public"]["Tables"]["profiles"]["Row"]
 type Listing = Database["public"]["Tables"]["listings"]["Row"]
@@ -82,7 +84,6 @@ const monthDateFormatter = new Intl.DateTimeFormat("en-GB", {
   timeZone: "Europe/London",
 })
 
-const activeListingStatuses = new Set(["live", "active", "payment_pending"])
 const draftListingStatuses = new Set(["draft", "pending_payment", "payment_pending"])
 const soldClosedListingStatuses = new Set(["sold", "closed", "archived", "removed", "expired"])
 const completedOrderStatuses = new Set(["paid", "complete", "completed", "delivered", "fulfilled"])
@@ -125,11 +126,6 @@ function formatStatus(value?: string | null) {
     .filter(Boolean)
     .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
     .join(" ")
-}
-
-function isActiveListing(listing: Listing) {
-  if (!listing.status) return true
-  return activeListingStatuses.has(listing.status.toLowerCase())
 }
 
 function isCompletedOrder(order: Order) {
@@ -320,6 +316,7 @@ function localPreviewData(): DashboardData {
 
 async function loadDashboardData(user: DashboardUser): Promise<DashboardData> {
   const supabase = await createClient()
+  const admin = createAdminClient()
   const authEmailVerified = profileIsEmailVerified(defaultProfile(user, false), user)
 
   const { data: profileData } = await supabase
@@ -333,7 +330,7 @@ async function loadDashboardData(user: DashboardUser): Promise<DashboardData> {
 
   const [
     listingsResult,
-    activeListingsResult,
+    activeListingsCount,
     conversationsResult,
     unreadMessagesResult,
     favouritesResult,
@@ -346,11 +343,7 @@ async function loadDashboardData(user: DashboardUser): Promise<DashboardData> {
       .or(ownershipFilter)
       .order("created_at", { ascending: false })
       .limit(50),
-    supabase
-      .from("listings")
-      .select("id", { count: "exact", head: true })
-      .or(ownershipFilter)
-      .or("status.is.null,status.eq.live,status.eq.active,status.eq.payment_pending"),
+    countLiveListings(admin, user.id),
     supabase
       .from("conversations")
       .select("*", { count: "exact" })
@@ -394,9 +387,7 @@ async function loadDashboardData(user: DashboardUser): Promise<DashboardData> {
     profile,
     user,
     listings: listingsResult.data || [],
-    activeListingsCount:
-      activeListingsResult.count ??
-      (listingsResult.data || []).filter((listing) => isActiveListing(listing)).length,
+    activeListingsCount,
     conversations,
     conversationsCount: conversationsResult.count ?? conversations.length,
     unreadMessagesCount: Array.from(unreadByConversation.values()).reduce((total, count) => total + count, 0),
@@ -1394,6 +1385,8 @@ export default async function AccountPage() {
               </div>
               </div>
             </section>
+
+            <PlanUsageStrip />
 
             <AccountTypePanel accountType={accountType} />
 

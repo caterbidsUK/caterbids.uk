@@ -321,6 +321,7 @@ export async function createListing(
     const admin = createAdminClient()
     const [{ data: paymentSettingsRow }, { count: sellerLiveListingCount }, { data: profileForEntitlement }] = await Promise.all([
       admin.from('payment_settings' as never).select('*').limit(1).maybeSingle(),
+      // TODO: route this gate through countLiveListings() in lib/entitlements/usage.ts (also adds seller_id fallback + status null)
       admin
         .from('listings')
         .select('id', { count: 'exact', head: true })
