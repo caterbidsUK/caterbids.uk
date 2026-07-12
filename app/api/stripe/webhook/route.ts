@@ -149,7 +149,7 @@ export async function POST(req: NextRequest) {
     if (invoice.billing_reason !== "subscription_cycle") {
       return NextResponse.json({ received: true })
     }
-    const rawSub = invoice.subscription
+    const rawSub = invoice.parent?.subscription_details?.subscription ?? null
     const subId = typeof rawSub === "string" ? rawSub : (rawSub as Stripe.Subscription | null)?.id ?? null
     if (!subId) {
       console.warn("invoice.paid (cycle): no subscription ID on invoice", invoice.id)
@@ -180,7 +180,7 @@ export async function POST(req: NextRequest) {
   // ── invoice.payment_failed (failed renewal) ───────────────────────────────
   if (event.type === "invoice.payment_failed") {
     const invoice = event.data.object as Stripe.Invoice
-    const rawSub = invoice.subscription
+    const rawSub = invoice.parent?.subscription_details?.subscription ?? null
     const subId = typeof rawSub === "string" ? rawSub : (rawSub as Stripe.Subscription | null)?.id ?? null
     if (!subId) {
       console.warn("invoice.payment_failed: no subscription ID on invoice", invoice.id)
