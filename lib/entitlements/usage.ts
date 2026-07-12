@@ -53,11 +53,17 @@ export async function getSellerCredits(admin: AdminClient, userId: string): Prom
 
   const rows = (entitlements ?? []) as EntRow[]
 
+  // "Founding Trade Member" is stored as a monthly=false entitlement with
+  // listing_count_total=30 and expires_at=null. It must never be counted as a
+  // purchasable pack credit — the primary plan already represents it.
+  const FOUNDING_PLAN_NAME = "Founding Trade Member"
+
   // Compute pack rows once, before all branching, so every primary plan type
   // can carry the extra credits alongside it.
   const packRows = rows.filter(
     (r) =>
       r.monthly === false &&
+      r.plan_name !== FOUNDING_PLAN_NAME &&
       (!r.expires_at || new Date(r.expires_at) > now) &&
       r.listing_count_used < r.listing_count_total,
   )
