@@ -80,8 +80,8 @@ const GENERIC_MARKETPLACE_TERMS = new Set([
 
 const maskStyle = (slug: string): React.CSSProperties => ({
   display: "block",
-  width: "2rem",
-  height: "2rem",
+  width: "3.5rem",
+  height: "3.5rem",
   backgroundColor: "currentColor",
   WebkitMaskImage: `url('/icons/categories/${slug}.svg')`,
   maskImage: `url('/icons/categories/${slug}.svg')`,
@@ -92,17 +92,6 @@ const maskStyle = (slug: string): React.CSSProperties => ({
   WebkitMaskPosition: "center",
   maskPosition: "center",
 })
-
-const CATEGORY_ICONS: Record<string, React.ReactNode> = {
-  "cooking-equipment":       <span style={maskStyle("cooking-equipment")} />,
-  "refrigeration":           <span style={maskStyle("refrigeration")} />,
-  "food-preparation":        <span style={maskStyle("food-preparation")} />,
-  "warewashing-sinks":       <span style={maskStyle("warewashing-sinks")} />,
-  "coffee-bar-equipment":    <span style={maskStyle("coffee-bar-equipment")} />,
-  "display-serving":         <span style={maskStyle("display-serving")} />,
-  "stainless-steel-storage": <span style={maskStyle("stainless-steel-storage")} />,
-  "parts-spares":            <span style={maskStyle("parts-spares")} />,
-}
 
 const conditionFilters: { key: ConditionFilter; label: string }[] = [
   { key: "all", label: "All" },
@@ -825,19 +814,14 @@ function SearchContent() {
                     href={`/category/${cat.slug}`}
                     className={`group flex flex-col items-center gap-4 rounded-3xl border p-5 text-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6B00] sm:p-6 ${
                       isCatActive
-                        ? "border-[#FF6B00]/60 bg-[#FF6B00]/10"
+                        ? "border-[#FF6B00] bg-[#FF6B00]/10"
                         : "border-white/10 bg-[#062747]/70 hover:border-[#FF6B00]/45 hover:bg-[#062747]"
                     }`}
                   >
-                    <div
-                      className={`flex h-16 w-16 items-center justify-center rounded-2xl transition sm:h-[72px] sm:w-[72px] ${
-                        isCatActive
-                          ? "bg-[#FF6B00] text-white"
-                          : "bg-[#FF6B00]/15 text-[#FF6B00] group-hover:bg-[#FF6B00]/22"
-                      }`}
-                    >
-                      {CATEGORY_ICONS[cat.slug]}
-                    </div>
+                    <span
+                      className={isCatActive ? "text-white" : "text-[#FF6B00]"}
+                      style={maskStyle(cat.slug)}
+                    />
                     <span className="text-xs font-black leading-snug text-white/85 group-hover:text-white sm:text-sm">
                       {cat.title}
                     </span>
