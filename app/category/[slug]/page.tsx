@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { use, useEffect, useMemo, useState } from "react"
 import { ArrowLeft, Bell, Loader2, Plus, Tag } from "lucide-react"
 
@@ -90,8 +91,21 @@ function categoryMatchesListing(item: Listing, category: CaterBidsCategory) {
 }
 
 export default function CategoryPage({ params }: CategoryPageProps) {
+  const router = useRouter()
   const { slug } = use(params)
   const category = categoryBySlug(slug)
+
+  function handleBack() {
+    const sameOrigin =
+      typeof document !== "undefined" &&
+      document.referrer &&
+      new URL(document.referrer).origin === window.location.origin
+    if (sameOrigin) {
+      router.back()
+    } else {
+      router.push("/")
+    }
+  }
   const [listings, setListings] = useState<Listing[]>([])
   const [loadingListings, setLoadingListings] = useState(true)
   const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null)
@@ -161,10 +175,10 @@ export default function CategoryPage({ params }: CategoryPageProps) {
     return (
       <main className="app-bg min-h-screen px-4 py-8 text-white">
         <div className="mx-auto max-w-3xl">
-          <Link href="/" className="soft-button inline-flex items-center gap-2 rounded-2xl px-4 py-2">
+          <button onClick={handleBack} className="soft-button inline-flex items-center gap-2 rounded-2xl px-4 py-2">
             <ArrowLeft className="h-4 w-4" />
-            Home
-          </Link>
+            Back
+          </button>
           <div className="premium-card mt-8 rounded-3xl p-6">
             <h1 className="text-3xl font-black">Category not found</h1>
             <p className="mt-2 text-white/65">Choose one of the main catering equipment categories from the homepage.</p>
@@ -178,10 +192,10 @@ export default function CategoryPage({ params }: CategoryPageProps) {
     <main className="app-bg min-h-screen pb-24 text-white">
       <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
         <div className="mb-5 flex items-center justify-between gap-3">
-          <Link href="/" className="soft-button inline-flex items-center gap-2 rounded-2xl px-4 py-2">
+          <button onClick={handleBack} className="soft-button inline-flex items-center gap-2 rounded-2xl px-4 py-2">
             <ArrowLeft className="h-4 w-4" />
-            Home
-          </Link>
+            Back
+          </button>
           <Link href="/post-listing" className="premium-button rounded-2xl px-4 py-2 text-sm font-black">
             List yours for free
           </Link>
