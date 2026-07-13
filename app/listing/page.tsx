@@ -945,12 +945,17 @@ function ListingContent() {
           .eq("id", sellerId)
           .maybeSingle()
 
-        if (publicProfileResult.error && /full_name|social_links|schema cache|column|does not exist/i.test(publicProfileResult.error.message || "")) {
-          publicProfileResult = await supabase
-            .from("seller_public_profiles" as "profiles")
-            .select("verified,email_verified,is_email_verified,phone_verified,is_phone_verified,verified_user_badge,seller_verification_level,business_verified,government_id_verified,stripe_connect_onboarding_complete,created_at,name,business")
-            .eq("id", sellerId)
-            .maybeSingle()
+        if (publicProfileResult.error) {
+          const msg = publicProfileResult.error.message || ""
+          if (/full_name|social_links|schema cache/i.test(msg)) {
+            publicProfileResult = await supabase
+              .from("seller_public_profiles" as "profiles")
+              .select("verified,email_verified,is_email_verified,phone_verified,is_phone_verified,verified_user_badge,seller_verification_level,business_verified,government_id_verified,stripe_connect_onboarding_complete,created_at,name,business")
+              .eq("id", sellerId)
+              .maybeSingle()
+          } else {
+            console.error("seller_public_profiles query failed — view may be missing a column:", publicProfileResult.error)
+          }
         }
 
         if (!publicProfileResult.error) {
