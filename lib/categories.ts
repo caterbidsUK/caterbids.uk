@@ -114,6 +114,18 @@ export const CATERING_CATEGORIES: CaterBidsCategory[] = [
     ],
   },
   {
+    title: "Canopies & Extraction",
+    slug: "canopies-extraction",
+    description: "Commercial kitchen canopies, extraction fans, ductwork and filters.",
+    searchQuery: "commercial kitchen extraction canopy",
+    subcategories: [
+      "Canopies",
+      "Filters & Odour Control",
+      "Ductwork & Fans",
+      "Other Canopies & Extraction",
+    ],
+  },
+  {
     title: "Coffee & Bar Equipment",
     slug: "coffee-bar-equipment",
     description: "Coffee machines, grinders, water boilers, bar fridges and bar sinks.",
@@ -157,7 +169,6 @@ export const CATERING_CATEGORIES: CaterBidsCategory[] = [
       "Trolleys & Service Carts",
       "Storage Containers & Bins",
       "Gastronorm Pans & Accessories",
-      "Canopies and extraction",
       "Other Stainless & Storage",
     ],
   },

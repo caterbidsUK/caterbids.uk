@@ -824,6 +824,9 @@ function categoryForEquipmentType(value: string) {
   if (/\bdishwasher|glasswasher|warewasher|pass\s*through|passthrough|hood\s*type\b/.test(text)) {
     return { category: "Catering Equipment", type: "Warewashing & Sinks" }
   }
+  if (/\bcanop(?:y|ies)\b|\bextract(?:ion|or)\b|\bventilation\b|\bplenum\b|\bductwork\b|\bducting\b|\bbaffle\b|\bgrease\s+filter\b|\bodour\s+control\b|make[\s-]+up\s+air|\bhood\b/.test(text)) {
+    return { category: "Catering Equipment", type: "Canopies & Extraction" }
+  }
   if (/\btoast|toaster|conveyor\s+toaster\b/.test(text)) {
     return { category: "Catering Equipment", type: "Cooking Equipment" }
   }

@@ -805,7 +805,7 @@ function SearchContent() {
             <p className="mb-5 text-[11px] font-black uppercase tracking-[0.22em] text-white/45">
               Browse by category
             </p>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               {CATERING_CATEGORIES.map((cat) => {
                 const isCatActive = activeFilter === cat.slug
                 return (
