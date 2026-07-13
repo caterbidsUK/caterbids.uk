@@ -227,6 +227,7 @@ export default async function HomePage({
 
   return (
     <main className="min-h-screen overflow-hidden bg-[#001225] text-white">
+      <LaunchStrip freeRemaining={freeRemaining} freeCap={freeCap} />
       <HeroSection accountHref={accountHref} accountLabel={accountLabel} freeRemaining={freeRemaining} freeCap={freeCap} />
 
       <section className="relative z-20 -mt-8 px-4 pb-10 sm:px-6 lg:px-10">
@@ -242,6 +243,23 @@ export default async function HomePage({
 
       <SiteFooter />
     </main>
+  )
+}
+
+function LaunchStrip({ freeRemaining, freeCap }: { freeRemaining: number; freeCap: number }) {
+  return (
+    <div className="w-full bg-[#FF6B00] px-4 py-2 text-center">
+      <p className="text-sm font-black text-white">
+        {freeRemaining > 0 ? (
+          <>
+            {freeRemaining} of {freeCap} free listings left
+            <span className="hidden sm:inline"> — no fees, no catch.</span>
+          </>
+        ) : (
+          `All ${freeCap} free listing slots have been claimed.`
+        )}
+      </p>
+    </div>
   )
 }
 
@@ -263,11 +281,18 @@ function HeroSection({ accountHref, accountLabel, freeRemaining, freeCap }: { ac
         <SiteHeader accountHref={accountHref} accountLabel={accountLabel} />
 
         <div className="pt-11 sm:pt-16 lg:max-w-4xl lg:pt-24">
-          <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-[#FF6B00]/40 bg-[#FF6B00]/10 px-4 py-1.5 backdrop-blur-sm">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#FF6B00]" />
-            <span className="text-xs font-black uppercase tracking-[0.22em] text-[#FF6B00]">
-              {freeRemaining > 0 ? `${freeRemaining} of ${freeCap} free listings left` : `All ${freeCap} free listing slots taken`}
-            </span>
+          <div className="mb-5">
+            <p className="mb-2 text-[0.65rem] font-black uppercase tracking-[0.3em] text-[#FF6B00]">
+              Limited time launch offer
+            </p>
+            <div className="flex items-baseline gap-3">
+              <span className="text-[2.8rem] font-black leading-none tracking-tight text-[#FF6B00]">
+                {freeRemaining > 0 ? freeRemaining : 0}
+              </span>
+              <span className="text-base font-semibold text-white/90">
+                {freeRemaining > 0 ? `of ${freeCap} free listings left` : `of ${freeCap} slots taken`}
+              </span>
+            </div>
           </div>
           <h1 className="max-w-4xl text-[4.15rem] font-black leading-[0.96] tracking-[-0.075em] text-white sm:text-[5.8rem] lg:text-[6.7rem]">
             The UK Marketplace for <span className="text-[#FF6B00]">Catering Equipment</span>
@@ -645,34 +670,31 @@ function HowItWorks() {
 
 function ClosingCta({ freeRemaining, freeCap }: { freeRemaining: number; freeCap: number }) {
   return (
-    <section className="mt-5 overflow-hidden rounded-[1.7rem] border border-[#FF6B00]/35 bg-[linear-gradient(135deg,rgba(7,36,72,0.96),rgba(3,20,43,0.98))] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.22)] sm:p-8">
-      <div className="grid items-center gap-6 lg:grid-cols-[auto_1fr_auto]">
-        <div className="flex h-20 w-20 rotate-[-14deg] items-center justify-center rounded-3xl bg-[#FF6B00] text-white shadow-[0_20px_60px_rgba(255,107,0,0.36)]">
-          <Tag className="h-10 w-10" strokeWidth={1.8} />
-        </div>
-        <div>
-          <p className="text-xs font-black uppercase tracking-[0.25em] text-[#FF6B00]">Limited time launch offer</p>
-          <h2 className="mt-1 text-3xl font-black tracking-[-0.045em] text-white sm:text-4xl">
+    <section className="mt-5 overflow-hidden rounded-[1.7rem] border border-white/10 bg-[rgba(0,12,30,0.7)] p-5 sm:p-7">
+      <div className="grid items-center gap-5 sm:grid-cols-[1fr_auto]">
+        <div className="border-l-2 border-[#FF6B00]/55 pl-4">
+          <p className="text-[0.65rem] font-black uppercase tracking-[0.28em] text-[#FF6B00]">Limited time launch offer</p>
+          <h2 className="mt-1 text-xl font-black tracking-[-0.03em] text-white sm:text-2xl">
             {freeRemaining > 0
               ? `${freeRemaining} of ${freeCap} free listings left`
               : `All ${freeCap} free listing slots taken`}
           </h2>
-          <p className="mt-2 text-base font-semibold text-white/72">No fees. No catch. Join UK caterers buying and selling equipment.</p>
-          <p className="mt-3 text-sm font-black uppercase tracking-[0.28em] text-[#FF6B00]">BUY • SELL • SAVE</p>
+          <p className="mt-1.5 text-sm font-semibold text-white/60">No fees. No catch. Join UK caterers buying and selling equipment.</p>
+          <p className="mt-3 text-[0.65rem] font-black uppercase tracking-[0.28em] text-[#FF6B00]/70">BUY · SELL · SAVE</p>
         </div>
-        <div className="flex flex-col gap-3 sm:flex-row lg:min-w-[240px] lg:flex-col">
+        <div className="flex flex-wrap gap-3 sm:min-w-[200px] sm:flex-col">
           <Link
             href={sellHref}
-            className="flex min-h-14 items-center justify-center gap-3 rounded-2xl bg-[#FF6B00] px-7 text-base font-black text-white shadow-[0_18px_45px_rgba(255,107,0,0.3)] transition hover:brightness-110 focus:outline-none focus:ring-4 focus:ring-[#FF6B00]/25"
+            className="flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-[#FF6B00]/55 px-6 text-sm font-black text-[#FF6B00] transition hover:bg-[#FF6B00]/10 focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/30"
           >
             Start Free Listing
-            <ArrowRight className="h-5 w-5" strokeWidth={2.4} />
+            <ArrowRight className="h-4 w-4" strokeWidth={2.4} />
           </Link>
           <Link
             href={searchAllHref}
-            className="flex min-h-14 items-center justify-center gap-3 rounded-2xl border border-white/20 bg-white/10 px-7 text-base font-black text-white transition hover:border-[#FF6B00]/55 focus:outline-none focus:ring-4 focus:ring-white/20"
+            className="flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-white/12 px-6 text-sm font-black text-white/60 transition hover:text-white/85 focus:outline-none focus:ring-2 focus:ring-white/20"
           >
-            <Search className="h-5 w-5" strokeWidth={2.2} />
+            <Search className="h-4 w-4" strokeWidth={2.2} />
             Browse Equipment
           </Link>
         </div>
