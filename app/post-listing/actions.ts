@@ -320,6 +320,7 @@ export async function createListing(
   const listingId = crypto.randomUUID()
   let paidEntitlementToUse: SellerListingEntitlement | null = null
   let isFoundingMember = false
+  let useFreeSlot = false
 
   try {
     const admin = createAdminClient()
@@ -341,16 +342,14 @@ export async function createListing(
       // Founding Trade Member fast-path: up to 30 concurrent live listings, free.
       // paidEntitlementToUse stays null — no claim consumed.
     } else {
-      // Attempt to claim a platform-wide free listing slot if the offer is active.
-      // The RPC is atomic: inserts a claim row (PK on seller_id prevents double-claim)
-      // and counts only non-test claims against the cap.
-      let useFreeSlot = false
+      // Read-only eligibility check — writes nothing to free_listing_claims.
+      // The actual claim row is written AFTER a successful listing INSERT
+      // so a failed insert can never burn the seller's one free slot.
       if (paymentSettings.free_listing_mode) {
-        const { data: claimGranted } = await (admin as any).rpc('claim_free_listing', {
+        const { data: eligible } = await (admin as any).rpc('can_claim_free_listing', {
           p_seller_id: user.id,
-          p_listing_id: listingId,
         })
-        useFreeSlot = Boolean(claimGranted)
+        useFreeSlot = Boolean(eligible)
       }
 
       if (!useFreeSlot) {
@@ -553,6 +552,40 @@ export async function createListing(
       success: false,
       error: error.message || 'Could not publish listing.',
       code: error.code,
+    }
+  }
+
+  // Commit the free listing claim now that the listing is confirmed to exist.
+  // If this returns false, the last slot was taken in the window between
+  // can_claim_free_listing (check) and here (commit). Set listing to
+  // payment_pending so it is not live for free, and ask seller to pay.
+  if (useFreeSlot && createdListing?.id) {
+    try {
+      const admin = createAdminClient()
+      const { data: claimGranted } = await (admin as any).rpc('claim_free_listing', {
+        p_seller_id: user.id,
+        p_listing_id: listingId,
+      })
+      if (!claimGranted) {
+        try {
+          await admin
+            .from('listings')
+            .update({ status: 'payment_pending' })
+            .eq('id', listingId)
+        } catch (statusError) {
+          console.warn('Race: free claim failed and listing status could not be set to payment_pending:', statusError)
+        }
+        return {
+          success: false,
+          error: 'The last free listing slot was just taken by another seller. Choose a listing pack or monthly plan to publish.',
+          code: 'PAYMENT_REQUIRED',
+          redirectTo: '/pricing?payment_required=1',
+        }
+      }
+    } catch (claimError) {
+      // Non-fatal: listing is live, claim row was not written.
+      // Prefer a live listing with a missing claim over burning the slot on nothing.
+      console.warn('Listing published but free claim could not be committed:', claimError)
     }
   }
 
