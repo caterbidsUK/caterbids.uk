@@ -18,6 +18,7 @@ import {
 } from "lucide-react"
 import { SELLER_PLANS, type SellerPlan, formatPlanPrice, normaliseSellerPlan } from "@/lib/pricing"
 import { createClient } from "@/lib/supabase/server"
+import { getFoundingMemberCount, getFreeListingsRemaining } from "@/lib/counters"
 import SellerPlanCheckoutButton from "./SellerPlanCheckoutButton"
 
 export const metadata: Metadata = {
@@ -275,21 +276,8 @@ export default async function SellerPricingPage() {
   }
 
   const foundingPlan = plans.find((p) => p.type === "founding_member")
-  let foundingRemaining = 0
-  let foundingCap = 100
-  if (foundingPlan) {
-    try {
-      const { data: counterData } = await (supabase.from("founding_member_counter" as never) as any)
-        .select("cap,sold")
-        .limit(1)
-      if (counterData?.[0]) {
-        foundingCap = Number(counterData[0].cap)
-        foundingRemaining = Math.max(0, foundingCap - Number(counterData[0].sold))
-      }
-    } catch {
-      foundingRemaining = 100
-    }
-  }
+  const [{ remaining: foundingRemaining, cap: foundingCap }, { remaining: freeRemaining, cap: freeCap }] =
+    await Promise.all([getFoundingMemberCount(), getFreeListingsRemaining()])
 
   const listingPacks = plans.filter((p) => p.type === "single_pack")
   const monthlyPlans = plans.filter((p) => p.type === "subscription")
@@ -325,7 +313,9 @@ export default async function SellerPricingPage() {
           </div>
           <div>
             <p className="mt-4 text-4xl font-black uppercase tracking-[-0.05em] md:mt-0 lg:text-5xl">
-              First 100 listings free
+              {freeRemaining > 0
+                ? `${freeRemaining} of ${freeCap} free listings left`
+                : `All ${freeCap} free listing slots taken`}
             </p>
             <p className="mt-2 text-xl font-black text-[#001A35]">
               No seller success fees • Keep 100% of your sale

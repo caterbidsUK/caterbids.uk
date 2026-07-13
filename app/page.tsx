@@ -26,6 +26,7 @@ import {
 import { createClient } from "@/lib/supabase/server"
 import type { Database } from "@/types/supabase"
 import FeaturedCarousel from "@/components/FeaturedCarousel"
+import { getFreeListingsRemaining } from "@/lib/counters"
 
 export const dynamic = "force-dynamic"
 
@@ -635,7 +636,8 @@ function HowItWorks() {
   )
 }
 
-function ClosingCta() {
+async function ClosingCta() {
+  const { remaining: freeRemaining, cap: freeCap } = await getFreeListingsRemaining()
   return (
     <section className="mt-5 overflow-hidden rounded-[1.7rem] border border-[#FF6B00]/35 bg-[linear-gradient(135deg,rgba(7,36,72,0.96),rgba(3,20,43,0.98))] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.22)] sm:p-8">
       <div className="grid items-center gap-6 lg:grid-cols-[auto_1fr_auto]">
@@ -644,7 +646,11 @@ function ClosingCta() {
         </div>
         <div>
           <p className="text-xs font-black uppercase tracking-[0.25em] text-[#FF6B00]">Limited time launch offer</p>
-          <h2 className="mt-1 text-3xl font-black tracking-[-0.045em] text-white sm:text-4xl">First 100 listings free</h2>
+          <h2 className="mt-1 text-3xl font-black tracking-[-0.045em] text-white sm:text-4xl">
+            {freeRemaining > 0
+              ? `${freeRemaining} of ${freeCap} free listings left`
+              : `All ${freeCap} free listing slots taken`}
+          </h2>
           <p className="mt-2 text-base font-semibold text-white/72">No fees. No catch. Join UK caterers buying and selling equipment.</p>
           <p className="mt-3 text-sm font-black uppercase tracking-[0.28em] text-[#FF6B00]">BUY • SELL • SAVE</p>
         </div>

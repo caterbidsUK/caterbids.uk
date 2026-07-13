@@ -14,6 +14,7 @@ import AdminDashboard, {
 } from "./AdminDashboard"
 import { requireAdmin } from "./admin-utils"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { getFoundingMemberCount } from "@/lib/counters"
 import { DEFAULT_PAYMENT_SETTINGS, SELLER_PLANS, normalisePaymentSettings, normaliseSellerPlan } from "@/lib/pricing"
 
 export const dynamic = "force-dynamic"
@@ -162,7 +163,7 @@ export default async function AdminPage({
     trustReportsTotal,
     blogPostsTotal,
     blogPostsRaw,
-    foundingCounterRaw,
+    foundingCounter,
     foundingMembersRaw,
   ] = await Promise.all([
     safeCount(
@@ -270,10 +271,7 @@ export default async function AdminPage({
         .limit(80),
       "blog posts"
     ),
-    safeData<{ cap: number; sold: number }>(
-      admin.from("founding_member_counter" as never).select("cap,sold").limit(1) as any,
-      "founding member counter"
-    ),
+    getFoundingMemberCount(),
     safeData<AdminFoundingMember>(
       admin
         .from("seller_listing_entitlements")
@@ -287,7 +285,7 @@ export default async function AdminPage({
 
   const usersById = new Map(usersRaw.map((user) => [user.id, user]))
   const listingsById = new Map(listingsRaw.map((listing) => [listing.id, listing]))
-  const foundingCounter = foundingCounterRaw[0] || { cap: 100, sold: 0 }
+
   const foundingMembers: AdminFoundingMember[] = foundingMembersRaw.map((member) => ({
     ...member,
     email: usersById.get(String((member as any).seller_id || ""))?.email || null,
