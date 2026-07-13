@@ -215,8 +215,8 @@ export default function CategoryPage({ params }: CategoryPageProps) {
           )}
 
           {category.slug !== "catering-equipment" && category.subcategories.length > 0 && (
-            <div className="-mx-5 mt-4 sm:-mx-6">
-              <div className="flex gap-2 overflow-x-auto px-5 pb-1 sm:px-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="mt-4">
+              <div className="flex flex-wrap gap-2">
                 {selectedSubcategory && (
                   <button
                     onClick={() => setSelectedSubcategory(null)}
