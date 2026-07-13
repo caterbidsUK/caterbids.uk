@@ -42,8 +42,8 @@ export default function TermsPage() {
           <div className="mt-4 rounded-2xl border border-[#FF6B00]/20 bg-[#FF6B00]/[0.06] px-4 py-3 text-sm font-semibold leading-relaxed text-white/70">
             This policy is provided in good faith and is being finalised. If you have any questions,
             contact{" "}
-            <a href="mailto:caterbidsuk@gmail.com" className="font-black text-[#FF6B00] hover:underline">
-              caterbidsuk@gmail.com
+            <a href="mailto:support@caterbids.uk" className="font-black text-[#FF6B00] hover:underline">
+              support@caterbids.uk
             </a>
             .
           </div>
@@ -51,8 +51,8 @@ export default function TermsPage() {
             <p>Colt Price, sole trader trading as CaterBids.uk</p>
             <p>Greyfriars House, Birmingham, B37 5HY</p>
             <p>
-              <a href="mailto:caterbidsuk@gmail.com" className="hover:text-[#FF6B00]">
-                caterbidsuk@gmail.com
+              <a href="mailto:support@caterbids.uk" className="hover:text-[#FF6B00]">
+                support@caterbids.uk
               </a>
             </p>
             <p>
@@ -106,8 +106,8 @@ export default function TermsPage() {
                 https://caterbids.uk
               </a>
               . Email:{" "}
-              <a href="mailto:caterbidsuk@gmail.com" className="text-[#FF6B00] hover:underline">
-                caterbidsuk@gmail.com
+              <a href="mailto:support@caterbids.uk" className="text-[#FF6B00] hover:underline">
+                support@caterbids.uk
               </a>
               .
             </p>
@@ -447,8 +447,8 @@ export default function TermsPage() {
             <h2 className="text-base font-black text-white">27. Contact</h2>
             <p className="mt-3 text-sm leading-relaxed text-white/72">
               For questions about these Terms, contact CaterBids.uk at{" "}
-              <a href="mailto:caterbidsuk@gmail.com" className="text-[#FF6B00] hover:underline">
-                caterbidsuk@gmail.com
+              <a href="mailto:support@caterbids.uk" className="text-[#FF6B00] hover:underline">
+                support@caterbids.uk
               </a>{" "}
               (Colt Price trading as CaterBids.uk, Greyfriars House, Birmingham, B37 5HY).
             </p>

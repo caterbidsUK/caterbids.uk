@@ -42,8 +42,8 @@ export default function PrivacyPolicyPage() {
           <div className="mt-4 rounded-2xl border border-[#FF6B00]/20 bg-[#FF6B00]/[0.06] px-4 py-3 text-sm font-semibold leading-relaxed text-white/70">
             This policy is provided in good faith and is being finalised. If you have any questions,
             contact{" "}
-            <a href="mailto:caterbidsuk@gmail.com" className="font-black text-[#FF6B00] hover:underline">
-              caterbidsuk@gmail.com
+            <a href="mailto:support@caterbids.uk" className="font-black text-[#FF6B00] hover:underline">
+              support@caterbids.uk
             </a>
             .
           </div>
@@ -51,8 +51,8 @@ export default function PrivacyPolicyPage() {
             <p>Colt Price, sole trader trading as CaterBids.uk</p>
             <p>Greyfriars House, Birmingham, B37 5HY</p>
             <p>
-              <a href="mailto:caterbidsuk@gmail.com" className="hover:text-[#FF6B00]">
-                caterbidsuk@gmail.com
+              <a href="mailto:support@caterbids.uk" className="hover:text-[#FF6B00]">
+                support@caterbids.uk
               </a>
             </p>
             <p>
@@ -72,8 +72,8 @@ export default function PrivacyPolicyPage() {
               CaterBids.uk is a UK online marketplace for buying and selling commercial catering
               equipment. For data protection purposes, the controller of your personal data is Colt
               Price, a sole trader, trading as CaterBids.uk (Greyfriars House, Birmingham, B37 5HY;{" "}
-              <a href="mailto:caterbidsuk@gmail.com" className="text-[#FF6B00] hover:underline">
-                caterbidsuk@gmail.com
+              <a href="mailto:support@caterbids.uk" className="text-[#FF6B00] hover:underline">
+                support@caterbids.uk
               </a>
               ). We are registered with the Information Commissioner&apos;s Office where required. We
               have not appointed a Data Protection Officer, as one is not legally required.
@@ -84,8 +84,8 @@ export default function PrivacyPolicyPage() {
             <h2 className="text-base font-black text-white">2. How to contact us about privacy</h2>
             <p className="mt-3 text-sm leading-relaxed text-white/72">
               For privacy questions, data requests, or data protection complaints, contact us at{" "}
-              <a href="mailto:caterbidsuk@gmail.com" className="text-[#FF6B00] hover:underline">
-                caterbidsuk@gmail.com
+              <a href="mailto:support@caterbids.uk" className="text-[#FF6B00] hover:underline">
+                support@caterbids.uk
               </a>{" "}
               using the subject line &ldquo;Data Protection Request&rdquo; or &ldquo;Data Protection
               Complaint.&rdquo;
@@ -98,8 +98,8 @@ export default function PrivacyPolicyPage() {
               Under the Data (Use and Access) Act 2026, you have the right to lodge a complaint
               directly with us if you are unhappy with how we have handled your personal data. To
               complain: email{" "}
-              <a href="mailto:caterbidsuk@gmail.com" className="text-[#FF6B00] hover:underline">
-                caterbidsuk@gmail.com
+              <a href="mailto:support@caterbids.uk" className="text-[#FF6B00] hover:underline">
+                support@caterbids.uk
               </a>{" "}
               with your full name, the email linked to your account, a description of your concern,
               and your desired resolution. We will acknowledge your complaint within 30 days,
@@ -190,8 +190,8 @@ export default function PrivacyPolicyPage() {
             </ul>
             <p className="mt-3 text-sm leading-relaxed text-white/72">
               To exercise any of these rights, contact us at{" "}
-              <a href="mailto:caterbidsuk@gmail.com" className="text-[#FF6B00] hover:underline">
-                caterbidsuk@gmail.com
+              <a href="mailto:support@caterbids.uk" className="text-[#FF6B00] hover:underline">
+                support@caterbids.uk
               </a>
               .
             </p>

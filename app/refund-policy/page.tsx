@@ -42,8 +42,8 @@ export default function RefundPolicyPage() {
           <div className="mt-4 rounded-2xl border border-[#FF6B00]/20 bg-[#FF6B00]/[0.06] px-4 py-3 text-sm font-semibold leading-relaxed text-white/70">
             This policy is provided in good faith and is being finalised. If you have any questions,
             contact{" "}
-            <a href="mailto:caterbidsuk@gmail.com" className="font-black text-[#FF6B00] hover:underline">
-              caterbidsuk@gmail.com
+            <a href="mailto:support@caterbids.uk" className="font-black text-[#FF6B00] hover:underline">
+              support@caterbids.uk
             </a>
             .
           </div>
@@ -51,8 +51,8 @@ export default function RefundPolicyPage() {
             <p>Colt Price, sole trader trading as CaterBids.uk</p>
             <p>Greyfriars House, Birmingham, B37 5HY</p>
             <p>
-              <a href="mailto:caterbidsuk@gmail.com" className="hover:text-[#FF6B00]">
-                caterbidsuk@gmail.com
+              <a href="mailto:support@caterbids.uk" className="hover:text-[#FF6B00]">
+                support@caterbids.uk
               </a>
             </p>
             <p>

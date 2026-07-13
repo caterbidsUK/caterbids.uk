@@ -1,5 +1,6 @@
 import Link from "next/link"
 import type { Metadata } from "next"
+import ContactForm from "./ContactForm"
 
 const siteUrl = "https://caterbids.uk"
 
@@ -45,39 +46,8 @@ export default function ContactPage() {
           </section>
 
           <section className="premium-card rounded-3xl p-5 sm:p-6">
-            <h2 className="text-xl font-black">Business Contact Form</h2>
-            <form className="mt-4 grid gap-3">
-              <label className="grid gap-1">
-                <span className="text-xs font-bold uppercase tracking-[0.14em] text-white/45">Name</span>
-                <input className="premium-input rounded-2xl px-4 py-3 text-sm" placeholder="Your name" />
-              </label>
-              <label className="grid gap-1">
-                <span className="text-xs font-bold uppercase tracking-[0.14em] text-white/45">Email</span>
-                <input className="premium-input rounded-2xl px-4 py-3 text-sm" placeholder="you@example.com" type="email" />
-              </label>
-              <label className="grid gap-1">
-                <span className="text-xs font-bold uppercase tracking-[0.14em] text-white/45">Topic</span>
-                <select className="premium-input rounded-2xl px-4 py-3 text-sm" defaultValue="Support">
-                  <option>Support</option>
-                  <option>Payment or Stripe question</option>
-                  <option>Delivery booking</option>
-                  <option>Buyer or seller dispute</option>
-                  <option>Safety report</option>
-                  <option>Business partnership</option>
-                </select>
-              </label>
-              <label className="grid gap-1">
-                <span className="text-xs font-bold uppercase tracking-[0.14em] text-white/45">Message</span>
-                <textarea className="premium-input min-h-32 rounded-2xl px-4 py-3 text-sm" placeholder="Tell us what happened..." />
-              </label>
-              <button type="button" className="premium-button rounded-2xl px-5 py-3 text-sm font-black text-white">
-                Send Message
-              </button>
-              <p className="text-xs leading-5 text-white/45">
-                This beta form is prepared for support routing. If it does not submit in your environment,
-                email support@caterbids.uk directly.
-              </p>
-            </form>
+            <h2 className="text-xl font-black">Contact Form</h2>
+            <ContactForm />
           </section>
         </div>
       </div>
