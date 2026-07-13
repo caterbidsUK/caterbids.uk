@@ -79,9 +79,6 @@ const GENERIC_MARKETPLACE_TERMS = new Set([
 ])
 
 const maskStyle = (slug: string): React.CSSProperties => ({
-  display: "block",
-  width: "3.5rem",
-  height: "3.5rem",
   backgroundColor: "currentColor",
   WebkitMaskImage: `url('/icons/categories/${slug}.svg')`,
   maskImage: `url('/icons/categories/${slug}.svg')`,
@@ -805,24 +802,24 @@ function SearchContent() {
             <p className="mb-5 text-[11px] font-black uppercase tracking-[0.22em] text-white/45">
               Browse by category
             </p>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <div className="grid grid-cols-3 gap-2 sm:gap-3">
               {CATERING_CATEGORIES.map((cat) => {
                 const isCatActive = activeFilter === cat.slug
                 return (
                   <Link
                     key={cat.slug}
                     href={`/category/${cat.slug}`}
-                    className={`group flex flex-col items-center gap-4 rounded-3xl border p-5 text-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6B00] sm:p-6 ${
+                    className={`group flex flex-col items-center gap-2 rounded-3xl border p-3 text-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6B00] sm:gap-4 sm:p-6 ${
                       isCatActive
                         ? "border-[#FF6B00] bg-[#FF6B00]/10"
                         : "border-white/10 bg-[#062747]/70 hover:border-[#FF6B00]/45 hover:bg-[#062747]"
                     }`}
                   >
                     <span
-                      className={isCatActive ? "text-white" : "text-[#FF6B00]"}
+                      className={`block h-10 w-10 shrink-0 sm:h-14 sm:w-14 ${isCatActive ? "text-white" : "text-[#FF6B00]"}`}
                       style={maskStyle(cat.slug)}
                     />
-                    <span className="text-xs font-black leading-snug text-white/85 group-hover:text-white sm:text-sm">
+                    <span className="text-[10px] font-black leading-tight text-white/85 group-hover:text-white sm:text-xs sm:leading-snug">
                       {cat.title}
                     </span>
                   </Link>
