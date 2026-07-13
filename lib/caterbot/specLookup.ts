@@ -36,6 +36,7 @@ export type CaterBotStructuredSpecs = {
   title: string
   category: string
   type: string
+  equipment_type: string | null
   condition: string
   brand: string
   model: string
@@ -818,22 +819,52 @@ function palletSize(
 
 function categoryForEquipmentType(value: string) {
   const text = value.toLowerCase()
-  if (/\bvan|trailer|mobile\b/.test(text)) return { category: "Catering Vans & Trailers", type: "Mobile Catering Units" }
-  if (/\bbusiness|cafe|takeaway|restaurant\b/.test(text)) return { category: "Catering Businesses", type: "Hospitality Business" }
-  if (/\bfridge|refriger|freezer|chiller\b/.test(text)) return { category: "Catering Equipment", type: "Refrigeration" }
+  if (/\bvan|trailer|mobile\b/.test(text)) return { category: "Catering Vans & Trailers", type: "Mobile Catering Units", subtype: null as string | null }
+  if (/\bbusiness|cafe|takeaway|restaurant\b/.test(text)) return { category: "Catering Businesses", type: "Hospitality Business", subtype: null as string | null }
+  if (/\bfridge|refriger|freezer|chiller\b/.test(text)) {
+    let subtype: string | null = null
+    if (/\bfreezer\b/.test(text)) subtype = "Commercial Freezers"
+    else if (/\bprep|counter|under.?counter\b/.test(text)) subtype = "Prep / Counter Refrigerators"
+    else if (/\bbottle\s*cool\b/.test(text)) subtype = "Bottle Coolers"
+    else if (/\bice\b/.test(text)) subtype = "Ice Machines"
+    else if (/\bcold\s*room\b/.test(text)) subtype = "Cold Rooms"
+    else subtype = "Commercial Fridges"
+    return { category: "Catering Equipment", type: "Refrigeration", subtype }
+  }
   if (/\bdishwasher|glasswasher|warewasher|pass\s*through|passthrough|hood\s*type\b/.test(text)) {
-    return { category: "Catering Equipment", type: "Warewashing & Sinks" }
+    let subtype: string | null = null
+    if (/\bglass(?:washer)?\b/.test(text)) subtype = "Glasswashers"
+    else if (/\bpass\s*through|passthrough\b/.test(text)) subtype = "Pass-Through Dishwashers"
+    else if (/\bsink|basin\b/.test(text)) subtype = "Sinks & Basins"
+    else subtype = "Dishwashers"
+    return { category: "Catering Equipment", type: "Warewashing & Sinks", subtype }
   }
   if (/\bcanop(?:y|ies)\b|\bextract(?:ion|or)\b|\bventilation\b|\bplenum\b|\bductwork\b|\bducting\b|\bbaffle\b|\bgrease\s+filter\b|\bodour\s+control\b|make[\s-]+up\s+air|\bhood\b/.test(text)) {
-    return { category: "Catering Equipment", type: "Canopies & Extraction" }
+    let subtype: string | null = null
+    if (/\bcanop(?:y|ies)\b/.test(text)) subtype = "Canopies"
+    else if (/\bductwork|ducting\b/.test(text)) subtype = "Ductwork & Fans"
+    else if (/\bfilter|odour\b/.test(text)) subtype = "Filters & Odour Control"
+    return { category: "Catering Equipment", type: "Canopies & Extraction", subtype }
   }
   if (/\btoast|toaster|conveyor\s+toaster\b/.test(text)) {
-    return { category: "Catering Equipment", type: "Cooking Equipment" }
+    return { category: "Catering Equipment", type: "Cooking Equipment", subtype: null as string | null }
   }
   if (/\bcoffee|bulk brew|beverage|hot water|boiler|dispenser\b/.test(text)) {
-    return { category: "Catering Equipment", type: "Coffee & Bar Equipment" }
+    let subtype: string | null = null
+    if (/\bcoffee\s*(?:machine|maker)|espresso\b/.test(text)) subtype = "Coffee Machines"
+    else if (/\bgrinder\b/.test(text)) subtype = "Coffee Grinders"
+    else if (/\bboiler|hot\s*water\b/.test(text)) subtype = "Water Boilers & Dispensers"
+    return { category: "Catering Equipment", type: "Coffee & Bar Equipment", subtype }
   }
-  return { category: "Catering Equipment", type: "Cooking Equipment" }
+  // Cooking Equipment — try to match Level 3 subtype
+  let cookingSubtype: string | null = null
+  if (/\bfryer\b/.test(text)) cookingSubtype = "Fryers"
+  else if (/\boven|combi\b/.test(text)) cookingSubtype = "Ovens & Combi Ovens"
+  else if (/\bgrill|chargrill\b/.test(text)) cookingSubtype = "Grills & Chargrills"
+  else if (/\brange|hob\b/.test(text)) cookingSubtype = "Ranges & Hobs"
+  else if (/\bmicrowave\b/.test(text)) cookingSubtype = "Microwaves"
+  else if (/\bkebab|doner\b/.test(text)) cookingSubtype = "Kebab / Doner Machines"
+  return { category: "Catering Equipment", type: "Cooking Equipment", subtype: cookingSubtype }
 }
 
 function titleCaseWords(value: string) {
@@ -1140,6 +1171,7 @@ export function specsFromValidatedSource(
     title,
     category: category.category,
     type: category.type,
+    equipment_type: category.subtype,
     condition: "Used",
     brand: correctedExtraction.brand,
     model: correctedExtraction.model,

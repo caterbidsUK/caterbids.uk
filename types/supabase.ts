@@ -353,6 +353,7 @@ export interface Database {
           location: string
           category: string
           subcategory: string | null
+          equipment_type: string | null
           user_id: string
           created_at: string
           updated_at: string | null
@@ -458,6 +459,7 @@ export interface Database {
           location: string
           category: string
           subcategory?: string | null
+          equipment_type?: string | null
           user_id: string
           created_at?: string
           updated_at?: string | null
@@ -563,6 +565,7 @@ export interface Database {
           location?: string
           category?: string
           subcategory?: string | null
+          equipment_type?: string | null
           user_id?: string
           created_at?: string
           updated_at?: string | null

@@ -387,6 +387,7 @@ function ListingContent() {
   const [selectedDelivery, setSelectedDelivery] = useState<DeliveryQuote | null>(null)
   const [editingCategory, setEditingCategory] = useState("Catering Equipment")
   const [editingSubcategory, setEditingSubcategory] = useState("Cooking Equipment")
+  const [editingEquipmentType, setEditingEquipmentType] = useState("")
   const [editError, setEditError] = useState("")
   const [messageError, setMessageError] = useState("")
   const [openingMessage, setOpeningMessage] = useState(false)
@@ -428,6 +429,7 @@ function ListingContent() {
           : itemCategory
     setEditingCategory(normalisedCategory)
     setEditingSubcategory(item.subcategory || (existingCategory?.marketplaceType ? "" : itemCategory) || subcategoriesForCategory(normalisedCategory)[0] || "")
+    setEditingEquipmentType(item.equipment_type || "")
     setEditImagePreviews(listingImageUrls(item))
     setEditError("")
   }
@@ -500,6 +502,7 @@ function ListingContent() {
       city: ((formData.get("city") as string) || "").trim() || null,
       category: (formData.get("category") as string) || "Catering Equipment",
       subcategory: (formData.get("subcategory") as string) || null,
+      equipment_type: (formData.get("equipment_type") as string) || null,
       condition: (formData.get("condition") as string) || "Used",
       power_type: (formData.get("power_type") as string) || "Unknown",
       dimensions: ((formData.get("dimensions") as string) || "").trim() || null,
@@ -551,6 +554,7 @@ function ListingContent() {
         city: updatedListing.city,
         category: updatedListing.category,
         subcategory: updatedListing.subcategory,
+        equipment_type: updatedListing.equipment_type,
         condition: updatedListing.condition,
         power_type: updatedListing.power_type,
         dimensions: updatedListing.dimensions,
@@ -1184,7 +1188,10 @@ function ListingContent() {
           <select
             name="subcategory"
             value={editingSubcategory}
-            onChange={(event) => setEditingSubcategory(event.target.value)}
+            onChange={(event) => {
+              setEditingSubcategory(event.target.value)
+              setEditingEquipmentType("")
+            }}
             className="premium-input mb-3 w-full rounded-2xl p-3"
           >
             {subcategoriesForCategory(editingCategory).map((subcategory) => (
@@ -1194,6 +1201,22 @@ function ListingContent() {
             ))}
           </select>
         )}
+        {(() => {
+          const level3 = categoryByTitle(editingSubcategory)?.subcategories ?? []
+          return level3.length > 0 ? (
+            <select
+              name="equipment_type"
+              value={editingEquipmentType}
+              onChange={(e) => setEditingEquipmentType(e.target.value)}
+              className="premium-input mb-3 w-full rounded-2xl p-3"
+            >
+              <option value="" className="text-black">— Subcategory (optional) —</option>
+              {level3.map((item) => (
+                <option key={item} className="text-black">{item}</option>
+              ))}
+            </select>
+          ) : null
+        })()}
         <select
           name="condition"
           defaultValue={editingListing.condition || "Used"}

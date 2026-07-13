@@ -20,7 +20,7 @@ import {
   TESTED_STATUS_OPTIONS,
   WARRANTY_TYPE_OPTIONS,
 } from "@/lib/listing-trust"
-import { CATEGORY_OPTIONS, subcategoriesForCategory } from "@/lib/categories"
+import { CATEGORY_OPTIONS, categoryByTitle, subcategoriesForCategory } from "@/lib/categories"
 
 type QuickListAiResponse = {
   suggested_title: string
@@ -174,6 +174,7 @@ type CaterBotSpecLookupResponse = {
     title?: string
     category?: string
     type?: string
+    equipment_type?: string | null
     condition?: string
     brand?: string
     model?: string
@@ -727,6 +728,7 @@ function PostListingPage() {
   const [city, setCity] = useState("")
   const [category, setCategory] = useState("Catering Equipment")
   const [subcategory, setSubcategory] = useState("Cooking Equipment")
+  const [equipmentType, setEquipmentType] = useState("")
   const [condition, setCondition] = useState("Used")
   const [powerType, setPowerType] = useState("Unknown")
   const [description, setDescription] = useState("")
@@ -842,6 +844,10 @@ function PostListingPage() {
   const [isPublishing, startPublishing] = useTransition()
   const imagePreview = imagePreviews[0] || ""
   const caterBotSearching = aiLoading || manualLinkChecking
+
+  useEffect(() => {
+    setEquipmentType("")
+  }, [subcategory])
 
   useEffect(() => {
     let kickoffTimer: number | undefined
@@ -1973,6 +1979,9 @@ function PostListingPage() {
       }
     }
     setSelectFromCaterBot(setSubcategory, specs?.type || visual?.visual_category, replace, ["Cooking Equipment"])
+    if (specs?.equipment_type) {
+      setEquipmentType((current) => (current ? current : (specs.equipment_type ?? "")))
+    }
     setSelectFromCaterBot(setCondition, specs?.condition, replace, ["Used"])
     setTextFromCaterBot(
       setDescription,
@@ -3230,6 +3239,26 @@ function PostListingPage() {
                 </label>
               )}
             </div>
+
+            {(() => {
+              const level3 = categoryByTitle(subcategory)?.subcategories ?? []
+              return level3.length > 0 ? (
+                <label className="block">
+                  <span className="mb-1 block text-sm font-black">Subcategory</span>
+                  <select
+                    name="equipment_type"
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                    value={equipmentType}
+                    onChange={(e) => setEquipmentType(e.target.value)}
+                  >
+                    <option value="">— Select subcategory —</option>
+                    {level3.map((item) => (
+                      <option key={item}>{item}</option>
+                    ))}
+                  </select>
+                </label>
+              ) : null
+            })()}
 
             <div className="grid gap-3 lg:grid-cols-3">
               <label className="block">

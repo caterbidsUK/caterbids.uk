@@ -56,7 +56,7 @@ import {
 } from "./actions"
 import { type PaymentSettings, type SellerPlan, formatPlanPrice, paymentStatusLabel } from "@/lib/pricing"
 import { CONDITION_OPTIONS, DELIVERY_OPTION_OPTIONS, POWER_TYPE_OPTIONS, TESTED_STATUS_OPTIONS, WARRANTY_TYPE_OPTIONS } from "@/lib/listing-trust"
-import { MARKETPLACE_CATEGORY_TITLES, subcategoriesForCategory } from "@/lib/categories"
+import { MARKETPLACE_CATEGORY_TITLES, categoryByTitle, subcategoriesForCategory } from "@/lib/categories"
 
 export type AdminTab = "overview" | "listings" | "users" | "orders" | "blog" | "verification" | "settings" | "audit"
 
@@ -78,6 +78,7 @@ export type AdminListing = {
   status?: string | null
   category?: string | null
   subcategory?: string | null
+  equipment_type?: string | null
   image_url?: string | null
   images?: string[] | null
   featured?: boolean | null
@@ -948,6 +949,8 @@ function ListingsPanel({
 function AdminListingEditModal({ listing, onClose }: { listing: AdminListing; onClose: () => void }) {
   const [state, action, pending] = useActionState(adminSaveListingEdits, null)
   const [selectedCategory, setSelectedCategory] = useState(listing.category || "Catering Equipment")
+  const [selectedSubcategory, setSelectedSubcategory] = useState(listing.subcategory || "")
+  const [selectedEquipmentType, setSelectedEquipmentType] = useState(listing.equipment_type || "")
 
   useEffect(() => {
     if (state?.success) {
@@ -957,6 +960,7 @@ function AdminListingEditModal({ listing, onClose }: { listing: AdminListing; on
   }, [state?.success, onClose])
 
   const subcategories = subcategoriesForCategory(selectedCategory)
+  const level3Options = categoryByTitle(selectedSubcategory)?.subcategories ?? []
   const inp = "w-full rounded-2xl border border-white/10 bg-[#001A35] px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-[#FF6B00]/50 focus:outline-none"
   const lbl = "mb-1 block text-xs font-black uppercase tracking-wide text-white/45"
   const sec = "space-y-3 rounded-3xl border border-white/10 bg-[#002448]/60 p-4"
@@ -1025,18 +1029,18 @@ function AdminListingEditModal({ listing, onClose }: { listing: AdminListing; on
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className={lbl}>Category</label>
-                <select name="category" value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)} className={inp}>
+                <select name="category" value={selectedCategory} onChange={(e) => { setSelectedCategory(e.target.value); setSelectedSubcategory(""); setSelectedEquipmentType("") }} className={inp}>
                   {MARKETPLACE_CATEGORY_TITLES.map((opt) => (
                     <option key={opt} value={opt}>{opt}</option>
                   ))}
                 </select>
               </div>
               <div>
-                <label className={lbl}>Subcategory</label>
+                <label className={lbl}>Type (Level 2)</label>
                 <select
                   name="subcategory"
-                  key={selectedCategory}
-                  defaultValue={selectedCategory === listing.category ? (listing.subcategory || "") : ""}
+                  value={selectedSubcategory}
+                  onChange={(e) => { setSelectedSubcategory(e.target.value); setSelectedEquipmentType("") }}
                   className={inp}
                 >
                   <option value="">— None —</option>
@@ -1044,6 +1048,20 @@ function AdminListingEditModal({ listing, onClose }: { listing: AdminListing; on
                 </select>
               </div>
             </div>
+            {level3Options.length > 0 && (
+              <div>
+                <label className={lbl}>Subcategory (Level 3)</label>
+                <select
+                  name="equipment_type"
+                  value={selectedEquipmentType}
+                  onChange={(e) => setSelectedEquipmentType(e.target.value)}
+                  className={inp}
+                >
+                  <option value="">— None —</option>
+                  {level3Options.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+            )}
           </div>
 
           <div className={sec}>

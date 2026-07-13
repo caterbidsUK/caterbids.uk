@@ -94,6 +94,13 @@ export default function CategoryPage({ params }: CategoryPageProps) {
   const category = categoryBySlug(slug)
   const [listings, setListings] = useState<Listing[]>([])
   const [loadingListings, setLoadingListings] = useState(true)
+  const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null)
+
+  const filteredListings = useMemo(() => {
+    if (!selectedSubcategory) return listings
+    return listings.filter((item) => item.equipment_type === selectedSubcategory)
+  }, [listings, selectedSubcategory])
+
   const browseLinks = useMemo(() => {
     if (!category) return []
 
@@ -180,16 +187,14 @@ export default function CategoryPage({ params }: CategoryPageProps) {
           </Link>
         </div>
 
-        <section className="premium-card rounded-[2rem] p-6">
+        <section className="premium-card rounded-[2rem] p-5 sm:p-6">
           <p className="text-xs font-black uppercase tracking-[0.22em] text-[#FF6B00]">CaterBids Category</p>
-          <h1 className="mt-2 text-4xl font-black">{category.title}</h1>
-          <p className="mt-2 max-w-2xl text-white/70">{category.description}</p>
+          <h1 className="mt-1 text-3xl font-black sm:text-4xl">{category.title}</h1>
+          <p className="mt-1.5 max-w-2xl text-sm text-white/70">{category.description}</p>
 
-          {browseLinks.length > 0 && (
+          {category.slug === "catering-equipment" && browseLinks.length > 0 && (
             <div className="mt-5">
-              <p className="mb-3 text-xs font-black uppercase tracking-[0.18em] text-white/55">
-                {category.slug === "catering-equipment" ? "Equipment categories" : "Subcategories"}
-              </p>
+              <p className="mb-3 text-xs font-black uppercase tracking-[0.18em] text-white/55">Equipment categories</p>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                 {browseLinks.map((item) => (
                   <Link
@@ -210,32 +215,56 @@ export default function CategoryPage({ params }: CategoryPageProps) {
           )}
 
           {category.slug !== "catering-equipment" && category.subcategories.length > 0 && (
-            <div className="mt-5 flex flex-wrap gap-2">
-              {category.subcategories.map((subcategory) => (
-              <Link
-                key={subcategory}
-                href={`/search?q=${encodeURIComponent(subcategory)}&category=${encodeURIComponent(category.title)}`}
-                className="rounded-full border border-white/10 bg-white/[0.07] px-3 py-1.5 text-xs font-bold text-white/75 hover:border-[#FF6B00]/50 hover:text-white"
-              >
-                {subcategory}
-              </Link>
-              ))}
+            <div className="-mx-5 mt-4 sm:-mx-6">
+              <div className="flex gap-2 overflow-x-auto px-5 pb-1 sm:px-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                {selectedSubcategory && (
+                  <button
+                    onClick={() => setSelectedSubcategory(null)}
+                    className="shrink-0 rounded-full border border-[#FF6B00]/60 bg-[#FF6B00]/15 px-3 py-1.5 text-xs font-bold text-white"
+                  >
+                    ✕ Clear
+                  </button>
+                )}
+                {category.subcategories.map((sub) => (
+                  <button
+                    key={sub}
+                    onClick={() => setSelectedSubcategory(selectedSubcategory === sub ? null : sub)}
+                    className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-bold transition ${
+                      selectedSubcategory === sub
+                        ? "border-[#FF6B00] bg-[#FF6B00]/20 text-white"
+                        : "border-white/10 bg-white/[0.07] text-white/75 hover:border-[#FF6B00]/50 hover:text-white"
+                    }`}
+                  >
+                    {sub}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </section>
 
         <section className="mt-8" id="caterbids-results">
-          <div className="mb-3 flex items-center justify-between">
+          <div className="mb-3 flex items-center justify-between gap-3">
             <h2 className="text-xl font-black">CaterBids Listings</h2>
-            <span className="text-sm text-white/55">{listings.length} found</span>
+            <span className="text-sm text-white/55">
+              {selectedSubcategory
+                ? `${filteredListings.length} of ${listings.length}`
+                : `${listings.length} found`}
+            </span>
           </div>
+          {selectedSubcategory && (
+            <div className="mb-3 flex items-center gap-2 text-sm text-white/55">
+              <span>Showing: <span className="font-bold text-white/80">{selectedSubcategory}</span></span>
+              <button onClick={() => setSelectedSubcategory(null)} className="text-[#FF6B00] hover:underline">Clear</button>
+            </div>
+          )}
 
           {loadingListings ? (
             <div className="premium-card flex items-center justify-center rounded-3xl p-8 text-white/65">
               <Loader2 className="mr-2 h-5 w-5 animate-spin" />
               Loading listings
             </div>
-          ) : listings.length === 0 ? (
+          ) : filteredListings.length === 0 ? (
             <div className="premium-card rounded-3xl p-8 text-center">
               <Tag className="mx-auto h-10 w-10 text-white/35" />
               <h3 className="mt-4 text-2xl font-black">No CaterBids listings here yet</h3>
@@ -249,7 +278,7 @@ export default function CategoryPage({ params }: CategoryPageProps) {
             </div>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {listings.map((item) => {
+              {filteredListings.map((item) => {
                 const image = listingImages(item)[0]
                 return (
                   <Link

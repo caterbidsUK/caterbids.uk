@@ -566,7 +566,7 @@ export async function adminSaveListingEdits(
   const admin = createAdminClient()
 
   const { data: before } = await (admin.from("listings") as any)
-    .select("title,price,location,city,category,subcategory,condition,power_type,dimensions,service_history,warranty_type,manuals_available,tested_status,delivery_option,collection_postcode,vat_included,weight_kg,length_cm,width_cm,height_cm,pallet_ready,tail_lift_required,forklift_available,ground_floor_collection,commercial_premises,delivery_available,description,image_url,images")
+    .select("title,price,location,city,category,subcategory,equipment_type,condition,power_type,dimensions,service_history,warranty_type,manuals_available,tested_status,delivery_option,collection_postcode,vat_included,weight_kg,length_cm,width_cm,height_cm,pallet_ready,tail_lift_required,forklift_available,ground_floor_collection,commercial_premises,delivery_available,description,image_url,images")
     .eq("id", listingId)
     .maybeSingle()
 
@@ -591,6 +591,7 @@ export async function adminSaveListingEdits(
     city: formString(formData, "city") || null,
     category: formString(formData, "category") || "Catering Equipment",
     subcategory: formString(formData, "subcategory") || null,
+    equipment_type: formString(formData, "equipment_type") || null,
     condition: formString(formData, "condition") || "Used",
     power_type: formString(formData, "power_type") || "Unknown",
     dimensions: formString(formData, "dimensions") || null,

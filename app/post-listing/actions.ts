@@ -14,6 +14,7 @@ type ListingInput = {
   location: string
   category: string
   subcategory?: string | null
+  equipment_type?: string | null
   description?: string | null
   condition?: string | null
   power_type?: string | null
@@ -139,6 +140,7 @@ const optionalListingColumns = [
   'spec_moderation_notes',
   'collection_enabled',
   'buyer_arranges_enabled',
+  'equipment_type',
 ] as const
 
 function withoutOptionalListingColumns(payload: Record<string, unknown>) {
@@ -191,6 +193,7 @@ export async function createListing(
     city: (formData.get('city') as string)?.trim() || null,
     category: (formData.get('category') as string) || 'Catering Equipment',
     subcategory: (formData.get('subcategory') as string) || null,
+    equipment_type: (formData.get('equipment_type') as string) || null,
     description: (formData.get('description') as string) || null,
     condition: (formData.get('condition') as string) || null,
     power_type: (formData.get('power_type') as string) || null,
@@ -429,6 +432,7 @@ export async function createListing(
     city: input.city,
     category: input.category,
     subcategory: input.subcategory,
+    equipment_type: input.equipment_type,
     description: input.description,
     condition: input.condition,
     power_type: input.power_type,
