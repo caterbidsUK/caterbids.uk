@@ -221,12 +221,13 @@ export default async function HomePage({
   }
 
   const { userId, featuredListings, categoryCounts } = await loadHomepageData()
+  const { remaining: freeRemaining, cap: freeCap } = await getFreeListingsRemaining()
   const accountHref = userId ? "/account" : "/login?next=%2Faccount"
   const accountLabel = userId ? "Account" : "Sign In"
 
   return (
     <main className="min-h-screen overflow-hidden bg-[#001225] text-white">
-      <HeroSection accountHref={accountHref} accountLabel={accountLabel} />
+      <HeroSection accountHref={accountHref} accountLabel={accountLabel} freeRemaining={freeRemaining} freeCap={freeCap} />
 
       <section className="relative z-20 -mt-8 px-4 pb-10 sm:px-6 lg:px-10">
         <div className="mx-auto max-w-6xl">
@@ -235,7 +236,7 @@ export default async function HomePage({
           <CategorySection counts={categoryCounts} />
           <WhyCaterBids />
           <HowItWorks />
-          <ClosingCta />
+          <ClosingCta freeRemaining={freeRemaining} freeCap={freeCap} />
         </div>
       </section>
 
@@ -244,7 +245,7 @@ export default async function HomePage({
   )
 }
 
-function HeroSection({ accountHref, accountLabel }: { accountHref: string; accountLabel: string }) {
+function HeroSection({ accountHref, accountLabel, freeRemaining, freeCap }: { accountHref: string; accountLabel: string; freeRemaining: number; freeCap: number }) {
   return (
     <section className="relative isolate min-h-[900px] overflow-hidden pb-28 pt-6 sm:min-h-[850px] lg:min-h-[820px]">
       <Image
@@ -262,6 +263,12 @@ function HeroSection({ accountHref, accountLabel }: { accountHref: string; accou
         <SiteHeader accountHref={accountHref} accountLabel={accountLabel} />
 
         <div className="pt-11 sm:pt-16 lg:max-w-4xl lg:pt-24">
+          <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-[#FF6B00]/40 bg-[#FF6B00]/10 px-4 py-1.5 backdrop-blur-sm">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#FF6B00]" />
+            <span className="text-xs font-black uppercase tracking-[0.22em] text-[#FF6B00]">
+              {freeRemaining > 0 ? `${freeRemaining} of ${freeCap} free listings left` : `All ${freeCap} free listing slots taken`}
+            </span>
+          </div>
           <h1 className="max-w-4xl text-[4.15rem] font-black leading-[0.96] tracking-[-0.075em] text-white sm:text-[5.8rem] lg:text-[6.7rem]">
             The UK Marketplace for <span className="text-[#FF6B00]">Catering Equipment</span>
           </h1>
@@ -636,8 +643,7 @@ function HowItWorks() {
   )
 }
 
-async function ClosingCta() {
-  const { remaining: freeRemaining, cap: freeCap } = await getFreeListingsRemaining()
+function ClosingCta({ freeRemaining, freeCap }: { freeRemaining: number; freeCap: number }) {
   return (
     <section className="mt-5 overflow-hidden rounded-[1.7rem] border border-[#FF6B00]/35 bg-[linear-gradient(135deg,rgba(7,36,72,0.96),rgba(3,20,43,0.98))] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.22)] sm:p-8">
       <div className="grid items-center gap-6 lg:grid-cols-[auto_1fr_auto]">
