@@ -191,11 +191,6 @@ export function formatPlanPrice(plan: SellerPlan) {
   return `£${amount}${plan.monthly ? "/mo" : ""}`
 }
 
-export function sellerCanPublishForFree(settings: PaymentSettings, sellerLiveListingCount: number) {
-  if (!settings.payments_enabled) return true
-  if (!settings.free_listing_mode) return false
-  return sellerLiveListingCount < settings.free_listing_limit
-}
 
 export function entitlementHasAllowance(entitlement: Pick<SellerListingEntitlement, "listing_count_total" | "listing_count_used" | "expires_at" | "active">) {
   if (!entitlement.active) return false

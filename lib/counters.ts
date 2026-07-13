@@ -35,20 +35,23 @@ export async function getFreeListingsRemaining(): Promise<{
 }> {
   try {
     const supabase = createAdminClient()
-    const { data: nonTestProfiles } = await supabase
-      .from("profiles")
-      .select("id")
-      .eq("is_test", false)
-    if (!nonTestProfiles || nonTestProfiles.length === 0) {
-      return { used: 0, cap: FREE_LISTING_CAP, remaining: FREE_LISTING_CAP }
+    const [profilesResult, settingsResult] = await Promise.all([
+      supabase.from("profiles").select("id").eq("is_test", false),
+      (supabase.from("payment_settings" as never) as any)
+        .select("free_listing_limit")
+        .limit(1)
+        .maybeSingle(),
+    ])
+    const cap = Number(settingsResult.data?.free_listing_limit ?? FREE_LISTING_CAP)
+    const nonTestIds = (profilesResult.data || []).map((p) => p.id)
+    if (nonTestIds.length === 0) {
+      return { used: 0, cap, remaining: cap }
     }
-    const sellerIds = nonTestProfiles.map((p) => p.id)
-    const { count } = await supabase
-      .from("listings")
+    const { count } = await (supabase.from("free_listing_claims" as never) as any)
       .select("*", { count: "exact", head: true })
-      .in("seller_id", sellerIds)
-    const used = count ?? 0
-    return { used, cap: FREE_LISTING_CAP, remaining: Math.max(0, FREE_LISTING_CAP - used) }
+      .in("seller_id", nonTestIds)
+    const used = (count as number | null) ?? 0
+    return { used, cap, remaining: Math.max(0, cap - used) }
   } catch {
     return { used: 0, cap: FREE_LISTING_CAP, remaining: FREE_LISTING_CAP }
   }

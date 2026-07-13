@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getCurrentUser } from '@/lib/supabase/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { runEquipmentSpecPipeline } from '@/lib/equipment-specs/pipeline'
-import { entitlementHasAllowance, normalisePaymentSettings, sellerCanPublishForFree, type SellerListingEntitlement } from '@/lib/pricing'
+import { entitlementHasAllowance, normalisePaymentSettings, type SellerListingEntitlement } from '@/lib/pricing'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
@@ -317,6 +317,7 @@ export async function createListing(
     redirect(`/account?published=existing&listing=${existing.id}`)
   }
 
+  const listingId = crypto.randomUUID()
   let paidEntitlementToUse: SellerListingEntitlement | null = null
   let isFoundingMember = false
 
@@ -338,69 +339,85 @@ export async function createListing(
 
     if (isFoundingMember && currentLiveListings < 30) {
       // Founding Trade Member fast-path: up to 30 concurrent live listings, free.
-      // paidEntitlementToUse stays null — no entitlement consumed.
-    } else if (!sellerCanPublishForFree(paymentSettings, currentLiveListings)) {
-      const { data: entitlements } = await admin
-        .from('seller_listing_entitlements')
-        .select('*')
-        .eq('seller_id', user.id)
-        .eq('active', true)
-        .order('expires_at', { ascending: true })
+      // paidEntitlementToUse stays null — no claim consumed.
+    } else {
+      // Attempt to claim a platform-wide free listing slot if the offer is active.
+      // The RPC is atomic: inserts a claim row (PK on seller_id prevents double-claim)
+      // and counts only non-test claims against the cap.
+      let useFreeSlot = false
+      if (paymentSettings.free_listing_mode) {
+        const { data: claimGranted } = await (admin as any).rpc('claim_free_listing', {
+          p_seller_id: user.id,
+          p_listing_id: listingId,
+        })
+        useFreeSlot = Boolean(claimGranted)
+      }
 
-      const usableEntitlement = ((entitlements || []) as Record<string, unknown>[])
-        .map((entitlement) => ({
-          id: String(entitlement.id || ''),
-          seller_id: String(entitlement.seller_id || ''),
-          plan_id: typeof entitlement.plan_id === 'string' ? entitlement.plan_id : null,
-          plan_name: String(entitlement.plan_name || 'Seller plan'),
-          stripe_session_id: typeof entitlement.stripe_session_id === 'string' ? entitlement.stripe_session_id : null,
-          listing_count_total: Number(entitlement.listing_count_total || 0),
-          listing_count_used: Number(entitlement.listing_count_used || 0),
-          monthly: Boolean(entitlement.monthly),
-          expires_at: typeof entitlement.expires_at === 'string' ? entitlement.expires_at : null,
-          active: Boolean(entitlement.active),
-        }))
-        .find(entitlementHasAllowance)
+      if (!useFreeSlot) {
+        // Free slot not available (offer full, seller already claimed, or mode off).
+        // Must have a paid entitlement.
+        const { data: entitlements } = await admin
+          .from('seller_listing_entitlements')
+          .select('*')
+          .eq('seller_id', user.id)
+          .eq('active', true)
+          .order('expires_at', { ascending: true })
 
-      if (usableEntitlement) {
-        paidEntitlementToUse = usableEntitlement
-      } else {
-        const monthlyAtLimit = ((entitlements || []) as Record<string, unknown>[])
-          .map((e) => ({
-            id: String(e.id || ''),
-            plan_name: String(e.plan_name || ''),
-            listing_count_total: Number(e.listing_count_total || 0),
-            listing_count_used: Number(e.listing_count_used || 0),
-            monthly: Boolean(e.monthly),
-            expires_at: typeof e.expires_at === 'string' ? e.expires_at : null,
-            active: Boolean(e.active),
+        const usableEntitlement = ((entitlements || []) as Record<string, unknown>[])
+          .map((entitlement) => ({
+            id: String(entitlement.id || ''),
+            seller_id: String(entitlement.seller_id || ''),
+            plan_id: typeof entitlement.plan_id === 'string' ? entitlement.plan_id : null,
+            plan_name: String(entitlement.plan_name || 'Seller plan'),
+            stripe_session_id: typeof entitlement.stripe_session_id === 'string' ? entitlement.stripe_session_id : null,
+            listing_count_total: Number(entitlement.listing_count_total || 0),
+            listing_count_used: Number(entitlement.listing_count_used || 0),
+            monthly: Boolean(entitlement.monthly),
+            expires_at: typeof entitlement.expires_at === 'string' ? entitlement.expires_at : null,
+            active: Boolean(entitlement.active),
           }))
-          .find((e) => {
-            if (!e.active || !e.monthly) return false
-            if (e.expires_at && new Date(e.expires_at) < new Date()) return false
-            return e.listing_count_used >= e.listing_count_total
-          })
-        if (monthlyAtLimit) {
-          const { data: planRow } = await (admin.from('seller_plans' as never) as any)
-            .select('overage_price')
-            .eq('name', monthlyAtLimit.plan_name)
-            .eq('active', true)
-            .maybeSingle()
-          const overagePrice = Number((planRow as Record<string, unknown> | null)?.overage_price || 0)
-          if (overagePrice > 0) {
-            return {
-              success: false,
-              error: `You've used all ${monthlyAtLimit.listing_count_total} listings in your ${monthlyAtLimit.plan_name}. Add 1 more for £${overagePrice.toFixed(2)}.`,
-              code: 'OVERAGE_REQUIRED',
+          .find(entitlementHasAllowance)
+
+        if (usableEntitlement) {
+          paidEntitlementToUse = usableEntitlement
+        } else {
+          const monthlyAtLimit = ((entitlements || []) as Record<string, unknown>[])
+            .map((e) => ({
+              id: String(e.id || ''),
+              plan_name: String(e.plan_name || ''),
+              listing_count_total: Number(e.listing_count_total || 0),
+              listing_count_used: Number(e.listing_count_used || 0),
+              monthly: Boolean(e.monthly),
+              expires_at: typeof e.expires_at === 'string' ? e.expires_at : null,
+              active: Boolean(e.active),
+            }))
+            .find((e) => {
+              if (!e.active || !e.monthly) return false
+              if (e.expires_at && new Date(e.expires_at) < new Date()) return false
+              return e.listing_count_used >= e.listing_count_total
+            })
+          if (monthlyAtLimit) {
+            const { data: planRow } = await (admin.from('seller_plans' as never) as any)
+              .select('overage_price')
+              .eq('name', monthlyAtLimit.plan_name)
+              .eq('active', true)
+              .maybeSingle()
+            const overagePrice = Number((planRow as Record<string, unknown> | null)?.overage_price || 0)
+            if (overagePrice > 0) {
+              return {
+                success: false,
+                error: `You've used all ${monthlyAtLimit.listing_count_total} listings in your ${monthlyAtLimit.plan_name}. Add 1 more for £${overagePrice.toFixed(2)}.`,
+                code: 'OVERAGE_REQUIRED',
+              }
             }
           }
-        }
-        return {
-          success: false,
-          error:
-            'Your free listing allowance has been used. Choose a listing pack or monthly plan before publishing.',
-          code: 'PAYMENT_REQUIRED',
-          redirectTo: '/pricing?payment_required=1',
+          return {
+            success: false,
+            error:
+              'Your free listing allowance has been used. Choose a listing pack or monthly plan before publishing.',
+            code: 'PAYMENT_REQUIRED',
+            redirectTo: '/pricing?payment_required=1',
+          }
         }
       }
     }
@@ -408,7 +425,6 @@ export async function createListing(
     console.warn('Payment settings unavailable. Allowing listing publish in launch free mode:', error)
   }
 
-  const listingId = crypto.randomUUID()
   const usesPalletDelivery = input.delivery_method === 'pallet_delivery'
   // spec_* fields carry raw item dimensions from CaterBot; weight_kg/height_cm/etc.
   // carry pallet-adjusted delivery values entered by the seller. Item dims take
