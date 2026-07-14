@@ -298,7 +298,7 @@ function HeroSection({ accountHref, accountLabel, freeRemaining, freeCap }: { ac
             The UK Marketplace for <span className="text-[#FF6B00]">Catering Equipment</span>
           </h1>
           <p className="mt-6 max-w-2xl text-2xl font-semibold leading-snug text-white/82 sm:text-3xl">
-            Buy, sell and save on catering equipment, vans and hospitality assets.
+            Buy direct from other UK catering businesses. No commission, no middleman.
           </p>
 
           <div className="mt-9 grid gap-4 sm:flex sm:flex-wrap">
