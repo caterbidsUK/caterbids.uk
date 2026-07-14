@@ -6,9 +6,7 @@ import {
   BookOpen,
   CheckCircle2,
   Filter,
-  Mail,
   Search,
-  Sparkles,
   Tag,
 } from "lucide-react"
 import type { ReactNode } from "react"
@@ -193,7 +191,6 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
             </section>
           )}
 
-          <NewsletterBlock />
         </div>
       </section>
 
@@ -258,39 +255,3 @@ function BlogCard({ post }: { post: BlogPost }) {
   )
 }
 
-function NewsletterBlock() {
-  return (
-    <section className="mt-12 overflow-hidden rounded-[2rem] border border-white/12 bg-[radial-gradient(circle_at_top_right,rgba(255,107,0,0.22),transparent_34%),linear-gradient(135deg,#062747,#001A35)] p-6 shadow-2xl sm:p-8">
-      <div className="grid gap-6 lg:grid-cols-[1fr_0.95fr] lg:items-center">
-        <div>
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#FF6B00] text-white shadow-[0_18px_45px_rgba(255,107,0,0.28)]">
-            <Mail className="h-7 w-7" aria-hidden="true" />
-          </div>
-          <h2 className="mt-5 text-3xl font-black tracking-[-0.035em]">Get catering equipment tips in your inbox</h2>
-          <p className="mt-3 max-w-2xl text-sm font-semibold leading-relaxed text-[#A7B5C9]">
-            Selling guides, buying advice and marketplace updates for UK hospitality operators.
-          </p>
-        </div>
-        <form className="grid gap-3 sm:grid-cols-[1fr_auto]" action="/contact">
-          <label className="sr-only" htmlFor="blog-newsletter-email">
-            Email address
-          </label>
-          <input
-            id="blog-newsletter-email"
-            name="email"
-            type="email"
-            placeholder="you@example.com"
-            className="min-h-14 rounded-2xl border border-white/14 bg-white px-5 text-base font-bold text-[#001A35] outline-none transition placeholder:text-slate-400 focus:border-[#FF6B00] focus:ring-4 focus:ring-[#FF6B00]/20"
-          />
-          <button
-            type="submit"
-            className="inline-flex min-h-14 items-center justify-center gap-2 rounded-2xl bg-[#FF6B00] px-6 text-base font-black text-white transition hover:brightness-110 focus:outline-none focus:ring-4 focus:ring-[#FF6B00]/25"
-          >
-            Subscribe
-            <Sparkles className="h-5 w-5" aria-hidden="true" />
-          </button>
-        </form>
-      </div>
-    </section>
-  )
-}

@@ -12,7 +12,6 @@ import {
   ClipboardCheck,
   ExternalLink,
   Heart,
-  Mail,
   MapPin,
   MessageCircle,
   Search,
@@ -364,7 +363,6 @@ function BlogSidebar() {
       </section>
 
       <RelatedListingsCard />
-      <SidebarNewsletter />
       <SidebarLinks title="Categories" items={["All Categories", "Seller Advice", "Buyer Advice", "Business Advice", "Industry Insights", "Equipment Guides", "Marketplace News"]} />
       <SidebarTags />
     </aside>
@@ -410,30 +408,6 @@ function RelatedListingsCard() {
           </Link>
         ))}
       </div>
-    </section>
-  )
-}
-
-function SidebarNewsletter() {
-  return (
-    <section className="rounded-[1.75rem] border border-white/12 bg-[#F3F8FF] p-5 text-[#001A35] shadow-2xl">
-      <h2 className="text-xl font-black">Stay Updated</h2>
-      <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-600">
-        Get the latest tips, guides and market insights straight to your inbox.
-      </p>
-      <form className="mt-4 grid gap-3" action="/contact">
-        <label htmlFor="sidebar-newsletter-email" className="sr-only">Email address</label>
-        <input
-          id="sidebar-newsletter-email"
-          name="email"
-          type="email"
-          placeholder="Email address"
-          className="min-h-12 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-bold outline-none focus:border-[#FF6B00] focus:ring-4 focus:ring-[#FF6B00]/15"
-        />
-        <button type="submit" className="min-h-12 rounded-2xl bg-[#FF6B00] px-4 text-sm font-black text-white">
-          Subscribe
-        </button>
-      </form>
     </section>
   )
 }
