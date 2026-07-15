@@ -71,6 +71,10 @@ export default function RootLayout({
             </Script>
           </>
         )}
+        <Script
+          src="//script.crazyegg.com/pages/scripts/0133/3047.js"
+          strategy="afterInteractive"
+        />
       </body>
     </html>
   );
