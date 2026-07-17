@@ -49,61 +49,110 @@ async function isAuthorized(request: Request): Promise<boolean> {
   }
 }
 
-async function resolveFlashModel(apiKey: string): Promise<string> {
-  const FALLBACK = "gemini-2.0-flash"
+async function resolveFlashModels(apiKey: string): Promise<string[]> {
+  const FALLBACKS = ["gemini-2.0-flash-001", "gemini-2.0-flash", "gemini-1.5-flash-001"]
   try {
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}&pageSize=200`,
     )
-    if (!res.ok) return FALLBACK
+    if (!res.ok) {
+      console.log("auto-generate: ListModels failed, using hardcoded fallbacks")
+      return FALLBACKS
+    }
     const data = await res.json() as { models?: Array<{ name: string; supportedGenerationMethods?: string[] }> }
     const all = (data.models || [])
       .filter((m) => (m.supportedGenerationMethods || []).includes("generateContent"))
       .map((m) => m.name.replace(/^models\//, ""))
-    console.log("auto-generate: available Gemini models:", all.join(", "))
-
-    // Prefer an explicit "-latest" flash alias
-    const latest = all.find((n) => /flash-latest$/i.test(n))
-    if (latest) {
-      console.log("auto-generate: selected model (latest alias):", latest)
-      return latest
-    }
-
-    // Otherwise pick the lexicographically newest non-experimental flash model
-    const flashes = all
       .filter((n) => /flash/i.test(n) && !/lite/i.test(n) && !/experimental/i.test(n))
+    console.log("auto-generate: flash models available:", all.join(", "))
+
+    // Pinned/stable: has a numbered version suffix (-001, -002, or a date like -05-20)
+    const pinned = all
+      .filter((n) => !/latest$/i.test(n) && /-\d/.test(n))
       .sort()
       .reverse()
-    const chosen = flashes[0] ?? FALLBACK
-    console.log("auto-generate: selected model:", chosen)
-    return chosen
+    // Aliases (e.g. gemini-2.0-flash, gemini-2.5-flash without version number)
+    const unversioned = all.filter((n) => !/latest$/i.test(n) && !/-\d/.test(n)).sort().reverse()
+    // -latest aliases last (route to newest = highest demand)
+    const latestAliases = all.filter((n) => /latest$/i.test(n)).sort().reverse()
+
+    const ordered = [...pinned, ...unversioned, ...latestAliases]
+    const candidates = ordered.length > 0 ? ordered : FALLBACKS
+    console.log("auto-generate: model priority order:", candidates.slice(0, 5).join(", "))
+    return candidates
   } catch {
-    return FALLBACK
+    return FALLBACKS
   }
 }
 
-async function callGemini(prompt: string, apiKey: string, model: string): Promise<string> {
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { responseMimeType: "application/json" },
-      }),
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms))
+}
+
+async function callGeminiWithFallback(
+  prompt: string,
+  apiKey: string,
+  models: string[],
+): Promise<string> {
+  const MAX_MODELS = 3
+  const RETRIES_PER_MODEL = 2
+  const RETRY_WAIT_MS = 10_000
+
+  for (const model of models.slice(0, MAX_MODELS)) {
+    let lastError = ""
+    let succeeded = false
+    let result = ""
+
+    for (let attempt = 0; attempt <= RETRIES_PER_MODEL; attempt++) {
+      if (attempt > 0) {
+        console.log(`auto-generate: ${model} -> retrying in 10s (attempt ${attempt + 1}/${RETRIES_PER_MODEL + 1})`)
+        await sleep(RETRY_WAIT_MS)
+      }
+      try {
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: { responseMimeType: "application/json" },
+            }),
+          },
+        )
+        if (res.status === 503) {
+          const body = await res.text()
+          lastError = `503 ${body.slice(0, 120)}`
+          console.log(`auto-generate: ${model} -> 503 (high demand)`, lastError)
+          continue
+        }
+        if (!res.ok) {
+          const body = await res.text()
+          throw new Error(`Gemini API ${res.status}: ${body.slice(0, 400)}`)
+        }
+        const data = await res.json() as {
+          candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
+        }
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || ""
+        if (!text) throw new Error("Gemini returned empty response")
+        console.log(`auto-generate: ${model} -> ok`)
+        result = text
+        succeeded = true
+        break
+      } catch (err) {
+        throw err
+      }
     }
-  )
-  if (!res.ok) {
-    const body = await res.text()
-    throw new Error(`Gemini API ${res.status}: ${body.slice(0, 400)}`)
+
+    if (succeeded) return result
+
+    const nextModel = models[models.indexOf(model) + 1]
+    if (nextModel) {
+      console.log(`auto-generate: ${model} -> exhausted retries, trying ${nextModel}`)
+    }
   }
-  const data = await res.json() as {
-    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
-  }
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || ""
-  if (!text) throw new Error("Gemini returned empty response")
-  return text
+
+  throw new Error("All Gemini models returned 503. Try again later.")
 }
 
 function parseJson(raw: string): Record<string, unknown> {
@@ -127,7 +176,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "GEMINI_API_KEY is not configured" }, { status: 500 })
   }
 
-  const model = await resolveFlashModel(apiKey)
+  const models = await resolveFlashModels(apiKey)
 
   const admin = createAdminClient()
   const { data: existingPosts } = await (admin.from("blog_posts" as any) as any)
@@ -170,7 +219,7 @@ Return a JSON object ONLY — no markdown, no explanation, no code fence:
 
   let topicData: Record<string, unknown>
   try {
-    topicData = parseJson(await callGemini(topicPrompt, apiKey, model))
+    topicData = parseJson(await callGeminiWithFallback(topicPrompt, apiKey, models))
   } catch (err) {
     console.error("auto-generate: topic selection failed:", err)
     return NextResponse.json({ error: "Topic selection failed: " + (err instanceof Error ? err.message : String(err)) }, { status: 500 })
@@ -254,7 +303,7 @@ Return a JSON object ONLY — no markdown, no explanation, no code fence:
 
   let articleData: Record<string, unknown>
   try {
-    articleData = parseJson(await callGemini(articlePrompt, apiKey, model))
+    articleData = parseJson(await callGeminiWithFallback(articlePrompt, apiKey, models))
   } catch (err) {
     console.error("auto-generate: article generation failed:", err)
     return NextResponse.json({ error: "Article generation failed: " + (err instanceof Error ? err.message : String(err)) }, { status: 500 })
