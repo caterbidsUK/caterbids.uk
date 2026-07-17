@@ -2,7 +2,57 @@ import { withSentryConfig } from "@sentry/nextjs";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  async redirects() {
+    return [
+      // 8 near-identical "buying and selling" duplicates → canonical
+      {
+        source: "/blog/scaling-your-kitchen-buying-selling-catering-equipment-0ebdc4",
+        destination: "/blog/maximising-efficiency-guide-buying-selling-commercial-catering-equipment",
+        permanent: true,
+      },
+      {
+        source: "/blog/maximising-your-kitchen-budget-guide-to-used-catering-equipment",
+        destination: "/blog/maximising-efficiency-guide-buying-selling-commercial-catering-equipment",
+        permanent: true,
+      },
+      {
+        source: "/blog/maximising-efficiency-buying-selling-used-commercial-catering-equipment",
+        destination: "/blog/maximising-efficiency-guide-buying-selling-commercial-catering-equipment",
+        permanent: true,
+      },
+      {
+        source: "/blog/maximising-kitchen-budget-buying-selling-used-equipment",
+        destination: "/blog/maximising-efficiency-guide-buying-selling-commercial-catering-equipment",
+        permanent: true,
+      },
+      {
+        source: "/blog/scaling-your-kitchen-buying-selling-catering-equipment-bb7850",
+        destination: "/blog/maximising-efficiency-guide-buying-selling-commercial-catering-equipment",
+        permanent: true,
+      },
+      {
+        source: "/blog/maximising-catering-budget-buying-selling-used-equipment",
+        destination: "/blog/maximising-efficiency-guide-buying-selling-commercial-catering-equipment",
+        permanent: true,
+      },
+      {
+        source: "/blog/maximising-roi-buying-selling-catering-equipment",
+        destination: "/blog/maximising-efficiency-guide-buying-selling-commercial-catering-equipment",
+        permanent: true,
+      },
+      {
+        source: "/blog/scaling-your-kitchen-buying-selling-catering-equipment",
+        destination: "/blog/maximising-efficiency-guide-buying-selling-commercial-catering-equipment",
+        permanent: true,
+      },
+      // combi valuation duplicate → canonical
+      {
+        source: "/blog/valuing-commercial-combination-ovens-resale",
+        destination: "/blog/commercial-combi-oven-valuation-guide",
+        permanent: true,
+      },
+    ]
+  },
 };
 
 export default withSentryConfig(nextConfig, {

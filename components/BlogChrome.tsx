@@ -12,9 +12,6 @@ const navLinks = [
   ["Marketplace", marketplaceHref],
   ["Blog", "/blog"],
   ["Sell Equipment", sellerEarlyAccessHref],
-  ["Logbook", "/blog"],
-  ["Delivery", "/pallet-delivery-guide"],
-  ["Safety Centre", "/safety"],
 ] as const
 
 export function BlogHeader() {
