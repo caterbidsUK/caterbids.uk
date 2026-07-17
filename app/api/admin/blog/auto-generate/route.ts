@@ -49,9 +49,42 @@ async function isAuthorized(request: Request): Promise<boolean> {
   }
 }
 
-async function callGemini(prompt: string, apiKey: string): Promise<string> {
+async function resolveFlashModel(apiKey: string): Promise<string> {
+  const FALLBACK = "gemini-2.0-flash"
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}&pageSize=200`,
+    )
+    if (!res.ok) return FALLBACK
+    const data = await res.json() as { models?: Array<{ name: string; supportedGenerationMethods?: string[] }> }
+    const all = (data.models || [])
+      .filter((m) => (m.supportedGenerationMethods || []).includes("generateContent"))
+      .map((m) => m.name.replace(/^models\//, ""))
+    console.log("auto-generate: available Gemini models:", all.join(", "))
+
+    // Prefer an explicit "-latest" flash alias
+    const latest = all.find((n) => /flash-latest$/i.test(n))
+    if (latest) {
+      console.log("auto-generate: selected model (latest alias):", latest)
+      return latest
+    }
+
+    // Otherwise pick the lexicographically newest non-experimental flash model
+    const flashes = all
+      .filter((n) => /flash/i.test(n) && !/lite/i.test(n) && !/experimental/i.test(n))
+      .sort()
+      .reverse()
+    const chosen = flashes[0] ?? FALLBACK
+    console.log("auto-generate: selected model:", chosen)
+    return chosen
+  } catch {
+    return FALLBACK
+  }
+}
+
+async function callGemini(prompt: string, apiKey: string, model: string): Promise<string> {
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -94,6 +127,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "GEMINI_API_KEY is not configured" }, { status: 500 })
   }
 
+  const model = await resolveFlashModel(apiKey)
+
   const admin = createAdminClient()
   const { data: existingPosts } = await (admin.from("blog_posts" as any) as any)
     .select("title,slug")
@@ -135,7 +170,7 @@ Return a JSON object ONLY — no markdown, no explanation, no code fence:
 
   let topicData: Record<string, unknown>
   try {
-    topicData = parseJson(await callGemini(topicPrompt, apiKey))
+    topicData = parseJson(await callGemini(topicPrompt, apiKey, model))
   } catch (err) {
     console.error("auto-generate: topic selection failed:", err)
     return NextResponse.json({ error: "Topic selection failed: " + (err instanceof Error ? err.message : String(err)) }, { status: 500 })
@@ -219,7 +254,7 @@ Return a JSON object ONLY — no markdown, no explanation, no code fence:
 
   let articleData: Record<string, unknown>
   try {
-    articleData = parseJson(await callGemini(articlePrompt, apiKey))
+    articleData = parseJson(await callGemini(articlePrompt, apiKey, model))
   } catch (err) {
     console.error("auto-generate: article generation failed:", err)
     return NextResponse.json({ error: "Article generation failed: " + (err instanceof Error ? err.message : String(err)) }, { status: 500 })
