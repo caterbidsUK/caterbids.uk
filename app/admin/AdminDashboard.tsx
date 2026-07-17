@@ -26,10 +26,12 @@ import {
   Pencil,
   PhoneCall,
   PieChart,
+  Plus,
   PoundSterling,
   Power,
   Save,
   Search,
+  Sparkles,
   Settings,
   ShieldCheck,
   ShoppingCart,
@@ -41,7 +43,9 @@ import {
 } from "lucide-react"
 import {
   adminSaveListingEdits,
+  createBlogPost,
   deleteBlogPost,
+  updateBlogPost,
   setPhoneVerificationStatus,
   setUserTestFlag,
   setUserVerificationFlag,
@@ -211,6 +215,10 @@ export type AdminBlogPost = {
   created_at?: string | null
   updated_at?: string | null
   published_at?: string | null
+  meta_title?: string | null
+  meta_description?: string | null
+  target_keywords?: string[] | null
+  article_markdown?: string | null
 }
 
 type AdminDashboardProps = {
@@ -1625,17 +1633,189 @@ function OrdersPanel({ orders }: { orders: AdminOrder[] }) {
   )
 }
 
-function BlogPostsPanel({ posts }: { posts: AdminBlogPost[] }) {
+const BLOG_CATEGORIES = [
+  "Business Advice",
+  "Buyer Advice",
+  "Seller Advice",
+  "Industry Insights",
+  "Equipment Guides",
+  "Marketplace News",
+]
+
+function slugify(str: string) {
+  return str
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .slice(0, 96)
+}
+
+function BlogPostForm({
+  post,
+  onClose,
+  onSaved,
+}: {
+  post: AdminBlogPost | null
+  onClose: () => void
+  onSaved: (slug: string, title: string, isNew: boolean) => void
+}) {
+  const isEdit = post !== null
+  const [createState, createAction] = useActionState(createBlogPost, null)
+  const [updateState, updateAction] = useActionState(updateBlogPost, null)
+  const state = isEdit ? updateState : createState
+  const action = isEdit ? updateAction : createAction
+
+  const [title, setTitle] = useState(post?.title || "")
+  const [slug, setSlug] = useState(post?.slug || "")
+  const [slugTouched, setSlugTouched] = useState(isEdit)
+
+  useEffect(() => {
+    if (!slugTouched) setSlug(slugify(title))
+  }, [title, slugTouched])
+
+  useEffect(() => {
+    if (state && "success" in state && state.success) {
+      onSaved(state.slug as string, title, !isEdit)
+    }
+  }, [state])
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4 pt-8 backdrop-blur-sm">
+      <div className="w-full max-w-3xl rounded-3xl border border-white/12 bg-[#001B36] p-6 shadow-2xl">
+        <div className="mb-5 flex items-center justify-between">
+          <h2 className="text-xl font-black">{isEdit ? "Edit post" : "New post"}</h2>
+          <button type="button" onClick={onClose} className="rounded-xl border border-white/10 bg-white/8 px-3 py-1.5 text-sm font-black text-white/70 hover:text-white">
+            Close
+          </button>
+        </div>
+
+        {state && "error" in state && state.error && (
+          <p className="mb-4 rounded-2xl border border-red-500/30 bg-red-500/12 px-4 py-3 text-sm font-semibold text-red-300">
+            {state.error as string}
+          </p>
+        )}
+
+        <form action={action} className="space-y-4">
+          {isEdit && <input type="hidden" name="post_id" value={post!.id} />}
+
+          <div>
+            <label className="mb-1.5 block text-xs font-black uppercase tracking-widest text-white/50">Title</label>
+            <input
+              name="title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              required
+              className="w-full rounded-2xl border border-white/10 bg-white/8 px-4 py-3 text-sm font-semibold text-white placeholder-white/30 focus:border-[#FF6B00]/60 focus:outline-none"
+              placeholder="Post title"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-black uppercase tracking-widest text-white/50">Slug</label>
+            <input
+              name="slug"
+              value={slug}
+              onChange={(e) => { setSlugTouched(true); setSlug(e.target.value) }}
+              required
+              className="w-full rounded-2xl border border-white/10 bg-white/8 px-4 py-3 font-mono text-sm text-white placeholder-white/30 focus:border-[#FF6B00]/60 focus:outline-none"
+              placeholder="url-slug"
+            />
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="mb-1.5 block text-xs font-black uppercase tracking-widest text-white/50">Category</label>
+              <select
+                name="category"
+                defaultValue={post?.category || "Equipment Guides"}
+                className="w-full rounded-2xl border border-white/10 bg-[#001B36] px-4 py-3 text-sm font-semibold text-white focus:border-[#FF6B00]/60 focus:outline-none"
+              >
+                {BLOG_CATEGORIES.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-black uppercase tracking-widest text-white/50">Target keywords (comma-separated)</label>
+              <input
+                name="target_keywords"
+                defaultValue={post?.target_keywords?.join(", ") || ""}
+                className="w-full rounded-2xl border border-white/10 bg-white/8 px-4 py-3 text-sm font-semibold text-white placeholder-white/30 focus:border-[#FF6B00]/60 focus:outline-none"
+                placeholder="used commercial fridge, café equipment"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-black uppercase tracking-widest text-white/50">Meta title</label>
+            <input
+              name="meta_title"
+              defaultValue={post?.meta_title || ""}
+              className="w-full rounded-2xl border border-white/10 bg-white/8 px-4 py-3 text-sm font-semibold text-white placeholder-white/30 focus:border-[#FF6B00]/60 focus:outline-none"
+              placeholder="SEO title (under 65 chars)"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-black uppercase tracking-widest text-white/50">Meta description</label>
+            <textarea
+              name="meta_description"
+              defaultValue={post?.meta_description || ""}
+              rows={2}
+              className="w-full rounded-2xl border border-white/10 bg-white/8 px-4 py-3 text-sm font-semibold text-white placeholder-white/30 focus:border-[#FF6B00]/60 focus:outline-none"
+              placeholder="140–160 character meta description"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-black uppercase tracking-widest text-white/50">Body (Markdown)</label>
+            <textarea
+              name="body"
+              defaultValue={post?.article_markdown || ""}
+              rows={18}
+              className="w-full rounded-2xl border border-white/10 bg-white/8 px-4 py-3 font-mono text-sm text-white placeholder-white/30 focus:border-[#FF6B00]/60 focus:outline-none"
+              placeholder="Write in Markdown — ## headings, **bold**, *italic*, - lists, [link text](/path)"
+            />
+          </div>
+
+          <div className="flex flex-wrap gap-3 pt-2">
+            <button
+              type="submit"
+              name="status"
+              value="draft"
+              className="rounded-2xl border border-white/12 bg-white/8 px-5 py-2.5 text-sm font-black text-white hover:bg-white/14"
+            >
+              Save as draft
+            </button>
+            <button
+              type="submit"
+              name="status"
+              value="published"
+              className="rounded-2xl bg-[#FF6B00] px-5 py-2.5 text-sm font-black text-white shadow-[0_12px_28px_rgba(255,107,0,0.25)] hover:brightness-110"
+            >
+              Publish
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+function BlogPostsPanel({ posts: initialPosts }: { posts: AdminBlogPost[] }) {
   const [isPending, startTransition] = useTransition()
   const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set())
+  const [extraPosts, setExtraPosts] = useState<AdminBlogPost[]>([])
+  const [formPost, setFormPost] = useState<AdminBlogPost | "new" | null>(null)
+  const [generating, setGenerating] = useState(false)
+  const [genResult, setGenResult] = useState<{ ok: true; url: string; title: string } | { ok: false; error: string } | null>(null)
 
-  const sortedPosts = [...posts]
+  const allPosts = [...extraPosts, ...initialPosts]
+  const sortedPosts = allPosts
     .filter((p) => !deletedIds.has(p.id))
-    .sort((left, right) => {
-      const leftDate = new Date(left.published_at || left.created_at || 0).getTime()
-      const rightDate = new Date(right.published_at || right.created_at || 0).getTime()
-      return rightDate - leftDate
-    })
+    .sort((l, r) => new Date(r.published_at || r.created_at || 0).getTime() - new Date(l.published_at || l.created_at || 0).getTime())
 
   function handleDelete(post: AdminBlogPost) {
     if (!confirm(`Delete "${post.title || "this post"}"? This cannot be undone.`)) return
@@ -1651,59 +1831,138 @@ function BlogPostsPanel({ posts }: { posts: AdminBlogPost[] }) {
     })
   }
 
+  async function handleGenerate() {
+    setGenerating(true)
+    setGenResult(null)
+    try {
+      const res = await fetch("/api/admin/blog/auto-generate", { method: "POST" })
+      const data = await res.json() as Record<string, unknown>
+      if (!res.ok) {
+        setGenResult({ ok: false, error: String(data.error || `HTTP ${res.status}`) })
+      } else {
+        setGenResult({ ok: true, url: String(data.url || ""), title: String(data.title || "New post") })
+      }
+    } catch (err) {
+      setGenResult({ ok: false, error: err instanceof Error ? err.message : "Network error" })
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  function handleSaved(slug: string, title: string, isNew: boolean) {
+    if (isNew) {
+      setExtraPosts((prev) => [{
+        id: `optimistic-${Date.now()}`,
+        title,
+        slug,
+        status: "published",
+        category: "Equipment Guides",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        published_at: new Date().toISOString(),
+      }, ...prev])
+    }
+    setFormPost(null)
+  }
+
   return (
-    <Panel title="Blog management" icon={<FileText className="h-5 w-5" />}>
-      <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
+    <>
+      {formPost !== null && (
+        <BlogPostForm
+          post={formPost === "new" ? null : formPost}
+          onClose={() => setFormPost(null)}
+          onSaved={handleSaved}
+        />
+      )}
+      <Panel title="Blog management" icon={<FileText className="h-5 w-5" />}>
+        <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <p className="text-sm font-semibold text-white/60">
-            Latest posts from the CaterBids blog publishing system and Make.com API.
+            Write and manage CaterBids blog posts, or auto-generate today&apos;s post with AI.
           </p>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/blog" className="rounded-2xl border border-white/10 bg-white/8 px-4 py-2 text-sm font-black text-white">
+              View blog
+            </Link>
+            <button
+              type="button"
+              onClick={() => setFormPost("new")}
+              className="inline-flex items-center gap-1.5 rounded-2xl border border-white/10 bg-white/8 px-4 py-2 text-sm font-black text-white hover:bg-white/14"
+            >
+              <Plus className="h-4 w-4" />
+              New post
+            </button>
+            <button
+              type="button"
+              onClick={handleGenerate}
+              disabled={generating}
+              className="inline-flex items-center gap-1.5 rounded-2xl bg-[#FF6B00] px-4 py-2 text-sm font-black text-white shadow-[0_12px_28px_rgba(255,107,0,0.22)] hover:brightness-110 disabled:opacity-60"
+            >
+              <Sparkles className="h-4 w-4" />
+              {generating ? "Writing post…" : "Generate today's post"}
+            </button>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Link href="/blog" className="rounded-2xl border border-white/10 bg-white/8 px-4 py-2 text-sm font-black text-white">
-            View blog
-          </Link>
-          <Link href="/api/admin/blog/create" className="rounded-2xl border border-white/10 bg-white/8 px-4 py-2 text-sm font-black text-white">
-            API status
-          </Link>
-        </div>
-      </div>
-      <div className="space-y-3">
-        {sortedPosts.length === 0 ? (
-          <EmptyState text="No blog posts found yet. Make.com can publish posts through the secured blog API." />
-        ) : (
-          sortedPosts.map((post) => (
-            <article key={post.id} className="rounded-3xl border border-white/10 bg-[#002E5D]/45 p-4">
-              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                <div className="min-w-0">
-                  <p className="truncate font-black">{post.title || "Untitled blog post"}</p>
-                  <p className="mt-1 text-sm text-white/55">
-                    {post.category || "Uncategorised"} • Published {formatDate(post.published_at || post.created_at)}
-                  </p>
-                  <p className="mt-1 text-xs text-white/45">Slug: {post.slug || "missing"}</p>
-                </div>
-                <div className="flex shrink-0 flex-wrap gap-2">
-                  <Badge label={post.status || "draft"} orange={String(post.status || "").toLowerCase() === "published"} />
-                  {post.slug && (
-                    <Link href={`/blog/${post.slug}`} className="rounded-full border border-white/10 bg-white/8 px-3 py-1 text-xs font-black text-white">
-                      Open post
-                    </Link>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(post)}
-                    disabled={isPending}
-                    className="rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-xs font-black text-red-300 transition hover:bg-red-500/25 disabled:opacity-50"
-                  >
-                    Delete
-                  </button>
-                </div>
-              </div>
-            </article>
-          ))
+
+        {genResult && (
+          <div className={`mb-4 rounded-2xl border px-4 py-3 text-sm font-semibold ${genResult.ok ? "border-green-500/30 bg-green-500/10 text-green-300" : "border-red-500/30 bg-red-500/10 text-red-300"}`}>
+            {genResult.ok ? (
+              <>
+                Generated:{" "}
+                <a href={genResult.url} className="underline" target="_blank" rel="noreferrer">
+                  {genResult.title}
+                </a>
+              </>
+            ) : (
+              <>Error: {genResult.error}</>
+            )}
+          </div>
         )}
-      </div>
-    </Panel>
+
+        <div className="space-y-3">
+          {sortedPosts.length === 0 ? (
+            <EmptyState text="No blog posts yet. Use 'New post' to write one, or 'Generate today's post' to create one with AI." />
+          ) : (
+            sortedPosts.map((post) => (
+              <article key={post.id} className="rounded-3xl border border-white/10 bg-[#002E5D]/45 p-4">
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div className="min-w-0">
+                    <p className="truncate font-black">{post.title || "Untitled blog post"}</p>
+                    <p className="mt-1 text-sm text-white/55">
+                      {post.category || "Uncategorised"} • {formatDate(post.published_at || post.created_at)}
+                    </p>
+                    <p className="mt-1 text-xs text-white/45">Slug: {post.slug || "missing"}</p>
+                  </div>
+                  <div className="flex shrink-0 flex-wrap gap-2">
+                    <Badge label={post.status || "draft"} orange={String(post.status || "").toLowerCase() === "published"} />
+                    {post.slug && (
+                      <Link href={`/blog/${post.slug}`} className="rounded-full border border-white/10 bg-white/8 px-3 py-1 text-xs font-black text-white">
+                        Open post
+                      </Link>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setFormPost(post)}
+                      className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/8 px-3 py-1 text-xs font-black text-white hover:bg-white/14"
+                    >
+                      <Pencil className="h-3 w-3" />
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(post)}
+                      disabled={isPending}
+                      className="rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-xs font-black text-red-300 transition hover:bg-red-500/25 disabled:opacity-50"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </article>
+            ))
+          )}
+        </div>
+      </Panel>
+    </>
   )
 }
 

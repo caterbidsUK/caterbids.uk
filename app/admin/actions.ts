@@ -6,6 +6,7 @@ import { isProtectedSuperAdminEmail } from "@/lib/admin-access"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { PAYMENT_SETTINGS_ID } from "@/lib/pricing"
 import { PROTECTED_SUPER_ADMIN_EMAIL, requireAdmin, writeAdminAuditLog } from "./admin-utils"
+import { normaliseBlogSlug, sanitizeArticleHtml } from "@/lib/blog"
 
 const LISTING_STATUSES = ["live", "pending", "draft", "hidden", "sold", "expired", "pending_payment", "paused", "removed"] as const
 const USER_ROLES = ["user", "seller", "dealer", "admin", "super_admin"] as const
@@ -675,4 +676,184 @@ export async function deleteBlogPost(formData: FormData) {
 
   revalidatePath("/admin")
   revalidatePath("/blog")
+}
+
+function adminMarkdownToHtml(markdown: string): string {
+  const lines = markdown.replace(/\r\n/g, "\n").split("\n")
+  const html: string[] = []
+  let listType: "ul" | "ol" | null = null
+
+  function closeList() {
+    if (listType) { html.push(`</${listType}>`); listType = null }
+  }
+
+  function inline(text: string): string {
+    return text
+      .replace(/\*\*\*([^*]+)\*\*\*/g, "<strong><em>$1</em></strong>")
+      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+      .replace(/\*([^*]+)\*/g, "<em>$1</em>")
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+|\/[^)]*)\)/g, '<a href="$2">$1</a>')
+  }
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim()
+    if (!line) { closeList(); continue }
+
+    if (line.startsWith("## ")) {
+      closeList(); html.push(`<h2>${inline(line.slice(3))}</h2>`)
+    } else if (line.startsWith("### ")) {
+      closeList(); html.push(`<h3>${inline(line.slice(4))}</h3>`)
+    } else {
+      const olMatch = line.match(/^\d+\.\s+(.+)/)
+      const isUl = !olMatch && (line.startsWith("- ") || line.startsWith("* "))
+      if (olMatch) {
+        if (listType !== "ol") { closeList(); html.push("<ol>"); listType = "ol" }
+        html.push(`<li>${inline(olMatch[1])}</li>`)
+      } else if (isUl) {
+        if (listType !== "ul") { closeList(); html.push("<ul>"); listType = "ul" }
+        const item = line.slice(2).replace(/^\[[ xX]\]\s*/, "")
+        html.push(`<li>${inline(item)}</li>`)
+      } else {
+        closeList(); html.push(`<p>${inline(line)}</p>`)
+      }
+    }
+  }
+  closeList()
+  return html.join("\n")
+}
+
+export async function createBlogPost(
+  _prev: { error?: string; success?: boolean; slug?: string } | null,
+  formData: FormData
+): Promise<{ error?: string; success?: boolean; slug?: string }> {
+  const context = await requireAdmin()
+  const admin = createAdminClient()
+
+  const title = formString(formData, "title")
+  const rawSlug = formString(formData, "slug")
+  const category = formString(formData, "category") || "Equipment Guides"
+  const metaTitle = formString(formData, "meta_title") || title
+  const metaDescription = formString(formData, "meta_description")
+  const keywordsRaw = formString(formData, "target_keywords")
+  const body = formString(formData, "body")
+  const status = formString(formData, "status") === "published" ? "published" : "draft"
+
+  if (!title) return { error: "Title is required." }
+  if (!body) return { error: "Article body is required." }
+
+  const slug = normaliseBlogSlug(rawSlug || title)
+
+  const { data: existing } = await (admin.from("blog_posts" as any) as any)
+    .select("id").eq("slug", slug).maybeSingle()
+  if (existing) return { error: `Slug already exists: ${slug}` }
+
+  const articleHtml = sanitizeArticleHtml(adminMarkdownToHtml(body))
+  const targetKeywords = keywordsRaw
+    ? keywordsRaw.split(",").map((k) => k.trim()).filter(Boolean)
+    : null
+  const now = new Date().toISOString()
+
+  const { error } = await (admin.from("blog_posts" as any) as any).insert({
+    title,
+    slug,
+    category,
+    meta_title: metaTitle,
+    meta_description: metaDescription || null,
+    target_keywords: targetKeywords,
+    article_html: articleHtml,
+    article_markdown: body,
+    image_prompt: null,
+    cta: null,
+    source_title: null,
+    source_url: null,
+    facebook_post: null,
+    linkedin_post: null,
+    x_post: null,
+    instagram_caption: null,
+    status,
+    created_at: now,
+    updated_at: now,
+    published_at: status === "published" ? now : null,
+  })
+
+  if (error) return { error: error.message }
+
+  await writeAdminAuditLog({
+    adminUserId: context.userId,
+    adminEmail: context.email,
+    action: "blog.post.create",
+    entityType: "blog_post",
+    entityId: slug,
+    metadata: { title, status },
+  })
+
+  revalidatePath("/admin")
+  revalidatePath("/blog")
+  revalidatePath(`/blog/${slug}`)
+  return { success: true, slug }
+}
+
+export async function updateBlogPost(
+  _prev: { error?: string; success?: boolean; slug?: string } | null,
+  formData: FormData
+): Promise<{ error?: string; success?: boolean; slug?: string }> {
+  const context = await requireAdmin()
+  const admin = createAdminClient()
+
+  const postId = formString(formData, "post_id")
+  if (!postId) return { error: "Missing post ID." }
+
+  const title = formString(formData, "title")
+  const category = formString(formData, "category") || "Equipment Guides"
+  const metaTitle = formString(formData, "meta_title") || title
+  const metaDescription = formString(formData, "meta_description")
+  const keywordsRaw = formString(formData, "target_keywords")
+  const body = formString(formData, "body")
+  const status = formString(formData, "status") === "published" ? "published" : "draft"
+
+  if (!title) return { error: "Title is required." }
+  if (!body) return { error: "Article body is required." }
+
+  const articleHtml = sanitizeArticleHtml(adminMarkdownToHtml(body))
+  const targetKeywords = keywordsRaw
+    ? keywordsRaw.split(",").map((k) => k.trim()).filter(Boolean)
+    : null
+  const now = new Date().toISOString()
+
+  const { data: current } = await (admin.from("blog_posts" as any) as any)
+    .select("slug,published_at").eq("id", postId).maybeSingle()
+
+  const slug = current?.slug || ""
+  const publishedAt = status === "published"
+    ? (current?.published_at || now)
+    : null
+
+  const { error } = await (admin.from("blog_posts" as any) as any).update({
+    title,
+    category,
+    meta_title: metaTitle,
+    meta_description: metaDescription || null,
+    target_keywords: targetKeywords,
+    article_html: articleHtml,
+    article_markdown: body,
+    status,
+    updated_at: now,
+    published_at: publishedAt,
+  }).eq("id", postId)
+
+  if (error) return { error: error.message }
+
+  await writeAdminAuditLog({
+    adminUserId: context.userId,
+    adminEmail: context.email,
+    action: "blog.post.update",
+    entityType: "blog_post",
+    entityId: postId,
+    metadata: { title, status },
+  })
+
+  revalidatePath("/admin")
+  revalidatePath("/blog")
+  if (slug) revalidatePath(`/blog/${slug}`)
+  return { success: true, slug }
 }

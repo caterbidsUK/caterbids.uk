@@ -17,13 +17,13 @@ import { formatBlogDate, plainTextFromArticle, type BlogPost } from "@/lib/blog"
 export const dynamic = "force-dynamic"
 
 export const metadata: Metadata = {
-  title: "CaterBidsUK Blog | UK Catering Equipment News, Selling Tips & Marketplace Guides",
+  title: "Used Catering Equipment Guides, Prices & Selling Tips | CaterBids UK",
   description:
-    "Read expert guides on buying, selling and managing commercial catering equipment in the UK with CaterBidsUK.",
+    "Practical guides on buying and selling used commercial catering equipment in the UK. Real price bands, buying checks and selling tips from CaterBids.",
   openGraph: {
-    title: "CaterBidsUK Blog",
+    title: "Used Catering Equipment Guides, Prices & Selling Tips | CaterBids UK",
     description:
-      "UK catering equipment news, selling tips and marketplace guides from CaterBidsUK.",
+      "Practical guides on buying and selling used commercial catering equipment in the UK. Real price bands, buying checks and selling tips from CaterBids.",
     url: "https://www.caterbids.uk/blog",
     siteName: "CaterBidsUK",
     type: "website",
@@ -97,11 +97,11 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
               CaterBidsUK Blog
             </span>
             <h1 className="mt-6 max-w-4xl text-4xl font-black leading-[0.98] tracking-[-0.045em] text-white sm:text-6xl lg:text-7xl">
-              UK Catering Equipment News, Selling Tips & Marketplace Guides
+              Buy Smarter. Sell Faster. The UK Guide to Used Catering Equipment.
             </h1>
             <p className="mt-6 max-w-3xl text-lg font-semibold leading-relaxed text-[#D5E0F0] sm:text-xl">
-              Practical advice for UK restaurants, cafes, takeaways, dealers and hospitality operators buying and
-              selling commercial catering equipment.
+              Real prices, honest checks and selling advice for restaurants, cafés, takeaways, food vans and dealers.
+              Written for the trade, not the showroom.
             </p>
             <div className="mt-9 flex flex-col gap-3 sm:flex-row">
               <Link
