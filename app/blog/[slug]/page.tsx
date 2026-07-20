@@ -34,6 +34,7 @@ import {
   type BlogPost,
 } from "@/lib/blog"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 
 export const dynamic = "force-dynamic"
 
@@ -87,6 +88,75 @@ function readingTime(post: BlogPost) {
   return `${Math.max(2, Math.ceil(words / 210))} min read`
 }
 
+type SidebarListing = {
+  id: string
+  title: string
+  price: string
+  location: string
+  images: string[] | null
+  image_url: string | null
+  featured: boolean | null
+  is_featured: boolean | null
+  featured_until: string | null
+  seller_id: string | null
+  created_at: string
+}
+
+type SidebarListingsData = { featured: SidebarListing[]; recent: SidebarListing[] }
+
+function isActiveFeatured(l: Pick<SidebarListing, "featured" | "is_featured" | "featured_until">): boolean {
+  if (!Boolean(l.featured || l.is_featured)) return false
+  if (!l.featured_until) return true
+  const ts = new Date(l.featured_until).getTime()
+  return Number.isFinite(ts) ? ts > Date.now() : true
+}
+
+async function loadSidebarListings(): Promise<SidebarListingsData> {
+  const empty: SidebarListingsData = { featured: [], recent: [] }
+  try {
+    const admin = createAdminClient()
+
+    // Exclude test sellers — same two-step pattern as lib/counters.ts
+    const { data: testProfiles } = await admin.from("profiles").select("id").eq("is_test", true)
+    const testIds = ((testProfiles || []) as Array<{ id: string }>).map((p) => p.id)
+
+    const SELECT = "id, title, price, location, images, image_url, featured, is_featured, featured_until, seller_id, created_at"
+
+    // Block 1 — Featured Equipment: candidates with featured=true or is_featured=true, expiry checked in JS
+    let featuredQuery = (admin.from("listings" as any) as any)
+      .select(SELECT)
+      .eq("status", "live")
+      .or("featured.eq.true,is_featured.eq.true")
+      .order("created_at", { ascending: false })
+      .limit(20)
+    if (testIds.length > 0) featuredQuery = featuredQuery.not("seller_id", "in", `(${testIds.join(",")})`)
+    const { data: featuredRaw, error: featuredError } = await featuredQuery
+    if (featuredError) throw featuredError
+    const featuredListings: SidebarListing[] = ((featuredRaw || []) as SidebarListing[])
+      .filter(isActiveFeatured)
+      .slice(0, 3)
+    const featuredIds = new Set(featuredListings.map((l) => l.id))
+
+    // Block 2 — Recently Listed: live, ordered newest first, excluding featured listings
+    let recentQuery = (admin.from("listings" as any) as any)
+      .select(SELECT)
+      .eq("status", "live")
+      .order("created_at", { ascending: false })
+      .limit(6) // fetch up to 6 so we can exclude up to 3 featured and still have 3 recent
+    if (testIds.length > 0) recentQuery = recentQuery.not("seller_id", "in", `(${testIds.join(",")})`)
+    const { data: recentRaw, error: recentError } = await recentQuery
+    if (recentError) throw recentError
+    const recentListings: SidebarListing[] = ((recentRaw || []) as SidebarListing[])
+      .filter((l) => !featuredIds.has(l.id))
+      .slice(0, 3)
+
+    return { featured: featuredListings, recent: recentListings }
+  } catch (err) {
+    console.error("loadSidebarListings failed:", err)
+    return empty
+  }
+}
+
 export async function generateMetadata({ params }: BlogPostPageProps): Promise<Metadata> {
   const { slug } = await params
   const post = await loadPost(slug)
@@ -123,7 +193,7 @@ export async function generateMetadata({ params }: BlogPostPageProps): Promise<M
 
 export default async function BlogPostPage({ params }: BlogPostPageProps) {
   const { slug } = await params
-  const post = await loadPost(slug)
+  const [post, sidebarListings] = await Promise.all([loadPost(slug), loadSidebarListings()])
 
   if (!post) notFound()
 
@@ -192,7 +262,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
               <BottomCta />
             </div>
 
-            <BlogSidebar />
+            <BlogSidebar sidebarListings={sidebarListings} />
           </div>
         </section>
       </article>
@@ -310,7 +380,7 @@ function ArticleHero({ post, excerpt, postUrl }: { post: BlogPost; excerpt: stri
   )
 }
 
-function BlogSidebar() {
+function BlogSidebar({ sidebarListings }: { sidebarListings: SidebarListingsData }) {
   return (
     <aside className="space-y-5 lg:sticky lg:top-24 lg:self-start" aria-label="Blog sidebar">
       <section className="rounded-[1.75rem] border border-white/12 bg-[#062747] p-5 shadow-2xl">
@@ -362,55 +432,14 @@ function BlogSidebar() {
         </Link>
       </section>
 
-      <RelatedListingsCard />
+      <SidebarListingsBlock title="Featured Equipment" listings={sidebarListings.featured} />
+      <SidebarListingsBlock title="Recently Listed" listings={sidebarListings.recent} />
       <SidebarLinks title="Categories" items={["All Categories", "Seller Advice", "Buyer Advice", "Business Advice", "Industry Insights", "Equipment Guides", "Marketplace News"]} />
       <SidebarTags />
     </aside>
   )
 }
 
-function RelatedListingsCard() {
-  const listings = [
-    ["Rational SCC WE 101 Combi Oven", "£4,250", "London"],
-    ["Foster Double Door Fridge", "£1,150", "Birmingham"],
-    ["Winterhalter UC-L Dishwasher", "£2,300", "Leeds"],
-  ]
-
-  return (
-    <section className="rounded-[1.75rem] border border-white/12 bg-[#062747] p-5 shadow-2xl">
-      <h2 className="text-lg font-black">Related Listings</h2>
-      <div className="mt-4 grid gap-3">
-        {listings.map(([title, price, location], index) => (
-          <Link
-            key={title}
-            href="/marketplace"
-            className="flex gap-3 rounded-2xl border border-white/10 bg-white/8 p-3 transition hover:border-[#FF6B00]/55"
-          >
-            <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-white">
-              <Image
-                src={index === 1 ? "/supplier-placeholders/fridge.jpg" : index === 2 ? "/supplier-placeholders/glasswasher.jpg" : "/supplier-placeholders/oven.jpg"}
-                alt=""
-                fill
-                className="object-cover"
-              />
-            </div>
-            <span className="min-w-0 flex-1">
-              <span className="line-clamp-2 text-sm font-black text-white">{title}</span>
-              <span className="mt-1 flex items-center justify-between gap-2 text-xs font-bold text-[#A7B5C9]">
-                <span className="text-[#FF6B00]">{price}</span>
-                <span className="inline-flex items-center gap-1">
-                  <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
-                  {location}
-                </span>
-              </span>
-            </span>
-            <Heart className="h-4 w-4 shrink-0 text-white/45" aria-hidden="true" />
-          </Link>
-        ))}
-      </div>
-    </section>
-  )
-}
 
 function SidebarLinks({ title, items }: { title: string; items: string[] }) {
   return (
@@ -438,6 +467,58 @@ function SidebarTags() {
           <Link key={tag} href="/blog" className="rounded-full border border-white/12 bg-white/8 px-3 py-2 text-xs font-black text-white/66 transition hover:border-[#FF6B00]/55 hover:text-[#FFB37A]">
             {tag}
           </Link>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function sidebarListingPhoto(listing: SidebarListing): string {
+  const first = Array.isArray(listing.images) ? listing.images[0] : null
+  return first || listing.image_url || "/images/caterbids-hero-showroom.png"
+}
+
+function formatSidebarPrice(price: string): string {
+  const v = price.trim()
+  return v.startsWith("£") ? v : `£${v}`
+}
+
+function SidebarListingCard({ listing }: { listing: SidebarListing }) {
+  return (
+    <Link
+      href={`/listing?id=${encodeURIComponent(listing.id)}`}
+      className="flex gap-3 rounded-2xl border border-white/10 bg-white/8 p-3 transition hover:border-[#FF6B00]/55"
+    >
+      <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-white/10">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={sidebarListingPhoto(listing)}
+          alt=""
+          className="h-full w-full object-cover"
+        />
+      </div>
+      <span className="min-w-0 flex-1">
+        <span className="line-clamp-2 text-sm font-black text-white">{listing.title}</span>
+        <span className="mt-1 flex items-center justify-between gap-2 text-xs font-bold text-[#A7B5C9]">
+          <span className="text-[#FF6B00]">{formatSidebarPrice(listing.price)}</span>
+          <span className="inline-flex items-center gap-1">
+            <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
+            {listing.location}
+          </span>
+        </span>
+      </span>
+    </Link>
+  )
+}
+
+function SidebarListingsBlock({ title, listings }: { title: string; listings: SidebarListing[] }) {
+  if (listings.length === 0) return null
+  return (
+    <section className="rounded-[1.75rem] border border-white/12 bg-[#062747] p-5 shadow-2xl">
+      <h2 className="text-lg font-black">{title}</h2>
+      <div className="mt-4 grid gap-3">
+        {listings.map((listing) => (
+          <SidebarListingCard key={listing.id} listing={listing} />
         ))}
       </div>
     </section>
