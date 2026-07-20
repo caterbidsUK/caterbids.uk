@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next"
+import { createAdminClient } from "@/lib/supabase/admin"
 
 const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://caterbids.uk"
 
@@ -16,7 +17,7 @@ const categorySlugs = [
   "parts-spares",
 ]
 
-export default function sitemap(): MetadataRoute.Sitemap {
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticPages: MetadataRoute.Sitemap = [
     { url: baseUrl,                             changeFrequency: "daily",   priority: 1.0 },
     { url: `${baseUrl}/search`,                 changeFrequency: "hourly",  priority: 0.9 },
@@ -43,5 +44,53 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.8,
   }))
 
-  return [...staticPages, ...categoryPages]
+  const admin = createAdminClient()
+
+  // Blog posts — published only
+  let blogEntries: MetadataRoute.Sitemap = []
+  try {
+    const { data, error } = await (admin.from("blog_posts" as any) as any)
+      .select("slug, updated_at, created_at")
+      .eq("status", "published")
+      .order("created_at", { ascending: false })
+    if (error) throw error
+    blogEntries = (data as Array<{ slug: string; updated_at: string | null; created_at: string }>).map((post) => ({
+      url: `${baseUrl}/blog/${post.slug}`,
+      lastModified: post.updated_at || post.created_at,
+      changeFrequency: "monthly" as const,
+      priority: 0.7,
+    }))
+  } catch (err) {
+    console.error("sitemap: blog_posts query failed:", err)
+  }
+
+  // Listings — live status, excluding test-profile sellers
+  let listingEntries: MetadataRoute.Sitemap = []
+  try {
+    const { data: testProfiles } = await admin
+      .from("profiles")
+      .select("id")
+      .eq("is_test", true)
+    const testIds = ((testProfiles || []) as Array<{ id: string }>).map((p) => p.id)
+
+    let query = (admin.from("listings" as any) as any)
+      .select("id, updated_at")
+      .eq("status", "live")
+    if (testIds.length > 0) {
+      query = query.not("seller_id", "in", `(${testIds.join(",")})`)
+    }
+
+    const { data, error } = await query
+    if (error) throw error
+    listingEntries = (data as Array<{ id: string; updated_at: string | null }>).map((listing) => ({
+      url: `${baseUrl}/listing?id=${encodeURIComponent(listing.id)}`,
+      lastModified: listing.updated_at ?? undefined,
+      changeFrequency: "weekly" as const,
+      priority: 0.7,
+    }))
+  } catch (err) {
+    console.error("sitemap: listings query failed:", err)
+  }
+
+  return [...staticPages, ...categoryPages, ...blogEntries, ...listingEntries]
 }
