@@ -1093,7 +1093,7 @@ function SettingsClient({ initialProfile }: { initialProfile: Profile | null }) 
         <div className="mx-auto grid max-w-[430px] grid-cols-5 px-3 py-3 text-center">
           <NavButton icon={<LayoutGrid size={22} />} label="Home" onClick={() => router.push('/')} />
           <NavButton icon={<Search size={22} />} label="Search" onClick={() => router.push('/search')} />
-          <NavButton icon={<Plus size={22} />} label="Sell" onClick={() => router.push('/post-listing')} special />
+          <NavButton icon={<Plus size={22} />} label="Sell" onClick={() => router.push('/post-listing/start')} special />
           <NavButton 
             icon={
               <>

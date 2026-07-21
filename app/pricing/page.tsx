@@ -30,7 +30,7 @@ export const metadata: Metadata = {
 const packIcons = [ListChecks, CalendarDays, Tags]
 const planIcons = [Rocket, TrendingUp, ShieldCheck]
 const searchAllHref = "/search?q=all&category=All%20Categories&location=All%20UK"
-const sellHref = "/post-listing"
+const sellHref = "/post-listing/start"
 
 // ── Nav ─────────────────────────────────────────────────────────────────────
 
@@ -393,7 +393,7 @@ export default async function SellerPricingPage() {
 
         {/* Final CTA */}
         <Link
-          href="/post-listing"
+          href="/post-listing/start"
           className="mt-6 flex items-center justify-between gap-4 rounded-[1.5rem] border border-[#FF6B00] bg-[#002E5D]/75 px-5 py-5 text-white shadow-xl shadow-black/25 transition hover:bg-[#07345f] focus:outline-none focus:ring-4 focus:ring-[#FF6B00]/35"
         >
           <span className="flex items-center gap-4 text-2xl font-black tracking-[-0.04em] md:text-4xl">

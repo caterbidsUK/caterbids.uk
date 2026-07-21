@@ -450,6 +450,9 @@ export interface Database {
           featured_at: string | null
           featured_by: string | null
           sold_at: string | null
+          trailer_details: Json | null
+          business_details: Json | null
+          is_confidential: boolean
         }
         Insert: {
           id?: string
@@ -556,6 +559,9 @@ export interface Database {
           featured_at?: string | null
           featured_by?: string | null
           sold_at?: string | null
+          trailer_details?: Json | null
+          business_details?: Json | null
+          is_confidential?: boolean
         }
         Update: {
           id?: string
@@ -662,6 +668,9 @@ export interface Database {
           featured_at?: string | null
           featured_by?: string | null
           sold_at?: string | null
+          trailer_details?: Json | null
+          business_details?: Json | null
+          is_confidential?: boolean
         }
         Relationships: [
           {

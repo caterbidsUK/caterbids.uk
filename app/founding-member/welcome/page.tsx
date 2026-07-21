@@ -106,7 +106,7 @@ export default async function FoundingMemberWelcomePage({
             Go to my account
           </Link>
           <Link
-            href="/post-listing"
+            href="/post-listing/start"
             className="text-sm font-bold text-white/45 transition hover:text-white/70"
           >
             Create a listing →

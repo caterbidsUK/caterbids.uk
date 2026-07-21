@@ -196,7 +196,7 @@ export default function CategoryPage({ params }: CategoryPageProps) {
             <ArrowLeft className="h-4 w-4" />
             Back
           </button>
-          <Link href="/post-listing" className="premium-button rounded-2xl px-4 py-2 text-sm font-black">
+          <Link href="/post-listing/start" className="premium-button rounded-2xl px-4 py-2 text-sm font-black">
             List yours for free
           </Link>
         </div>
@@ -285,7 +285,7 @@ export default function CategoryPage({ params }: CategoryPageProps) {
               <p className="mx-auto mt-2 max-w-lg text-sm text-white/60">
                 Be the first to list used or refurbished {category.title.toLowerCase()} during the free beta.
               </p>
-              <Link href="/post-listing" className="premium-button mt-5 inline-flex items-center gap-2 rounded-2xl px-5 py-3 font-black">
+              <Link href="/post-listing/start" className="premium-button mt-5 inline-flex items-center gap-2 rounded-2xl px-5 py-3 font-black">
                 <Plus className="h-4 w-4" />
                 List yours for free
               </Link>

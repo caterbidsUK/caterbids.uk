@@ -653,7 +653,7 @@ export default function AccountClient({
 
         {/* BIG SELL BUTTON */}
         <Link
-          href="/post-listing"
+          href="/post-listing/start"
           className="premium-button flex items-center justify-center gap-3 rounded-3xl py-5 text-lg font-black text-white"
         >
           <Plus size={24} />

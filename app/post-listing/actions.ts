@@ -92,6 +92,8 @@ type ListingInput = {
   images?: string[] | null
   city?: string | null
   trailer_details?: Record<string, unknown> | null
+  business_details?: Record<string, unknown> | null
+  is_confidential?: boolean | null
 }
 
 function isMissingColumnError(error: unknown) {
@@ -275,6 +277,12 @@ export async function createListing(
       if (!raw) return null
       try { return JSON.parse(raw as string) as Record<string, unknown> } catch { return null }
     })(),
+    business_details: (() => {
+      const raw = formData.get('business_details')
+      if (!raw) return null
+      try { return JSON.parse(raw as string) as Record<string, unknown> } catch { return null }
+    })(),
+    is_confidential: formData.get('is_confidential') === 'true',
   }
 
   if (!input.title || !input.price || !input.location) {
@@ -532,6 +540,8 @@ export async function createListing(
     user_id: user.id,
     status: 'live',
     trailer_details: input.category === 'Catering Vans & Trailers' ? (input.trailer_details || null) : null,
+    business_details: input.category === 'Catering Businesses' ? (input.business_details || null) : null,
+    is_confidential: input.category === 'Catering Businesses' ? (input.is_confidential ?? false) : false,
   }
 
   let { data: createdListing, error } = await supabase

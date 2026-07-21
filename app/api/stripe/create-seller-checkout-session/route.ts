@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
   const settings = normalisePaymentSettings(settingsRow as Record<string, unknown> | null)
 
   if (!settings.payments_enabled) {
-    return NextResponse.json({ error: "Payments are currently disabled — free listing mode is active.", redirectTo: "/post-listing" }, { status: 409 })
+    return NextResponse.json({ error: "Payments are currently disabled — free listing mode is active.", redirectTo: "/post-listing/start" }, { status: 409 })
   }
 
   if (planError || !isPlanRow(planRow)) {

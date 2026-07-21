@@ -584,11 +584,11 @@ function SearchContent() {
           </Link>
 
           <nav className="ml-auto hidden items-center gap-1 text-sm font-bold text-white/80 lg:flex">
-            <Link href="/post-listing" className="rounded-xl px-3 py-2 transition hover:text-[#FF6B00]">Sell</Link>
+            <Link href="/post-listing/start" className="rounded-xl px-3 py-2 transition hover:text-[#FF6B00]">Sell</Link>
             <Link href="/favourites" className="rounded-xl px-3 py-2 transition hover:text-[#FF6B00]">Saved</Link>
             <Link href="/account" className="rounded-xl px-3 py-2 transition hover:text-[#FF6B00]">Account</Link>
             <Link
-              href="/post-listing"
+              href="/post-listing/start"
               className="ml-3 rounded-2xl bg-[#FF6B00] px-5 py-2.5 font-black text-white shadow-[0_8px_24px_rgba(255,107,0,0.28)] transition hover:brightness-110 focus:outline-none focus:ring-4 focus:ring-[#FF6B00]/30"
             >
               List free
@@ -625,7 +625,7 @@ function SearchContent() {
               {[
                 ["Home", "/"],
                 ["Browse Equipment", "/search?q=all&category=All%20Categories&location=All%20UK"],
-                ["Sell an Item", "/post-listing"],
+                ["Sell an Item", "/post-listing/start"],
                 ["Saved Items", "/favourites"],
                 ["Account", "/account"],
               ].map(([label, href]) => (
@@ -1026,7 +1026,7 @@ function SearchContent() {
                 </p>
               </div>
               <Link
-                href="/post-listing"
+                href="/post-listing/start"
                 className="shrink-0 rounded-2xl bg-[#FF6B00] px-5 py-3 text-center text-sm font-black text-white transition hover:brightness-110"
               >
                 Start listing
@@ -1091,7 +1091,7 @@ function SearchContent() {
             active
           />
           <Link
-            href="/post-listing"
+            href="/post-listing/start"
             aria-label="Post listing"
             className="-mt-8 flex h-14 w-14 items-center justify-center rounded-full bg-[#FF6B00] text-white shadow-lg shadow-[#FF6B00]/30"
           >

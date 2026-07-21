@@ -68,7 +68,7 @@ type StepCard = {
 }
 
 const searchAllHref = "/search?q=all&category=All%20Categories&location=All%20UK"
-const sellHref = "/post-listing"
+const sellHref = "/post-listing/start"
 
 const heroFeatureCards = [
   {

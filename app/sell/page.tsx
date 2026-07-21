@@ -6,5 +6,5 @@ export default function SellRedirectPage() {
     redirect("/marketplace")
   }
 
-  redirect("/post-listing")
+  redirect("/post-listing/start")
 }

@@ -112,7 +112,7 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
                 <ArrowRight className="h-5 w-5" aria-hidden="true" />
               </Link>
               <Link
-                href="/post-listing"
+                href="/post-listing/start"
                 className="inline-flex min-h-14 items-center justify-center gap-3 rounded-2xl border border-white/20 bg-white/8 px-6 text-base font-black text-white transition hover:border-[#FF6B00]/70 hover:bg-white/12 focus:outline-none focus:ring-4 focus:ring-white/15"
               >
                 Sell an Item

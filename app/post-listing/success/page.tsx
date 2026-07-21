@@ -91,7 +91,7 @@ export default function PostListingSuccessPage() {
 
   useEffect(() => {
     if (!id) {
-      router.replace("/post-listing")
+      router.replace("/post-listing/start")
       return
     }
 
@@ -206,7 +206,7 @@ export default function PostListingSuccessPage() {
           <div className="grid grid-cols-2 gap-3">
             <ShareButton url={shareUrl} title={listing.title ?? "My CaterBidsUK listing"} />
             <Link
-              href="/post-listing"
+              href="/post-listing/start"
               className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/7 px-4 text-sm font-black text-white transition hover:bg-white/12"
             >
               <ListPlus className="h-4 w-4" />

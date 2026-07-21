@@ -98,6 +98,17 @@ export async function sellerUpdateListing(
     try { return JSON.parse(raw as string) as Record<string, unknown> } catch { return null }
   })()
 
+  const businessDetails = (() => {
+    if (category !== 'Catering Businesses') return null
+    const raw = formData.get('business_details')
+    if (!raw) return null
+    try { return JSON.parse(raw as string) as Record<string, unknown> } catch { return null }
+  })()
+
+  const isConfidential = category === 'Catering Businesses'
+    ? formData.get('is_confidential') === 'true'
+    : false
+
   const images = (() => {
     const raw = formData.get('images')
     if (!raw) return []
@@ -130,6 +141,8 @@ export async function sellerUpdateListing(
     image_url:         images[0] || null,
     images,
     trailer_details:   trailerDetails,
+    business_details:  businessDetails,
+    is_confidential:   isConfidential,
     updated_at:        new Date().toISOString(),
     // created_at intentionally omitted — must not change on edit
     // status intentionally omitted — edit does not change status

@@ -413,7 +413,7 @@ function BlogSidebar({ sidebarListings }: { sidebarListings: SidebarListingsData
           ].map(({ title, text, Icon }) => (
             <Link
               key={title}
-              href="/post-listing"
+              href="/post-listing/start"
               className="flex gap-3 rounded-2xl border border-white/12 bg-white/8 p-3 transition hover:border-[#FF6B00]/55 hover:bg-white/12"
             >
               <Icon className="mt-0.5 h-5 w-5 shrink-0 text-[#FF6B00]" aria-hidden="true" />
@@ -425,7 +425,7 @@ function BlogSidebar({ sidebarListings }: { sidebarListings: SidebarListingsData
           ))}
         </div>
         <Link
-          href="/post-listing"
+          href="/post-listing/start"
           className="mt-5 inline-flex min-h-12 w-full items-center justify-center rounded-2xl bg-[#FF6B00] px-4 text-sm font-black text-white transition hover:brightness-110"
         >
           Try CaterBot AI
@@ -619,13 +619,13 @@ function BottomCta() {
         List now, reach serious buyers and turn your unused equipment into cash - fast.
       </p>
       <div className="mt-6 grid gap-3 sm:grid-cols-3">
-        <Link href="/post-listing" className="inline-flex min-h-14 items-center justify-center rounded-2xl bg-[#FF6B00] px-5 text-sm font-black text-white transition hover:brightness-110">
+        <Link href="/post-listing/start" className="inline-flex min-h-14 items-center justify-center rounded-2xl bg-[#FF6B00] px-5 text-sm font-black text-white transition hover:brightness-110">
           Start Your Free Listing
         </Link>
         <Link href="/search?q=all&category=All%20Categories&location=All%20UK" className="inline-flex min-h-14 items-center justify-center rounded-2xl border border-white/18 bg-white/8 px-5 text-sm font-black text-white transition hover:border-[#FF6B00]/55">
           Browse the Marketplace
         </Link>
-        <Link href="/post-listing" className="inline-flex min-h-14 items-center justify-center rounded-2xl border border-white/18 bg-white/8 px-5 text-sm font-black text-white transition hover:border-[#FF6B00]/55">
+        <Link href="/post-listing/start" className="inline-flex min-h-14 items-center justify-center rounded-2xl border border-white/18 bg-white/8 px-5 text-sm font-black text-white transition hover:border-[#FF6B00]/55">
           Try CaterBot AI
         </Link>
       </div>
