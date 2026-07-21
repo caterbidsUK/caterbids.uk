@@ -4,7 +4,7 @@
 
 create table if not exists public.listing_price_history (
   id          uuid primary key default gen_random_uuid(),
-  listing_id  uuid not null references public.listings(id) on delete cascade,
+  listing_id  text not null references public.listings(id) on delete cascade,
   seller_id   uuid not null references auth.users(id) on delete cascade,
   old_price   text not null,
   new_price   text not null,
