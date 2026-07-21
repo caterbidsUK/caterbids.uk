@@ -15,6 +15,7 @@ import {
   WARRANTY_TYPE_OPTIONS,
 } from "@/lib/listing-trust"
 import TrailerDetailsForm from "@/app/post-listing/TrailerDetailsForm"
+import BusinessDetailsForm from "@/app/post-listing/BusinessDetailsForm"
 import { sellerUpdateListing, sellerDeleteListing } from "../../listing-actions"
 
 const LISTING_IMAGES_BUCKET = "listing-images"
@@ -97,10 +98,22 @@ export default function EditListingForm({ listing }: { listing: Listing }) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   const isVanTrailer = category === "Catering Vans & Trailers"
+  const isBusiness = category === "Catering Businesses"
+
   const trailerInitialData =
     isVanTrailer && listing.trailer_details && typeof listing.trailer_details === "object"
       ? (listing.trailer_details as Record<string, unknown>)
       : {}
+
+  const businessInitialData =
+    isBusiness && listing.business_details && typeof listing.business_details === "object"
+      ? (listing.business_details as Record<string, unknown>)
+      : {}
+
+  const initialIsConfidential =
+    isBusiness && typeof listing.is_confidential === "boolean"
+      ? listing.is_confidential
+      : false
 
   function handleCategoryChange(next: string) {
     setCategory(next)
@@ -527,6 +540,14 @@ export default function EditListingForm({ listing }: { listing: Listing }) {
         {/* ── CATERING VANS & TRAILERS ─────────────────────────────────── */}
         {isVanTrailer && (
           <TrailerDetailsForm initialData={trailerInitialData} />
+        )}
+
+        {/* ── CATERING BUSINESSES ──────────────────────────────────────── */}
+        {isBusiness && (
+          <BusinessDetailsForm
+            initialData={businessInitialData}
+            initialIsConfidential={initialIsConfidential}
+          />
         )}
 
         {/* ── SAVE BUTTON ──────────────────────────────────────────────── */}

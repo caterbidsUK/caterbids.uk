@@ -98,7 +98,7 @@ export async function GET() {
       expiryLabel = `Expires in ${expiryDays} day${expiryDays === 1 ? "" : "s"}`
     }
 
-    const buyMoreHref = planType === "founding" || planType === "subscription" ? "/post-listing" : "/pricing"
+    const buyMoreHref = planType === "founding" || planType === "subscription" ? "/post-listing/start" : "/pricing"
 
     const extra: Record<string, unknown> | null =
       planType === "founding" ? { freeFeatureSlotInUse: Boolean(freeFeatureSlotInUse) } : null

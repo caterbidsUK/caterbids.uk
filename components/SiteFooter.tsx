@@ -14,7 +14,7 @@ const columns: { title: string; links: [string, string][] }[] = [
   {
     title: "Sell & Company",
     links: [
-      ["Sell an Item", "/post-listing"],
+      ["Sell an Item", "/post-listing/start"],
       ["Pricing", "/pricing"],
       ["About Us", "/about"],
       ["How It Works", "/how-it-works"],

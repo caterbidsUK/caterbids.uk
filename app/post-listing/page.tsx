@@ -1,6 +1,7 @@
 "use client"
 
 import { useRouter, useSearchParams } from "next/navigation"
+import Link from "next/link"
 import NextImage from "next/image"
 import SiteLogo from "@/components/SiteLogo"
 import { useEffect, useState, useTransition, type Dispatch, type SetStateAction } from "react"
@@ -20,8 +21,9 @@ import {
   TESTED_STATUS_OPTIONS,
   WARRANTY_TYPE_OPTIONS,
 } from "@/lib/listing-trust"
-import { CATEGORY_OPTIONS, categoryByTitle, subcategoriesForCategory } from "@/lib/categories"
+import { categoryByTitle, subcategoriesForCategory } from "@/lib/categories"
 import TrailerDetailsForm from "./TrailerDetailsForm"
+import BusinessDetailsForm from "./BusinessDetailsForm"
 
 type QuickListAiResponse = {
   suggested_title: string
@@ -723,11 +725,18 @@ function PostListingPage() {
   const postListingParams = useSearchParams()
   const [showOverageSuccess, setShowOverageSuccess] = useState(postListingParams.get("overage") === "success")
 
+  const VALID_CATEGORIES = ["Catering Equipment", "Catering Vans & Trailers", "Catering Businesses"] as const
+  type ValidCategory = typeof VALID_CATEGORIES[number]
+  const categoryParam = postListingParams.get("category")
+  const validCategoryParam: ValidCategory | null = VALID_CATEGORIES.includes(categoryParam as ValidCategory)
+    ? (categoryParam as ValidCategory)
+    : null
+
   const [title, setTitle] = useState("")
   const [price, setPrice] = useState("")
   const [location, setLocation] = useState("")
   const [city, setCity] = useState("")
-  const [category, setCategory] = useState("Catering Equipment")
+  const [category, _setCategory] = useState<string>(validCategoryParam ?? "")
   const [subcategory, setSubcategory] = useState("Cooking Equipment")
   const [equipmentType, setEquipmentType] = useState("")
   const [condition, setCondition] = useState("Used")
@@ -900,7 +909,7 @@ function PostListingPage() {
       setUserId(user?.id || null)
       setAuthChecked(true)
       if (!user) {
-        router.replace(`/login?next=${encodeURIComponent("/post-listing")}`)
+        router.replace(`/login?next=${encodeURIComponent("/post-listing/start")}`)
         return
       }
 
@@ -998,8 +1007,18 @@ function PostListingPage() {
       })
   }, [])
 
+  // If ?category= is missing or not one of the three known values, send the
+  // seller back to the chooser. Category is locked by the URL — it cannot be
+  // changed inside the wizard.
+  useEffect(() => {
+    if (!validCategoryParam) {
+      router.replace("/post-listing/start")
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   function requireLogin() {
-    router.push(`/login?next=${encodeURIComponent("/post-listing")}`)
+    router.push(`/login?next=${encodeURIComponent("/post-listing/start")}`)
   }
 
   function resizeImage(file: File, maxSize = 900, quality = 0.82) {
@@ -1691,8 +1710,9 @@ function PostListingPage() {
   }
 
   function applySuggestionToVisibleForm(suggestion: QuickListAiResponse) {
-    const nextCategory = suggestion.category || "Catering Equipment"
-    const subcategories = subcategoriesForCategory(nextCategory)
+    // Category is locked by the URL param — CaterBot must not change it.
+    // Use the current locked category to validate subcategory suggestions.
+    const subcategories = subcategoriesForCategory(category)
     const nextSubcategory =
       suggestion.subcategory && subcategories.includes(suggestion.subcategory)
         ? suggestion.subcategory
@@ -1709,7 +1729,6 @@ function PostListingPage() {
     const aiShortDescription = buildCaterBotShortDescription(suggestion, normaliseCondition(suggestion.condition))
 
     setTitle(seoTitle || suggestion.suggested_title || suggestion.title || "")
-    setCategory(nextCategory)
     setSubcategory(nextSubcategory)
     setCondition(normaliseCondition(suggestion.condition))
     setDescription((current) => (current.trim() ? current : aiShortDescription))
@@ -1972,13 +1991,7 @@ function PostListingPage() {
     const visual = result.image_analysis?.main_image
 
     setTextFromCaterBot(setTitle, specs?.title, replace)
-    setSelectFromCaterBot(setCategory, specs?.category, replace, ["Catering Equipment"])
-    if (specs?.category) {
-      const nextSubcategories = subcategoriesForCategory(specs.category)
-      if (nextSubcategories.length > 0 && !nextSubcategories.includes(subcategory)) {
-        setSubcategory(nextSubcategories[0])
-      }
-    }
+    // Category is locked by the URL param — CaterBot must not change it.
     setSelectFromCaterBot(setSubcategory, specs?.type || visual?.visual_category, replace, ["Cooking Equipment"])
     if (specs?.equipment_type) {
       setEquipmentType((current) => (current ? current : (specs.equipment_type ?? "")))
@@ -2478,6 +2491,15 @@ function PostListingPage() {
       }
     }
 
+    if (category === "Catering Businesses") {
+      const bizRaw = (formData.get("business_details") as string) || ""
+      const bizData = bizRaw ? (() => { try { return JSON.parse(bizRaw) } catch { return {} } })() : {}
+      if (!bizData.business_type) {
+        setPublishError("Select the business type in the Business Details section.")
+        return
+      }
+    }
+
     if (manualSourceHasVerifiedUrl && formData.get("specs_verified_by_seller") !== "on") {
       setPublishError("Confirm the product source matches your item.")
       return
@@ -2700,6 +2722,9 @@ function PostListingPage() {
   const reviewLocation = city || location || collectionCity || "Not added"
   const reviewDeliveryOption = buildDeliveryOptionSummary(palletEnabled, collectionEnabled, buyerArrangesEnabled)
 
+  // Redirect is in flight — render nothing to avoid a flash of the wrong category
+  if (!validCategoryParam) return null
+
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(0,46,93,0.95),rgba(0,18,40,1)_48%,rgba(0,10,25,1)_100%)] px-4 py-5 text-white sm:px-6 lg:px-8">
       {showOverageSuccess && (
@@ -2714,7 +2739,7 @@ function PostListingPage() {
               type="button"
               onClick={() => {
                 setShowOverageSuccess(false)
-                router.replace("/post-listing", { scroll: false })
+                router.replace("/post-listing/start", { scroll: false })
               }}
               className="shrink-0 rounded-xl p-1.5 text-white/80 hover:text-white"
               aria-label="Dismiss"
@@ -2810,26 +2835,30 @@ function PostListingPage() {
             />
           </label>
 
-          <label className="flex min-h-36 cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-white/28 bg-white/7 px-4 py-5 text-center text-sm font-extrabold text-white transition hover:bg-white/12 focus-within:ring-4 focus-within:ring-white/15">
-            <UploadCloud size={34} aria-hidden="true" />
-            <span className="text-base">Upload spec plate</span>
-            <span className="text-xs font-semibold text-white/68">JPG or PNG</span>
-            <input
-              type="file"
-              accept="image/jpeg,image/jpg,image/png,image/webp,image/heic,image/heif"
-              onChange={handleSpecPlateSelect}
-              className="hidden"
-            />
-          </label>
+          {category === "Catering Equipment" && (
+            <label className="flex min-h-36 cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-white/28 bg-white/7 px-4 py-5 text-center text-sm font-extrabold text-white transition hover:bg-white/12 focus-within:ring-4 focus-within:ring-white/15">
+              <UploadCloud size={34} aria-hidden="true" />
+              <span className="text-base">Upload spec plate</span>
+              <span className="text-xs font-semibold text-white/68">JPG or PNG</span>
+              <input
+                type="file"
+                accept="image/jpeg,image/jpg,image/png,image/webp,image/heic,image/heif"
+                onChange={handleSpecPlateSelect}
+                className="hidden"
+              />
+            </label>
+          )}
         </div>
 
         <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-white/70">
           <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
             {imageFiles.length}/6 item photos
           </span>
-          <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
-            {specPlateFile ? "Spec plate added" : "No spec plate yet"}
-          </span>
+          {category === "Catering Equipment" && (
+            <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
+              {specPlateFile ? "Spec plate added" : "No spec plate yet"}
+            </span>
+          )}
         </div>
 
         {specPlateValidation && (
@@ -2903,7 +2932,7 @@ function PostListingPage() {
         </p>
         </div>
 
-        <aside className="order-first lg:order-none rounded-[1.35rem] border border-white/12 bg-white/[0.055] p-4 shadow-[0_18px_60px_rgba(0,0,0,0.18)]">
+        {category === "Catering Equipment" && <aside className="order-first lg:order-none rounded-[1.35rem] border border-white/12 bg-white/[0.055] p-4 shadow-[0_18px_60px_rgba(0,0,0,0.18)]">
         <div className="flex items-start gap-3">
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#FF6B00]/18 text-[#FF6B00]">
             <ScanSearch size={23} aria-hidden="true" />
@@ -3184,7 +3213,7 @@ function PostListingPage() {
             )}
           </>
         )}
-        </aside>
+        </aside>}
       </div>
       </section>
 
@@ -3215,23 +3244,17 @@ function PostListingPage() {
             </label>
 
             <div className="grid gap-3 lg:grid-cols-2">
-              <label className="block">
-                <span className="mb-1 block text-sm font-black">Category <span className="text-[#FF6B00]">*</span></span>
-                <select
-                  name="category"
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
-                  value={category}
-                  onChange={(e) => {
-                    const nextCategory = e.target.value
-                    setCategory(nextCategory)
-                    setSubcategory(subcategoriesForCategory(nextCategory)[0] || "")
-                  }}
-                >
-                  {CATEGORY_OPTIONS.filter((item) => item !== "All Categories").map((item) => (
-                    <option key={item}>{item}</option>
-                  ))}
-                </select>
-              </label>
+              <div>
+                <span className="mb-1 block text-sm font-black">Category</span>
+                <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
+                  <span className="font-black text-[#002E5D]">{category}</span>
+                  <Link href="/post-listing/start" className="text-xs font-black text-[#FF6B00] hover:underline">
+                    Change
+                  </Link>
+                </div>
+                {/* Category is locked by the URL — hidden input carries it into formData */}
+                <input type="hidden" name="category" value={category} />
+              </div>
 
               {subcategoriesForCategory(category).length > 0 && (
                 <label className="block">
@@ -3627,6 +3650,8 @@ function PostListingPage() {
         </section>
 
         {category === "Catering Vans & Trailers" && <TrailerDetailsForm />}
+
+        {category === "Catering Businesses" && <BusinessDetailsForm />}
 
         <section id="power-step" className="rounded-[1.6rem] border border-slate-200 bg-white p-4 text-[#002E5D] shadow-[0_24px_80px_rgba(0,0,0,0.2)] sm:p-6">
           <div className="flex items-start justify-between gap-3">

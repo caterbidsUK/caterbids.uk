@@ -477,7 +477,7 @@ function TopNavigation({ displayName, showAdminLink }: { displayName: string; sh
     {
       title: "Seller tools",
       items: [
-        ["Add New Listing", "/post-listing"],
+        ["Add New Listing", "/post-listing/start"],
         ["Seller Profile", "/settings#profile"],
         ["Business Details", "/settings#profile"],
         ["Verification Centre", "/settings#verification"],
@@ -509,7 +509,7 @@ function TopNavigation({ displayName, showAdminLink }: { displayName: string; sh
           <Link href="/search" className="hover:text-[#FF6B00]">
             Browse
           </Link>
-          <Link href="/post-listing" className="hover:text-[#FF6B00]">
+          <Link href="/post-listing/start" className="hover:text-[#FF6B00]">
             Sell
           </Link>
           <Link href="/messages" className="hover:text-[#FF6B00]">
@@ -521,7 +521,7 @@ function TopNavigation({ displayName, showAdminLink }: { displayName: string; sh
         </nav>
 
         <Link
-          href="/post-listing"
+          href="/post-listing/start"
           className="hidden rounded-xl bg-[#FF6B00] px-4 py-3 text-sm font-black text-white shadow-lg shadow-[#FF6B00]/25 transition hover:bg-[#ff7b1f] xl:inline-flex"
         >
           Start Free Listing
@@ -588,7 +588,7 @@ function Sidebar({
     { label: "Orders", href: "/account/orders", icon: ShoppingBag },
   ]
   const sellerItems = [
-    { label: "Add New Listing", href: "/post-listing", icon: PlusCircle },
+    { label: "Add New Listing", href: "/post-listing/start", icon: PlusCircle },
     { label: "Seller Profile", href: "/settings#profile", icon: UserCircle },
     { label: "Business Details", href: "/settings#profile", icon: Building2 },
     { label: "Verification Centre", href: "/settings#verification", icon: ShieldCheck },
@@ -1000,7 +1000,7 @@ function RecentListings({ listings }: { listings: Listing[] }) {
             Create your first catering equipment listing to start reaching buyers.
           </p>
           <Link
-            href="/post-listing"
+            href="/post-listing/start"
             className="mt-5 inline-flex rounded-2xl bg-[#FF6B00] px-5 py-3 text-sm font-black text-white shadow-lg shadow-[#FF6B00]/20"
           >
             Add New Listing
@@ -1144,7 +1144,7 @@ function QuickActions({
     {
       title: "Add New Listing",
       text: "List your equipment, van or business",
-      href: "/post-listing",
+      href: "/post-listing/start",
       icon: MessageSquare,
     },
     {
@@ -1380,7 +1380,7 @@ export default async function AccountPage() {
                 )}
                 {accountType === "seller" ? (
                   <Link
-                    href="/post-listing"
+                    href="/post-listing/start"
                     className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#FF6B00] px-5 py-4 text-sm font-black text-white shadow-lg shadow-[#FF6B00]/25 transition hover:bg-[#ff7b1f]"
                   >
                     <PlusCircle className="h-5 w-5" />

@@ -81,7 +81,7 @@ export default function BottomNav() {
               stands in for the icon slot so "Sell" label aligns with the other tabs.
           */}
           <Link
-            href="/post-listing"
+            href="/post-listing/start"
             aria-label="Sell — post a listing"
             className="relative flex flex-1 flex-col items-center justify-center gap-1 py-3"
           >

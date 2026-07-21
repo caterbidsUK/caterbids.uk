@@ -222,7 +222,7 @@ function DesktopHeader() {
           <SearchHeaderForm />
         </div>
         <nav className="ml-auto flex items-center gap-6 text-sm font-black text-white">
-          <Link href="/post-listing" className="transition hover:text-[#FF6B00]">
+          <Link href="/post-listing/start" className="transition hover:text-[#FF6B00]">
             Sell
           </Link>
           <Link href="/favourites" className="inline-flex items-center gap-2 transition hover:text-[#FF6B00]">
@@ -239,7 +239,7 @@ function DesktopHeader() {
             Account
           </Link>
           <Link
-            href="/post-listing"
+            href="/post-listing/start"
             className="rounded-2xl bg-[#FF6B00] px-5 py-3 text-sm font-black text-white shadow-lg shadow-[#FF6B00]/25 transition hover:bg-[#ff7f24]"
           >
             Sell for free
@@ -996,7 +996,7 @@ function MobileBottomNav({ unreadCount }: { unreadCount: number }) {
       <div className="mx-auto grid max-w-md grid-cols-5 items-end text-[10px] font-black text-blue-100/75">
         <MobileNavItem href="/" icon={<Home className="h-5 w-5" />} label="Home" />
         <MobileNavItem href="/search" icon={<Search className="h-5 w-5" />} label="Search" />
-        <Link href="/post-listing" className="flex flex-col items-center gap-1 text-white" aria-label="Sell">
+        <Link href="/post-listing/start" className="flex flex-col items-center gap-1 text-white" aria-label="Sell">
           <span className="-mt-7 grid h-14 w-14 place-items-center rounded-full bg-[#FF6B00] shadow-lg shadow-[#FF6B00]/35">
             <Plus className="h-7 w-7" />
           </span>
