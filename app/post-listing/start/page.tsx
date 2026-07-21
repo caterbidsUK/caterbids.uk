@@ -83,7 +83,7 @@ export default async function PostListingStartPage() {
       </header>
 
       {/* ── Page content ─────────────────────────────────────── */}
-      <main className="min-h-screen bg-[#001B36] px-4 pb-20 pt-10 text-white sm:pt-14">
+      <main className="bg-[#001B36] px-4 pb-20 pt-10 text-white sm:pt-14">
         <div className="mx-auto max-w-5xl">
           {/* Back link */}
           <Link
