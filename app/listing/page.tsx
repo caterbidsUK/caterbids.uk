@@ -51,6 +51,7 @@ import type { DeliveryQuote } from "@/components/DeliveryQuoteBox"
 import type { Database } from '@/types/supabase'
 import { formatUKDate } from "@/lib/trust/badges"
 import { CATEGORY_OPTIONS, categoryByTitle, subcategoriesForCategory } from "@/lib/categories"
+import { sellerDeleteListing } from "@/app/account/listings/listing-actions"
 import { resolveFullUkPostcode } from "@/lib/delivery/postcodes"
 import {
   BUYER_WARNING,
@@ -591,8 +592,21 @@ function ListingContent() {
     setEditImagePreviews([])
   }
 
+  // Redirect DB-backed listings to the full edit page.
+  // Local-only listings (not yet in DB) fall back to the inline modal.
+  function handleEdit(item: Listing) {
+    const itemId = safeListingId(item.id)
+    if (!itemId || itemId.startsWith("local-") || readLocalListing(itemId)) {
+      startEditing(item)
+      return
+    }
+    router.push(`/account/listings/${itemId}/edit`)
+  }
+
   async function deleteListing(item: Listing) {
-    const confirmed = window.confirm("Delete this listing? This cannot be undone.")
+    const confirmed = window.confirm(
+      "This will remove your listing from the site. Buyers will no longer be able to find it. This cannot be undone by you. Continue?"
+    )
     if (!confirmed) return
 
     if (!userOwnsListing(item)) {
@@ -618,18 +632,10 @@ function ListingContent() {
       return
     }
 
-    const supabase = createClient()
-    const { error, count } = await supabase
-      .from("listings")
-      .delete({ count: "exact" })
-      .eq("id", itemId)
-
-    if (error) {
-      setEditError(error.message || "Could not delete listing.")
-      return
-    }
-    if (!count) {
-      setEditError("Listing could not be deleted. You may not have permission.")
+    // Soft delete via server action — sets status = 'deleted', never removes the row
+    const result = await sellerDeleteListing(itemId)
+    if (!result.success) {
+      setEditError(result.error)
       return
     }
 
@@ -849,6 +855,7 @@ function ListingContent() {
         .from('listings')
         .select('*')
         .eq('id', id)
+        .neq('status', 'deleted')
         .single()
 
       if (error) {
@@ -1501,7 +1508,7 @@ function ListingContent() {
                   <div className="flex gap-2 border-t border-white/10 p-3">
                     <button
                       type="button"
-                      onClick={() => startEditing(item)}
+                      onClick={() => handleEdit(item)}
                       className="soft-button flex flex-1 items-center justify-center gap-2 rounded-2xl px-3 py-2 text-xs font-bold"
                     >
                       <Pencil className="h-3.5 w-3.5" />
@@ -2551,7 +2558,7 @@ function ListingContent() {
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1">
                 <button
                   type="button"
-                  onClick={() => startEditing(listing)}
+                  onClick={() => handleEdit(listing)}
                   className="flex items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/[0.08] px-5 py-4 text-sm font-black text-white transition hover:border-[#FF6B00]/60"
                 >
                   <Pencil className="h-5 w-5" />
@@ -2658,7 +2665,7 @@ function ListingContent() {
             {isListingOwner ? (
               <button
                 type="button"
-                onClick={() => startEditing(listing)}
+                onClick={() => handleEdit(listing)}
                 className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[#FF6B00] px-4 py-4 text-sm font-black text-white"
               >
                 <Pencil className="h-5 w-5" />
@@ -2895,7 +2902,7 @@ function ListingContent() {
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <button
                 type="button"
-                onClick={() => startEditing(listing)}
+                onClick={() => handleEdit(listing)}
                 className="soft-button flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-bold"
               >
                 <Pencil className="h-4 w-4" />

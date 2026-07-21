@@ -1771,6 +1771,11 @@ function BlogPostForm({
 
           <div>
             <label className="mb-1.5 block text-xs font-black uppercase tracking-widest text-white/50">Body (Markdown)</label>
+            {isEdit && !post?.article_markdown && (
+              <p className="mb-2 text-xs text-amber-400/80">
+                This post was auto-generated as HTML — no Markdown is stored. Leave this blank to keep the existing content, or type new Markdown here to replace it.
+              </p>
+            )}
             <textarea
               name="body"
               defaultValue={post?.article_markdown || ""}

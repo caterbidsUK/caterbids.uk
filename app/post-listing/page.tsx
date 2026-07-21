@@ -21,6 +21,7 @@ import {
   WARRANTY_TYPE_OPTIONS,
 } from "@/lib/listing-trust"
 import { CATEGORY_OPTIONS, categoryByTitle, subcategoriesForCategory } from "@/lib/categories"
+import TrailerDetailsForm from "./TrailerDetailsForm"
 
 type QuickListAiResponse = {
   suggested_title: string
@@ -2468,6 +2469,15 @@ function PostListingPage() {
       }
     }
 
+    if (category === "Catering Vans & Trailers") {
+      const trailerRaw = (formData.get("trailer_details") as string) || ""
+      const trailerData = trailerRaw ? (() => { try { return JSON.parse(trailerRaw) } catch { return {} } })() : {}
+      if (!trailerData.asset_type) {
+        setPublishError("Select the asset type in the Catering Vans & Trailers section.")
+        return
+      }
+    }
+
     if (manualSourceHasVerifiedUrl && formData.get("specs_verified_by_seller") !== "on") {
       setPublishError("Confirm the product source matches your item.")
       return
@@ -3615,6 +3625,8 @@ function PostListingPage() {
             </div>
           )}
         </section>
+
+        {category === "Catering Vans & Trailers" && <TrailerDetailsForm />}
 
         <section id="power-step" className="rounded-[1.6rem] border border-slate-200 bg-white p-4 text-[#002E5D] shadow-[0_24px_80px_rgba(0,0,0,0.2)] sm:p-6">
           <div className="flex items-start justify-between gap-3">
