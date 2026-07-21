@@ -1,92 +1,146 @@
+import Image from "next/image"
 import Link from "next/link"
+import { ArrowRight, ChevronLeft, ChevronRight, Menu, Store, Truck, Utensils } from "lucide-react"
+import SiteLogo from "@/components/SiteLogo"
+import SiteFooter from "@/components/SiteFooter"
+import { createClient } from "@/lib/supabase/server"
+
+const searchAllHref = "/search?q=all&category=All%20Categories&location=All%20UK"
 
 const CATEGORIES = [
   {
     title: "Catering Equipment",
-    description:
-      "Ovens, fridges, fryers, prep tables and any other standalone catering equipment.",
-    icon: (
-      <svg viewBox="0 0 40 40" fill="none" className="h-10 w-10" aria-hidden="true">
-        <rect width="40" height="40" rx="10" fill="#FF6B00" fillOpacity="0.15" />
-        <path d="M10 28h20M13 22h14v6H13zM11 12h18v10H11z" stroke="#FF6B00" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-        <circle cx="20" cy="17" r="2" stroke="#FF6B00" strokeWidth="1.5"/>
-      </svg>
-    ),
+    description: "Ovens, fridges, fryers and more",
+    image: "/home-equipment-card.png",
+    icon: <Utensils className="h-8 w-8" strokeWidth={1.8} />,
   },
   {
     title: "Catering Vans & Trailers",
-    description:
-      "Food vans, catering trailers, coffee vans, burger vans and horsebox conversions.",
-    icon: (
-      <svg viewBox="0 0 40 40" fill="none" className="h-10 w-10" aria-hidden="true">
-        <rect width="40" height="40" rx="10" fill="#FF6B00" fillOpacity="0.15" />
-        <path d="M6 26h28M8 26V18l5-6h14l5 8v6" stroke="#FF6B00" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-        <circle cx="13" cy="28" r="2.5" stroke="#FF6B00" strokeWidth="1.5"/>
-        <circle cx="27" cy="28" r="2.5" stroke="#FF6B00" strokeWidth="1.5"/>
-        <path d="M13 12h10v8H13z" stroke="#FF6B00" strokeWidth="1.5" strokeLinecap="round"/>
-      </svg>
-    ),
+    description: "Catering vans, trailers and vehicles",
+    image: "/home-van-card.png",
+    icon: <Truck className="h-8 w-8" strokeWidth={1.8} />,
   },
   {
     title: "Catering Businesses",
-    description:
-      "Cafés, takeaways, restaurants and other catering businesses for sale as a going concern.",
-    icon: (
-      <svg viewBox="0 0 40 40" fill="none" className="h-10 w-10" aria-hidden="true">
-        <rect width="40" height="40" rx="10" fill="#FF6B00" fillOpacity="0.15" />
-        <path d="M8 32h24V18H8v14zM8 18l12-9 12 9" stroke="#FF6B00" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-        <rect x="15" y="22" width="10" height="10" rx="1" stroke="#FF6B00" strokeWidth="1.5"/>
-      </svg>
-    ),
+    description: "Cafes, restaurants and takeaways",
+    image: "/home-business-card.png",
+    icon: <Store className="h-8 w-8" strokeWidth={1.8} />,
   },
 ]
 
-export default function PostListingStartPage() {
+export default async function PostListingStartPage() {
+  const supabase = await createClient()
+  const { data: authData } = await supabase.auth.getUser()
+  const userId = authData?.user?.id ?? null
+  const accountHref = userId ? "/account" : "/login?next=%2Faccount"
+  const accountLabel = userId ? "Account" : "Sign In"
+
   return (
-    <main className="min-h-screen bg-[#002E5D] px-4 pb-16 pt-10 sm:pt-16">
-      <div className="mx-auto max-w-lg">
-        <p className="text-xs font-black uppercase tracking-[0.18em] text-[#FF6B00]">
-          CaterBidsUK
-        </p>
-        <h1 className="mt-2 text-3xl font-black tracking-[-0.04em] text-white sm:text-4xl">
-          What are you selling?
-        </h1>
-        <p className="mt-2 text-sm font-semibold leading-relaxed text-white/60">
-          Choose a category to start your listing.
-        </p>
+    <>
+      {/* ── Header ───────────────────────────────────────────── */}
+      <header className="sticky top-0 z-50 border-b border-white/10 bg-[#001225]/95 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-10">
+          <Link href="/" aria-label="CaterBidsUK home">
+            <SiteLogo size="sm" />
+          </Link>
 
-        <div className="mt-8 space-y-3">
-          {CATEGORIES.map((cat) => (
-            <Link
-              key={cat.title}
-              href={`/post-listing?category=${encodeURIComponent(cat.title)}`}
-              className="group flex items-start gap-5 rounded-[1.6rem] border border-white/10 bg-white/[0.055] p-5 text-left text-white transition hover:border-[#FF6B00]/50 hover:bg-[#FF6B00]/10"
-            >
-              <div className="shrink-0">{cat.icon}</div>
-              <div>
-                <p className="text-base font-black group-hover:text-[#FF6B00] transition-colors">
-                  {cat.title}
-                </p>
-                <p className="mt-1 text-sm font-semibold leading-relaxed text-white/60">
-                  {cat.description}
-                </p>
-              </div>
-              <svg
-                viewBox="0 0 20 20"
-                fill="none"
-                className="ml-auto mt-0.5 h-5 w-5 shrink-0 text-white/30 group-hover:text-[#FF6B00] transition-colors"
-                aria-hidden="true"
-              >
-                <path d="M7 4l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </Link>
-          ))}
+          <nav className="hidden items-center gap-6 text-sm font-black text-white/80 lg:flex" aria-label="Primary">
+            <Link className="transition hover:text-[#FF6B00]" href="/">Home</Link>
+            <Link className="transition hover:text-[#FF6B00]" href={searchAllHref}>Marketplace</Link>
+            <Link className="transition hover:text-[#FF6B00]" href="/blog">Blog</Link>
+            <Link className="text-[#FF6B00]" href="/post-listing/start">Sell</Link>
+            <Link className="transition hover:text-[#FF6B00]" href="/pricing">Pricing</Link>
+            <Link className="transition hover:text-[#FF6B00]" href={accountHref}>{accountLabel}</Link>
+          </nav>
+
+          <details className="relative lg:hidden">
+            <summary className="flex h-12 w-12 cursor-pointer list-none items-center justify-center rounded-full border border-white/20 bg-white/8 text-white [&::-webkit-details-marker]:hidden">
+              <Menu className="h-6 w-6" strokeWidth={2.2} />
+            </summary>
+            <div className="absolute right-0 top-16 z-30 w-64 rounded-3xl border border-white/14 bg-[#001a34]/96 p-3 shadow-2xl backdrop-blur-xl">
+              {(
+                [
+                  ["Home", "/"],
+                  ["Marketplace", searchAllHref],
+                  ["Blog", "/blog"],
+                  ["Sell an Item", "/post-listing/start"],
+                  ["Pricing", "/pricing"],
+                  [accountLabel, accountHref],
+                ] as [string, string][]
+              ).map(([label, href]) => (
+                <Link
+                  key={label}
+                  href={href}
+                  className="flex items-center justify-between rounded-2xl px-4 py-3 text-sm font-black text-white transition hover:bg-white/8 hover:text-[#FF6B00]"
+                >
+                  {label}
+                  <ChevronRight className="h-4 w-4" strokeWidth={2.4} />
+                </Link>
+              ))}
+            </div>
+          </details>
         </div>
+      </header>
 
-        <p className="mt-8 text-center text-xs font-semibold text-white/40">
-          All listings are free during our launch period.
-        </p>
-      </div>
-    </main>
+      {/* ── Page content ─────────────────────────────────────── */}
+      <main className="min-h-screen bg-[#001B36] px-4 pb-20 pt-10 text-white sm:pt-14">
+        <div className="mx-auto max-w-5xl">
+          {/* Back link */}
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1.5 text-sm font-black text-white/55 transition hover:text-white"
+          >
+            <ChevronLeft className="h-4 w-4" strokeWidth={2.4} />
+            Back to home
+          </Link>
+
+          {/* Heading */}
+          <div className="mt-6">
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-[#FF6B00]">
+              Start your listing
+            </p>
+            <h1 className="mt-2 text-3xl font-black tracking-[-0.04em] sm:text-4xl lg:text-5xl">
+              What are you selling?
+            </h1>
+            <p className="mt-2 text-base font-semibold text-white/55">
+              Choose a category to begin. All listings are free during our launch period.
+            </p>
+          </div>
+
+          {/* Cards — same markup and classes as CategoryCard in app/page.tsx */}
+          <div className="mt-8 grid gap-5 md:grid-cols-3">
+            {CATEGORIES.map((cat) => (
+              <Link
+                key={cat.title}
+                href={`/post-listing?category=${encodeURIComponent(cat.title)}`}
+                className="group relative min-h-[250px] overflow-hidden rounded-[1.55rem] border border-white/14 bg-[#061d38] shadow-[0_24px_75px_rgba(0,0,0,0.24)] transition hover:-translate-y-1 hover:border-[#FF6B00]/70 focus:outline-none focus:ring-4 focus:ring-[#FF6B00]/25"
+              >
+                <Image
+                  src={cat.image}
+                  alt={cat.title}
+                  fill
+                  sizes="(min-width: 768px) 33vw, 100vw"
+                  className="object-cover transition duration-500 group-hover:scale-105"
+                />
+                <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,18,40,0.12)_0%,rgba(0,18,40,0.94)_82%)]" />
+                <div className="absolute inset-x-0 bottom-0 p-5">
+                  <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#FF6B00] text-white shadow-[0_18px_40px_rgba(255,107,0,0.34)]">
+                    {cat.icon}
+                  </span>
+                  <h2 className="mt-4 text-2xl font-black tracking-[-0.035em] text-white">{cat.title}</h2>
+                  <p className="mt-2 text-base font-semibold leading-snug text-white/75">{cat.description}</p>
+                  <div className="mt-4 flex items-center justify-between text-[#FF6B00]">
+                    <span className="text-base font-black">Sell now</span>
+                    <ArrowRight className="h-7 w-7 transition group-hover:translate-x-1" strokeWidth={2.2} />
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </main>
+
+      <SiteFooter />
+    </>
   )
 }
