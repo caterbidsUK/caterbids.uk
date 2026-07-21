@@ -29,9 +29,10 @@ function initEquipmentRows(v: unknown): EquipmentRow[] {
   })
 }
 
-// Asset types that determine which chassis fields to show
-const VAN_ASSET_TYPES = ["Food van", "Horsebox conversion", "Container unit"]
-const TRAILER_ASSET_TYPES = ["Catering trailer", "Concession unit", "Coffee cart"]
+// Subcategory values (from the wizard Type dropdown) that determine chassis fields
+const VAN_SUBCATEGORIES = ["Catering Vans", "Food Trucks", "Coffee Vans", "Burger Vans", "Pizza Vans"]
+const TRAILER_SUBCATEGORIES = ["Catering Trailers"]
+// "Other Vans & Trailers" → show both sets
 
 const ELECTRICAL_SUPPLY_OPTIONS = [
   "240V 16A hook-up",
@@ -191,11 +192,12 @@ interface TrailerDetailsFormProps {
   // When editing an existing listing, pass the parsed trailer_details JSONB here.
   // Omit (or pass undefined) when creating a new listing.
   initialData?: Record<string, unknown>
+  // The wizard's Type dropdown value (subcategory). Drives van-vs-trailer field visibility.
+  listingType?: string
 }
 
-export default function TrailerDetailsForm({ initialData = {} }: TrailerDetailsFormProps) {
+export default function TrailerDetailsForm({ initialData = {}, listingType = "" }: TrailerDetailsFormProps) {
   // --- Section 1: Basics ---
-  const [assetType, setAssetType] = useState(str(initialData.asset_type))
   const [priceBasis, setPriceBasis] = useState(str(initialData.price_basis) || "Fixed")
   const [vatStatus, setVatStatus] = useState(str(initialData.vat_status))
   const [yearBuilt, setYearBuilt] = useState(numStr(initialData.year_built))
@@ -278,8 +280,8 @@ export default function TrailerDetailsForm({ initialData = {} }: TrailerDetailsF
   const [handoverTraining, setHandoverTraining] = useState(str(initialData.handover_training))
   const [partExchange, setPartExchange] = useState(str(initialData.part_exchange))
 
-  const isVanType = VAN_ASSET_TYPES.includes(assetType)
-  const isTrailerType = TRAILER_ASSET_TYPES.includes(assetType)
+  const isVanType = VAN_SUBCATEGORIES.includes(listingType) || listingType === "Other Vans & Trailers"
+  const isTrailerType = TRAILER_SUBCATEGORIES.includes(listingType) || listingType === "Other Vans & Trailers"
   const deliveryIncludesRadius =
     deliveryOptionTrailer === "Delivery available buyer pays" ||
     deliveryOptionTrailer === "Delivery included within radius"
@@ -290,7 +292,6 @@ export default function TrailerDetailsForm({ initialData = {} }: TrailerDetailsF
     const details: Record<string, unknown> = {}
 
     // Section 1
-    if (assetType) details.asset_type = assetType
     if (priceBasis) details.price_basis = priceBasis
     if (vatStatus) details.vat_status = vatStatus
     if (yearBuilt) details.year_built = Number(yearBuilt)
@@ -401,15 +402,6 @@ export default function TrailerDetailsForm({ initialData = {} }: TrailerDetailsF
       <section className={SECTION}>
         <SectionHeading title="Asset basics" />
         <div className="space-y-4">
-          <Field label="Asset type" required>
-            <select className={SELECT} value={assetType} onChange={(e) => setAssetType(e.target.value)}>
-              <option value="">— Select type —</option>
-              {["Catering trailer", "Food van", "Horsebox conversion", "Concession unit", "Coffee cart", "Container unit", "Other"].map(
-                (opt) => <option key={opt}>{opt}</option>
-              )}
-            </select>
-          </Field>
-
           <div className="grid gap-4 sm:grid-cols-3">
             <div>
               <p className={LABEL}>Price basis {REQ}</p>

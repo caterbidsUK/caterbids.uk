@@ -539,7 +539,7 @@ export default function EditListingForm({ listing }: { listing: Listing }) {
 
         {/* ── CATERING VANS & TRAILERS ─────────────────────────────────── */}
         {isVanTrailer && (
-          <TrailerDetailsForm initialData={trailerInitialData} />
+          <TrailerDetailsForm initialData={trailerInitialData} listingType={subcategory} />
         )}
 
         {/* ── CATERING BUSINESSES ──────────────────────────────────────── */}

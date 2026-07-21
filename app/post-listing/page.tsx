@@ -2482,15 +2482,6 @@ function PostListingPage() {
       }
     }
 
-    if (category === "Catering Vans & Trailers") {
-      const trailerRaw = (formData.get("trailer_details") as string) || ""
-      const trailerData = trailerRaw ? (() => { try { return JSON.parse(trailerRaw) } catch { return {} } })() : {}
-      if (!trailerData.asset_type) {
-        setPublishError("Select the asset type in the Catering Vans & Trailers section.")
-        return
-      }
-    }
-
     if (category === "Catering Businesses") {
       const bizRaw = (formData.get("business_details") as string) || ""
       const bizData = bizRaw ? (() => { try { return JSON.parse(bizRaw) } catch { return {} } })() : {}
@@ -3273,7 +3264,7 @@ function PostListingPage() {
               )}
             </div>
 
-            {(() => {
+            {category === "Catering Equipment" && (() => {
               const level3 = categoryByTitle(subcategory)?.subcategories ?? []
               return level3.length > 0 ? (
                 <label className="block">
@@ -3320,28 +3311,32 @@ function PostListingPage() {
               </label>
             </div>
 
-            <div className="grid gap-3 lg:grid-cols-3">
-              <label className="block">
-                <span className="mb-1 block text-sm font-black">Brand</span>
-                <input
-                  name="spec_brand"
-                  value={shippingSpecBrand}
-                  onChange={(event) => setShippingSpecBrand(event.target.value)}
-                  placeholder="e.g. Rational"
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
-                />
-              </label>
+            <div className={`grid gap-3 ${category === "Catering Equipment" ? "lg:grid-cols-3" : ""}`}>
+              {category === "Catering Equipment" && (
+                <label className="block">
+                  <span className="mb-1 block text-sm font-black">Brand</span>
+                  <input
+                    name="spec_brand"
+                    value={shippingSpecBrand}
+                    onChange={(event) => setShippingSpecBrand(event.target.value)}
+                    placeholder="e.g. Rational"
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                  />
+                </label>
+              )}
 
-              <label className="block">
-                <span className="mb-1 block text-sm font-black">Model</span>
-                <input
-                  name="spec_model"
-                  value={shippingSpecModel}
-                  onChange={(event) => setShippingSpecModel(event.target.value)}
-                  placeholder="e.g. iCombi Pro 6-1/1"
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
-                />
-              </label>
+              {category === "Catering Equipment" && (
+                <label className="block">
+                  <span className="mb-1 block text-sm font-black">Model</span>
+                  <input
+                    name="spec_model"
+                    value={shippingSpecModel}
+                    onChange={(event) => setShippingSpecModel(event.target.value)}
+                    placeholder="e.g. iCombi Pro 6-1/1"
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                  />
+                </label>
+              )}
 
               <label className="block">
                 <span className="mb-1 block text-sm font-black">Town or city <span className="text-[#FF6B00]">*</span></span>
@@ -3358,7 +3353,7 @@ function PostListingPage() {
               </label>
             </div>
 
-            {pendingGeminiEstimates && (
+            {category === "Catering Equipment" && pendingGeminiEstimates && (
               <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm">
                 <p className="font-black text-amber-900">AI estimate — please confirm before publishing</p>
                 <p className="mt-1 font-semibold text-amber-800">
@@ -3397,26 +3392,28 @@ function PostListingPage() {
               </div>
             )}
 
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {[
-                { label: "Width (cm)", value: shippingSpecWidth, setValue: setShippingSpecWidth },
-                { label: "Depth (cm)", value: shippingSpecDepth, setValue: setShippingSpecDepth },
-                { label: "Height (cm)", value: shippingSpecHeight, setValue: setShippingSpecHeight },
-                { label: "Weight (kg)", value: shippingSpecWeight, setValue: setShippingSpecWeight },
-              ].map((field) => (
-                <label key={field.label} className="block">
-                  <span className="mb-1 block text-sm font-black">{field.label}</span>
-                  <input
-                    type="number"
-                    min="0"
-                    value={field.value}
-                    onChange={(e) => field.setValue(e.target.value)}
-                    placeholder="Needs seller check"
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
-                  />
-                </label>
-              ))}
-            </div>
+            {category === "Catering Equipment" && (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {[
+                  { label: "Width (cm)", value: shippingSpecWidth, setValue: setShippingSpecWidth },
+                  { label: "Depth (cm)", value: shippingSpecDepth, setValue: setShippingSpecDepth },
+                  { label: "Height (cm)", value: shippingSpecHeight, setValue: setShippingSpecHeight },
+                  { label: "Weight (kg)", value: shippingSpecWeight, setValue: setShippingSpecWeight },
+                ].map((field) => (
+                  <label key={field.label} className="block">
+                    <span className="mb-1 block text-sm font-black">{field.label}</span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={field.value}
+                      onChange={(e) => field.setValue(e.target.value)}
+                      placeholder="Needs seller check"
+                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                    />
+                  </label>
+                ))}
+              </div>
+            )}
 
             <label className="block">
               <span className="mb-1 block text-sm font-black">Short description <span className="text-[#FF6B00]">*</span></span>
@@ -3649,11 +3646,11 @@ function PostListingPage() {
           )}
         </section>
 
-        {category === "Catering Vans & Trailers" && <TrailerDetailsForm />}
+        {category === "Catering Vans & Trailers" && <TrailerDetailsForm listingType={subcategory} />}
 
         {category === "Catering Businesses" && <BusinessDetailsForm />}
 
-        <section id="power-step" className="rounded-[1.6rem] border border-slate-200 bg-white p-4 text-[#002E5D] shadow-[0_24px_80px_rgba(0,0,0,0.2)] sm:p-6">
+        {category === "Catering Equipment" && <section id="power-step" className="rounded-[1.6rem] border border-slate-200 bg-white p-4 text-[#002E5D] shadow-[0_24px_80px_rgba(0,0,0,0.2)] sm:p-6">
           <div className="flex items-start justify-between gap-3">
             <div>
               <h2 className="text-2xl font-black tracking-[-0.035em]">3. Power & safety</h2>
@@ -3768,10 +3765,10 @@ function PostListingPage() {
               className="min-h-20 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
             />
           </label>
-        </section>
+        </section>}
 
         <section id="delivery-step" className="rounded-[1.6rem] border border-slate-200 bg-white p-4 text-[#002E5D] shadow-[0_24px_80px_rgba(0,0,0,0.2)] sm:p-6">
-          <h2 className="text-2xl font-black tracking-[-0.035em]">4. Delivery Options</h2>
+          <h2 className="text-2xl font-black tracking-[-0.035em]">{category === "Catering Equipment" ? "4" : "3"}. Delivery Options</h2>
           <p className="mt-1 text-sm font-semibold text-[#002E5D]/65">
             Choose all that apply — you must enable at least one.
           </p>
@@ -3790,22 +3787,24 @@ function PostListingPage() {
               </div>
             </label>
 
-            <label className={`flex items-start gap-3 rounded-2xl border px-4 py-3 transition ${palletTooBig ? "cursor-not-allowed border-red-200 bg-red-50 opacity-60" : "cursor-pointer border-slate-200 bg-slate-50 hover:border-slate-300 has-[:checked]:border-[#FF6B00]/40 has-[:checked]:bg-[#FF6B00]/5"}`}>
-              <input
-                type="checkbox"
-                checked={palletEnabled}
-                disabled={palletTooBig}
-                onChange={(e) => setPalletEnabled(e.target.checked)}
-                className="mt-0.5 h-4 w-4 shrink-0 accent-[#FF6B00] disabled:cursor-not-allowed"
-              />
-              <div>
-                <p className="text-sm font-black text-[#002E5D]">CaterBids Pallet Delivery</p>
-                {palletTooBig
-                  ? <p className="mt-0.5 text-xs font-bold text-red-700">This item is too large for pallet delivery — choose Collection or Buyer-arranged instead.</p>
-                  : <p className="mt-0.5 text-xs font-semibold text-[#002E5D]/60">Interparcel pallet courier — requires pallet size and collection details below.</p>
-                }
-              </div>
-            </label>
+            {category === "Catering Equipment" && (
+              <label className={`flex items-start gap-3 rounded-2xl border px-4 py-3 transition ${palletTooBig ? "cursor-not-allowed border-red-200 bg-red-50 opacity-60" : "cursor-pointer border-slate-200 bg-slate-50 hover:border-slate-300 has-[:checked]:border-[#FF6B00]/40 has-[:checked]:bg-[#FF6B00]/5"}`}>
+                <input
+                  type="checkbox"
+                  checked={palletEnabled}
+                  disabled={palletTooBig}
+                  onChange={(e) => setPalletEnabled(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-[#FF6B00] disabled:cursor-not-allowed"
+                />
+                <div>
+                  <p className="text-sm font-black text-[#002E5D]">CaterBids Pallet Delivery</p>
+                  {palletTooBig
+                    ? <p className="mt-0.5 text-xs font-bold text-red-700">This item is too large for pallet delivery — choose Collection or Buyer-arranged instead.</p>
+                    : <p className="mt-0.5 text-xs font-semibold text-[#002E5D]/60">Interparcel pallet courier — requires pallet size and collection details below.</p>
+                  }
+                </div>
+              </label>
+            )}
 
             <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 transition hover:border-slate-300 has-[:checked]:border-[#FF6B00]/40 has-[:checked]:bg-[#FF6B00]/5">
               <input
@@ -4113,7 +4112,7 @@ function PostListingPage() {
           )}
         </section>
 
-        {process.env.NODE_ENV === "development" && (
+        {process.env.NODE_ENV === "development" && category === "Catering Equipment" && (
         <details className="rounded-3xl bg-white p-5 text-[#002E5D] shadow-sm">
           <summary className="cursor-pointer list-none text-lg font-black">Advanced CaterBot details</summary>
           <div className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
@@ -4155,7 +4154,7 @@ function PostListingPage() {
         )}
 
         <section id="review-step" className="rounded-[1.6rem] border border-slate-200 bg-white p-4 text-[#002E5D] shadow-[0_24px_80px_rgba(0,0,0,0.22)] sm:p-6">
-          <h2 className="text-2xl font-black tracking-[-0.035em]">5. Review & publish</h2>
+          <h2 className="text-2xl font-black tracking-[-0.035em]">{category === "Catering Equipment" ? "5" : "4"}. Review & publish</h2>
 
           <div className="mt-4 grid gap-5 lg:grid-cols-[1.2fr_0.9fr]">
             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
@@ -4180,7 +4179,7 @@ function PostListingPage() {
                   <h3 className="text-lg font-black leading-tight">{title || "Listing title not added"}</h3>
                   <p className="text-slate-500">{subcategory || category} • {condition}</p>
                   <p className="text-slate-500">{reviewLocation}</p>
-                  <p className="text-slate-500">{shippingSpecPowerType !== "Not sure" ? shippingSpecPowerType : "Power not confirmed"}</p>
+                  {category === "Catering Equipment" && <p className="text-slate-500">{shippingSpecPowerType !== "Not sure" ? shippingSpecPowerType : "Power not confirmed"}</p>}
                   <div className="flex flex-wrap items-center gap-2 pt-2">
                     <span className="text-2xl font-black text-[#FF6B00]">{price ? formatPrice(price) : "Price not added"}</span>
                     <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-black text-[#002E5D]">{condition}</span>
