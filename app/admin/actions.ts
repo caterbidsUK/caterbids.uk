@@ -812,16 +812,28 @@ export async function updateBlogPost(
   const status = formString(formData, "status") === "published" ? "published" : "draft"
 
   if (!title) return { error: "Title is required." }
-  if (!body) return { error: "Article body is required." }
 
-  const articleHtml = sanitizeArticleHtml(adminMarkdownToHtml(body))
   const targetKeywords = keywordsRaw
     ? keywordsRaw.split(",").map((k) => k.trim()).filter(Boolean)
     : null
   const now = new Date().toISOString()
 
   const { data: current } = await (admin.from("blog_posts" as any) as any)
-    .select("slug,published_at").eq("id", postId).maybeSingle()
+    .select("slug,published_at,article_html").eq("id", postId).maybeSingle()
+
+  // If body is empty (e.g. AI-generated post with no stored markdown),
+  // preserve the existing article_html rather than wiping it.
+  let articleHtml: string
+  let articleMarkdown: string | null
+  if (body) {
+    articleHtml = sanitizeArticleHtml(adminMarkdownToHtml(body))
+    articleMarkdown = body
+  } else {
+    const existing = String(current?.article_html || "").trim()
+    if (!existing) return { error: "Article body is required." }
+    articleHtml = existing
+    articleMarkdown = null
+  }
 
   const slug = current?.slug || ""
   const publishedAt = status === "published"
@@ -835,7 +847,7 @@ export async function updateBlogPost(
     meta_description: metaDescription || null,
     target_keywords: targetKeywords,
     article_html: articleHtml,
-    article_markdown: body,
+    article_markdown: articleMarkdown,
     status,
     updated_at: now,
     published_at: publishedAt,

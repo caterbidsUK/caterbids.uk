@@ -19,6 +19,7 @@ import {
   Menu,
   MessageSquare,
   PackageCheck,
+  Pencil,
   Percent,
   PlusCircle,
   Search,
@@ -30,6 +31,7 @@ import {
   Truck,
   UserCircle,
 } from "lucide-react"
+import DeleteListingButton from "./DeleteListingButton"
 import type { User } from "@supabase/supabase-js"
 import type { Database } from "@/types/supabase"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -1008,13 +1010,10 @@ function RecentListings({ listings }: { listings: Listing[] }) {
         <div className="mt-5 divide-y divide-white/10">
           {recentListings.map((listing) => {
             const image = listingImage(listing)
+            const canEdit = listing.status !== "sold" && listing.status !== "deleted"
             return (
-              <Link
-                key={listing.id}
-                href={`/listing?id=${listing.id}`}
-                className="grid grid-cols-[76px_minmax(0,1fr)] gap-3 py-4 transition hover:bg-white/[0.04] sm:grid-cols-[84px_minmax(0,1fr)_auto] sm:items-center"
-              >
-                <div className="h-20 overflow-hidden rounded-2xl bg-white/8">
+              <div key={listing.id} className="grid grid-cols-[76px_minmax(0,1fr)] gap-3 py-4 sm:grid-cols-[84px_minmax(0,1fr)_auto] sm:items-center">
+                <Link href={`/listing?id=${listing.id}`} className="h-20 overflow-hidden rounded-2xl bg-white/8 transition hover:opacity-80">
                   {image ? (
                     <img src={image} alt="" className="h-full w-full object-cover" />
                   ) : (
@@ -1022,11 +1021,13 @@ function RecentListings({ listings }: { listings: Listing[] }) {
                       <PackageCheck className="h-7 w-7" />
                     </div>
                   )}
-                </div>
+                </Link>
                 <div className="min-w-0">
-                  <h3 className="overflow-hidden text-sm font-black leading-snug text-white [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] md:text-base">
-                    {listing.title}
-                  </h3>
+                  <Link href={`/listing?id=${listing.id}`} className="block">
+                    <h3 className="overflow-hidden text-sm font-black leading-snug text-white [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] hover:text-[#FF9A4A] md:text-base">
+                      {listing.title}
+                    </h3>
+                  </Link>
                   <p className="mt-1 text-sm font-black text-[#FF9A4A]">{displayPrice(listing.price)}</p>
                   <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold text-[#A7B5C9]">
                     <span>{listing.category || "Catering Equipment"}</span>
@@ -1035,13 +1036,24 @@ function RecentListings({ listings }: { listings: Listing[] }) {
                     {listing.created_at && <span>{formatDate(listing.created_at)}</span>}
                   </div>
                 </div>
-                <div className="col-span-2 flex items-center justify-between gap-3 sm:col-span-1 sm:justify-end">
+                <div className="col-span-2 flex items-center justify-between gap-3 sm:col-span-1 sm:flex-col sm:items-end">
                   <span className={`rounded-full px-3 py-1 text-xs font-black ${statusClasses(listing.status)}`}>
                     {formatStatus(listing.status)}
                   </span>
-                  <ChevronRight className="h-5 w-5 text-[#FF6B00]" />
+                  {canEdit && (
+                    <div className="flex items-center gap-2">
+                      <Link
+                        href={`/account/listings/${listing.id}/edit`}
+                        className="flex items-center gap-1 rounded-xl border border-white/20 bg-white/10 px-2.5 py-1.5 text-xs font-black text-white transition hover:bg-white/20"
+                      >
+                        <Pencil className="h-3 w-3" />
+                        Edit
+                      </Link>
+                      <DeleteListingButton listingId={listing.id} />
+                    </div>
+                  )}
                 </div>
-              </Link>
+              </div>
             )
           })}
           <Link

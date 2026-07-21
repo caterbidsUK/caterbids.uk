@@ -91,6 +91,7 @@ type ListingInput = {
   image?: string | null
   images?: string[] | null
   city?: string | null
+  trailer_details?: Record<string, unknown> | null
 }
 
 function isMissingColumnError(error: unknown) {
@@ -269,6 +270,11 @@ export async function createListing(
     delivery_available: formData.get('delivery_available') === 'on',
     image: (formData.get('image') as string) || null,
     images: parseImageUrls(formData.get('images')),
+    trailer_details: (() => {
+      const raw = formData.get('trailer_details')
+      if (!raw) return null
+      try { return JSON.parse(raw as string) as Record<string, unknown> } catch { return null }
+    })(),
   }
 
   if (!input.title || !input.price || !input.location) {
@@ -525,6 +531,7 @@ export async function createListing(
     seller_id: user.id,
     user_id: user.id,
     status: 'live',
+    trailer_details: input.category === 'Catering Vans & Trailers' ? (input.trailer_details || null) : null,
   }
 
   let { data: createdListing, error } = await supabase
