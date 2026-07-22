@@ -3210,7 +3210,7 @@ function PostListingPage() {
 
       {/* FORM */}
       <form onSubmit={handlePublish} className="space-y-5">
-        <section id="item-details-step" className="rounded-[1.6rem] border border-slate-200 bg-white p-4 text-[#002E5D] shadow-[0_24px_80px_rgba(0,0,0,0.22)] sm:p-6">
+        <section id="item-details-step" className="rounded-[1.6rem] border border-white/14 bg-[#061f3d]/86 p-4 text-white shadow-[0_24px_80px_rgba(0,0,0,0.28)] backdrop-blur sm:p-6">
           <div className="flex items-start justify-between gap-3">
             <div>
               <h2 className="text-2xl font-black tracking-[-0.035em]">2. Item details</h2>
@@ -3228,7 +3228,7 @@ function PostListingPage() {
               <input
                 name="title"
                 placeholder="e.g. Rational iCombi Pro 6-1/1"
-                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                className="w-full rounded-2xl border border-white/20 bg-white/[0.08] px-4 py-3 text-sm font-semibold text-white placeholder:text-white/35 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
               />
@@ -3237,8 +3237,8 @@ function PostListingPage() {
             <div className="grid gap-3 lg:grid-cols-2">
               <div>
                 <span className="mb-1 block text-sm font-black">Category</span>
-                <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
-                  <span className="font-black text-[#002E5D]">{category}</span>
+                <div className="flex items-center justify-between rounded-2xl border border-white/12 bg-white/[0.06] px-4 py-3 text-sm">
+                  <span className="font-black text-white">{category}</span>
                   <Link href="/post-listing/start" className="text-xs font-black text-[#FF6B00] hover:underline">
                     Change
                   </Link>
@@ -3252,7 +3252,7 @@ function PostListingPage() {
                   <span className="mb-1 block text-sm font-black">Type <span className="text-[#FF6B00]">*</span></span>
                   <select
                     name="subcategory"
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                    className="w-full rounded-2xl border border-white/20 bg-white/[0.08] px-4 py-3 text-sm font-semibold text-white focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
                     value={subcategory}
                     onChange={(e) => setSubcategory(e.target.value)}
                   >
@@ -3271,7 +3271,7 @@ function PostListingPage() {
                   <span className="mb-1 block text-sm font-black">Subcategory</span>
                   <select
                     name="equipment_type"
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                    className="w-full rounded-2xl border border-white/20 bg-white/[0.08] px-4 py-3 text-sm font-semibold text-white focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
                     value={equipmentType}
                     onChange={(e) => setEquipmentType(e.target.value)}
                   >
@@ -3289,7 +3289,7 @@ function PostListingPage() {
                 <span className="mb-1 block text-sm font-black">Condition <span className="text-[#FF6B00]">*</span></span>
                 <select
                   name="condition"
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                  className="w-full rounded-2xl border border-white/20 bg-white/[0.08] px-4 py-3 text-sm font-semibold text-white focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
                   value={condition}
                   onChange={(e) => setCondition(e.target.value)}
                 >
@@ -3304,7 +3304,7 @@ function PostListingPage() {
                 <input
                   name="price"
                   placeholder="£ 0.00"
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                  className="w-full rounded-2xl border border-white/20 bg-white/[0.08] px-4 py-3 text-sm font-semibold text-white placeholder:text-white/35 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
                   value={price}
                   onChange={(e) => setPrice(e.target.value)}
                 />
@@ -3320,7 +3320,7 @@ function PostListingPage() {
                     value={shippingSpecBrand}
                     onChange={(event) => setShippingSpecBrand(event.target.value)}
                     placeholder="e.g. Rational"
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                    className="w-full rounded-2xl border border-white/20 bg-white/[0.08] px-4 py-3 text-sm font-semibold text-white placeholder:text-white/35 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
                   />
                 </label>
               )}
@@ -3333,7 +3333,7 @@ function PostListingPage() {
                     value={shippingSpecModel}
                     onChange={(event) => setShippingSpecModel(event.target.value)}
                     placeholder="e.g. iCombi Pro 6-1/1"
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                    className="w-full rounded-2xl border border-white/20 bg-white/[0.08] px-4 py-3 text-sm font-semibold text-white placeholder:text-white/35 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
                   />
                 </label>
               )}
@@ -3343,7 +3343,7 @@ function PostListingPage() {
                 <input
                   name="city"
                   placeholder="e.g. Manchester"
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                  className="w-full rounded-2xl border border-white/20 bg-white/[0.08] px-4 py-3 text-sm font-semibold text-white placeholder:text-white/35 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
                   value={city}
                   onChange={(e) => {
                     setCity(e.target.value)
@@ -3408,7 +3408,7 @@ function PostListingPage() {
                       value={field.value}
                       onChange={(e) => field.setValue(e.target.value)}
                       placeholder="Needs seller check"
-                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                      className="w-full rounded-2xl border border-white/20 bg-white/[0.08] px-4 py-3 text-sm font-semibold text-white placeholder:text-white/35 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
                     />
                   </label>
                 ))}
@@ -3421,11 +3421,11 @@ function PostListingPage() {
                 name="description"
                 placeholder="Describe the item, key features, age, and any notes for buyers..."
                 maxLength={1000}
-                className="min-h-28 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                className="min-h-28 w-full rounded-2xl border border-white/20 bg-white/[0.08] px-4 py-3 text-sm font-semibold text-white placeholder:text-white/35 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
               />
-              <span className="mt-1 block text-right text-xs font-bold text-slate-400">{description.length} / 1000</span>
+              <span className="mt-1 block text-right text-xs font-bold text-white/40">{description.length} / 1000</span>
             </label>
           </div>
 
@@ -3435,7 +3435,7 @@ function PostListingPage() {
                 {manualSourceHasVerifiedUrl ? "CaterBot found a product source." : "Manual/spec source not verified yet."}
               </p>
               {!manualSourceHasVerifiedUrl && (
-                <p className="mt-1 text-sm font-semibold text-[#002E5D]/70">
+                <p className="mt-1 text-sm font-semibold text-white/70">
                   CaterBot could not verify an exact manual/spec source. You can still list using your own checks.
                 </p>
               )}
@@ -3481,7 +3481,7 @@ function PostListingPage() {
                         setManualLinkPanelOpen((current) => !current)
                         setManualLinkError("")
                       }}
-                      className="inline-flex flex-1 items-center justify-center rounded-2xl border border-[#002E5D]/15 bg-white px-4 py-3 text-sm font-black text-[#002E5D]"
+                      className="inline-flex flex-1 items-center justify-center rounded-2xl border border-white/15 bg-white/[0.08] px-4 py-3 text-sm font-black text-white"
                     >
                       Add link manually
                     </button>
@@ -3500,13 +3500,13 @@ function PostListingPage() {
               )}
 
               {manualLinkPanelOpen && (
-                <div className="mt-3 rounded-2xl border border-[#002E5D]/10 bg-white p-3">
+                <div className="mt-3 rounded-2xl border border-white/12 bg-white/[0.08] p-3">
                   <label className="mb-1 block text-sm font-black">Manual/spec URL</label>
                   <input
                     value={manualLinkInput}
                     onChange={(event) => setManualLinkInput(event.target.value)}
                     placeholder="https://manufacturer.co.uk/model-spec-sheet"
-                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                    className="w-full rounded-xl border border-white/20 bg-white/[0.08] px-4 py-3 text-sm font-semibold text-white placeholder:text-white/35 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
                   />
                   <button
                     type="button"
@@ -3526,8 +3526,8 @@ function PostListingPage() {
               )}
 
               {pendingSpecLookup && (
-                <div className="mt-3 rounded-2xl border border-[#002E5D]/10 bg-white p-3">
-                  <p className="text-sm font-black text-[#002E5D]">CaterBot found possible equipment specs</p>
+                <div className="mt-3 rounded-2xl border border-white/12 bg-white/[0.08] p-3">
+                  <p className="text-sm font-black text-white">CaterBot found possible equipment specs</p>
                   <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
                     {[
                       ["Brand", pendingSpecLookup!.extracted?.brand || "Needs seller check"],
@@ -3563,9 +3563,9 @@ function PostListingPage() {
                       ],
                       ["Delivery", pendingSpecLookup!.specs?.suggested_pallet_size || "Needs seller check"],
                     ].map(([label, value]) => (
-                      <div key={label} className="rounded-xl bg-slate-50 px-3 py-2">
-                        <p className="font-black uppercase tracking-[0.1em] text-slate-400">{label}</p>
-                        <p className="mt-1 font-bold text-[#002E5D]">{value}</p>
+                      <div key={label} className="rounded-xl bg-white/[0.06] px-3 py-2">
+                        <p className="font-black uppercase tracking-[0.1em] text-white/40">{label}</p>
+                        <p className="mt-1 font-bold text-white">{value}</p>
                       </div>
                     ))}
                   </div>
@@ -3579,12 +3579,12 @@ function PostListingPage() {
                       Open source
                     </a>
                   )}
-                  <p className="mt-3 text-xs font-semibold leading-relaxed text-[#002E5D]/65">
+                  <p className="mt-3 text-xs font-semibold leading-relaxed text-white/65">
                     Specs are for guidance only. Check the measurements and source before publishing.
                   </p>
                   {process.env.NODE_ENV === "development" && (
-                    <details className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
-                      <summary className="cursor-pointer font-black text-[#002E5D]">CaterBot debug details</summary>
+                    <details className="mt-3 rounded-xl border border-white/12 bg-white/[0.06] p-3 text-xs text-white/70">
+                      <summary className="cursor-pointer font-black text-white">CaterBot debug details</summary>
                       <div className="mt-2 space-y-2 break-words">
                         <p>
                           <span className="font-black">OCR text:</span>{" "}
@@ -3628,14 +3628,14 @@ function PostListingPage() {
                     <button
                       type="button"
                       onClick={() => lookupSpecsWithCaterBot({ autoApplyEmpty: true, suggestion: quickListResult ?? undefined })}
-                      className="rounded-xl border border-[#002E5D]/15 bg-white px-4 py-3 text-sm font-black text-[#002E5D]"
+                      className="rounded-xl border border-white/15 bg-white/[0.08] px-4 py-3 text-sm font-black text-white"
                     >
                       Search Again
                     </button>
                     <button
                       type="button"
                       onClick={() => setPendingSpecLookup(null)}
-                      className="rounded-xl border border-[#002E5D]/15 bg-white px-4 py-3 text-sm font-black text-[#002E5D]"
+                      className="rounded-xl border border-white/15 bg-white/[0.08] px-4 py-3 text-sm font-black text-white"
                     >
                       Edit Manually
                     </button>
@@ -3650,7 +3650,7 @@ function PostListingPage() {
 
         {category === "Catering Businesses" && <BusinessDetailsForm />}
 
-        {category === "Catering Equipment" && <section id="power-step" className="rounded-[1.6rem] border border-slate-200 bg-white p-4 text-[#002E5D] shadow-[0_24px_80px_rgba(0,0,0,0.2)] sm:p-6">
+        {category === "Catering Equipment" && <section id="power-step" className="rounded-[1.6rem] border border-white/14 bg-[#061f3d]/86 p-4 text-white shadow-[0_24px_80px_rgba(0,0,0,0.28)] backdrop-blur sm:p-6">
           <div className="flex items-start justify-between gap-3">
             <div>
               <h2 className="text-2xl font-black tracking-[-0.035em]">3. Power & safety</h2>
@@ -3671,7 +3671,7 @@ function PostListingPage() {
                   className={`flex items-center justify-center rounded-2xl border px-3 py-3 text-sm font-black transition ${
                     shippingSpecPowerType === option
                       ? "border-[#FF6B00] bg-[#FF6B00]/10 text-[#B34700]"
-                      : "border-slate-200 bg-white text-[#002E5D] hover:border-[#FF6B00]/45"
+                      : "border-white/20 bg-white/[0.06] text-white/80 hover:border-[#FF6B00]/45"
                   }`}
                 >
                   <input
@@ -3697,7 +3697,7 @@ function PostListingPage() {
                   value={shippingSpecVoltage}
                   onChange={(event) => setShippingSpecVoltage(event.target.value)}
                   placeholder="e.g. 400"
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                  className="w-full rounded-2xl border border-white/20 bg-white/[0.08] px-4 py-3 text-sm font-semibold text-white placeholder:text-white/35 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
                 />
               </label>
               <label className="block">
@@ -3706,7 +3706,7 @@ function PostListingPage() {
                   name="spec_phase"
                   value={shippingSpecPhase}
                   onChange={(event) => setShippingSpecPhase(event.target.value)}
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                  className="w-full rounded-2xl border border-white/20 bg-white/[0.08] px-4 py-3 text-sm font-semibold text-white focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
                 >
                   <option value="">Not sure</option>
                   <option value="1">1 phase</option>
@@ -3720,7 +3720,7 @@ function PostListingPage() {
                   value={shippingSpecCurrent}
                   onChange={(event) => setShippingSpecCurrent(event.target.value)}
                   placeholder="e.g. 13A"
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                  className="w-full rounded-2xl border border-white/20 bg-white/[0.08] px-4 py-3 text-sm font-semibold text-white placeholder:text-white/35 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
                 />
               </label>
             </div>
@@ -3734,7 +3734,7 @@ function PostListingPage() {
                   name="spec_gas_type"
                   value={shippingSpecGasType}
                   onChange={(event) => setShippingSpecGasType(event.target.value)}
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                  className="w-full rounded-2xl border border-white/20 bg-white/[0.08] px-4 py-3 text-sm font-semibold text-white focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
                 >
                   <option value="">Not sure</option>
                   <option value="Natural Gas">Natural Gas</option>
@@ -3749,7 +3749,7 @@ function PostListingPage() {
                   value={shippingSpecGasConnection}
                   onChange={(event) => setShippingSpecGasConnection(event.target.value)}
                   placeholder="e.g. 1/2 inch BSP"
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                  className="w-full rounded-2xl border border-white/20 bg-white/[0.08] px-4 py-3 text-sm font-semibold text-white placeholder:text-white/35 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
                 />
               </label>
             </div>
@@ -3762,19 +3762,19 @@ function PostListingPage() {
               value={shippingSpecNotes}
               onChange={(event) => setShippingSpecNotes(event.target.value)}
               placeholder="Optional"
-              className="min-h-20 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+              className="min-h-20 w-full rounded-2xl border border-white/20 bg-white/[0.08] px-4 py-3 text-sm font-semibold text-white placeholder:text-white/35 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
             />
           </label>
         </section>}
 
-        <section id="delivery-step" className="rounded-[1.6rem] border border-slate-200 bg-white p-4 text-[#002E5D] shadow-[0_24px_80px_rgba(0,0,0,0.2)] sm:p-6">
+        <section id="delivery-step" className="rounded-[1.6rem] border border-white/14 bg-[#061f3d]/86 p-4 text-white shadow-[0_24px_80px_rgba(0,0,0,0.28)] backdrop-blur sm:p-6">
           <h2 className="text-2xl font-black tracking-[-0.035em]">{category === "Catering Equipment" ? "4" : "3"}. Delivery Options</h2>
-          <p className="mt-1 text-sm font-semibold text-[#002E5D]/65">
+          <p className="mt-1 text-sm font-semibold text-white/65">
             Choose all that apply — you must enable at least one.
           </p>
 
           <div className="mt-4 space-y-2">
-            <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 transition hover:border-slate-300 has-[:checked]:border-[#FF6B00]/40 has-[:checked]:bg-[#FF6B00]/5">
+            <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-white/12 bg-white/[0.06] px-4 py-3 transition hover:border-white/25 has-[:checked]:border-[#FF6B00]/40 has-[:checked]:bg-[#FF6B00]/5">
               <input
                 type="checkbox"
                 checked={collectionEnabled}
@@ -3782,13 +3782,13 @@ function PostListingPage() {
                 className="mt-0.5 h-4 w-4 shrink-0 accent-[#FF6B00]"
               />
               <div>
-                <p className="text-sm font-black text-[#002E5D]">Collection</p>
-                <p className="mt-0.5 text-xs font-semibold text-[#002E5D]/60">Buyer collects in person from your location.</p>
+                <p className="text-sm font-black text-white">Collection</p>
+                <p className="mt-0.5 text-xs font-semibold text-white/60">Buyer collects in person from your location.</p>
               </div>
             </label>
 
             {category === "Catering Equipment" && (
-              <label className={`flex items-start gap-3 rounded-2xl border px-4 py-3 transition ${palletTooBig ? "cursor-not-allowed border-red-200 bg-red-50 opacity-60" : "cursor-pointer border-slate-200 bg-slate-50 hover:border-slate-300 has-[:checked]:border-[#FF6B00]/40 has-[:checked]:bg-[#FF6B00]/5"}`}>
+              <label className={`flex items-start gap-3 rounded-2xl border px-4 py-3 transition ${palletTooBig ? "cursor-not-allowed border-red-200 bg-red-50 opacity-60" : "cursor-pointer border-white/12 bg-white/[0.06] hover:border-white/25 has-[:checked]:border-[#FF6B00]/40 has-[:checked]:bg-[#FF6B00]/5"}`}>
                 <input
                   type="checkbox"
                   checked={palletEnabled}
@@ -3797,16 +3797,16 @@ function PostListingPage() {
                   className="mt-0.5 h-4 w-4 shrink-0 accent-[#FF6B00] disabled:cursor-not-allowed"
                 />
                 <div>
-                  <p className="text-sm font-black text-[#002E5D]">CaterBids Pallet Delivery</p>
+                  <p className="text-sm font-black text-white">CaterBids Pallet Delivery</p>
                   {palletTooBig
-                    ? <p className="mt-0.5 text-xs font-bold text-red-700">This item is too large for pallet delivery — choose Collection or Buyer-arranged instead.</p>
-                    : <p className="mt-0.5 text-xs font-semibold text-[#002E5D]/60">Interparcel pallet courier — requires pallet size and collection details below.</p>
+                    ? <p className="mt-0.5 text-xs font-bold text-red-400">This item is too large for pallet delivery — choose Collection or Buyer-arranged instead.</p>
+                    : <p className="mt-0.5 text-xs font-semibold text-white/60">Interparcel pallet courier — requires pallet size and collection details below.</p>
                   }
                 </div>
               </label>
             )}
 
-            <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 transition hover:border-slate-300 has-[:checked]:border-[#FF6B00]/40 has-[:checked]:bg-[#FF6B00]/5">
+            <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-white/12 bg-white/[0.06] px-4 py-3 transition hover:border-white/25 has-[:checked]:border-[#FF6B00]/40 has-[:checked]:bg-[#FF6B00]/5">
               <input
                 type="checkbox"
                 checked={buyerArrangesEnabled}
@@ -3814,8 +3814,8 @@ function PostListingPage() {
                 className="mt-0.5 h-4 w-4 shrink-0 accent-[#FF6B00]"
               />
               <div>
-                <p className="text-sm font-black text-[#002E5D]">Buyer Arranges Delivery</p>
-                <p className="mt-0.5 text-xs font-semibold text-[#002E5D]/60">Buyer books their own courier or transport.</p>
+                <p className="text-sm font-black text-white">Buyer Arranges Delivery</p>
+                <p className="mt-0.5 text-xs font-semibold text-white/60">Buyer books their own courier or transport.</p>
               </div>
             </label>
           </div>
@@ -3823,8 +3823,8 @@ function PostListingPage() {
           {palletEnabled && (
             <div className="mt-4 space-y-3">
               <div className="rounded-2xl border border-[#FF6B00]/25 bg-[#FF6B00]/10 p-4">
-                <h3 className="text-lg font-black text-[#002E5D]">Need help preparing your item for pallet collection?</h3>
-                <p className="mt-2 text-sm font-semibold leading-relaxed text-[#002E5D]/75">
+                <h3 className="text-lg font-black text-white">Need help preparing your item for pallet collection?</h3>
+                <p className="mt-2 text-sm font-semibold leading-relaxed text-white/75">
                   Pallet delivery only works if the item is clean, safely disconnected, securely strapped and shrink-wrapped on a pallet before the driver arrives.
                 </p>
                 <a
@@ -3856,7 +3856,7 @@ function PostListingPage() {
                 value={collectionPostcode}
                 onChange={(event) => setCollectionPostcode(event.target.value.toUpperCase())}
                 placeholder="e.g. M1 1AA"
-                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                className="w-full rounded-2xl border border-white/20 bg-white/[0.08] px-4 py-3 text-sm font-semibold text-white placeholder:text-white/35 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
               />
             </label>
             <label className="block">
@@ -3866,7 +3866,7 @@ function PostListingPage() {
                 value={collectionCity}
                 onChange={(event) => setCollectionCity(event.target.value)}
                 placeholder="e.g. Manchester"
-                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                className="w-full rounded-2xl border border-white/20 bg-white/[0.08] px-4 py-3 text-sm font-semibold text-white placeholder:text-white/35 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
               />
             </label>
             <label className="block">
@@ -3876,7 +3876,7 @@ function PostListingPage() {
                 value={preferredCollectionDate}
                 onChange={(event) => setPreferredCollectionDate(event.target.value)}
                 type="date"
-                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                className="w-full rounded-2xl border border-white/20 bg-white/[0.08] px-4 py-3 text-sm font-semibold text-white focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
               />
             </label>
           </div>
@@ -3888,7 +3888,7 @@ function PostListingPage() {
                   value={collectionFullAddress}
                   onChange={(event) => setCollectionFullAddress(event.target.value)}
                   placeholder="Start typing your address"
-                  className="min-h-24 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                  className="min-h-24 w-full rounded-2xl border border-white/20 bg-white/[0.08] px-4 py-3 text-sm font-semibold text-white placeholder:text-white/35 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
                 />
               </label>
 
@@ -3900,7 +3900,7 @@ function PostListingPage() {
                     value={sellerContactName}
                     onChange={(event) => setSellerContactName(event.target.value)}
                     placeholder="Your full name"
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                    className="w-full rounded-2xl border border-white/20 bg-white/[0.08] px-4 py-3 text-sm font-semibold text-white placeholder:text-white/35 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
                   />
                 </label>
                 <label className="block">
@@ -3910,18 +3910,18 @@ function PostListingPage() {
                     value={sellerPhone}
                     onChange={(event) => setSellerPhone(event.target.value)}
                     placeholder="07 1234 567890"
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                    className="w-full rounded-2xl border border-white/20 bg-white/[0.08] px-4 py-3 text-sm font-semibold text-white placeholder:text-white/35 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
                   />
                 </label>
               </div>
 
-              <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold text-[#002E5D]/70">
-                All standard pallets sit on the <strong className="text-[#002E5D]">SAME 1.2m &times; 1m base</strong> — you&apos;re choosing by how <strong className="text-[#002E5D]">TALL</strong> and <strong className="text-[#002E5D]">HEAVY</strong> your item is, not the floor size. Measure after wrapping, round up, and if between two sizes pick the bigger one to avoid surcharges.
+              <p className="rounded-2xl border border-white/12 bg-white/[0.06] px-4 py-3 text-xs font-semibold text-white/70">
+                All standard pallets sit on the <strong className="text-white">SAME 1.2m &times; 1m base</strong> — you&apos;re choosing by how <strong className="text-white">TALL</strong> and <strong className="text-white">HEAVY</strong> your item is, not the floor size. Measure after wrapping, round up, and if between two sizes pick the bigger one to avoid surcharges.
               </p>
 
               {/* Pallet size visual picker */}
               <div>
-                <p className="mb-3 text-sm font-black text-[#002E5D]">
+                <p className="mb-3 text-sm font-black text-white">
                   Pallet size <span className="text-[#FF6B00]">*</span>
                 </p>
                 {/* Big card — always the currently selected pallet */}
@@ -3947,7 +3947,7 @@ function PostListingPage() {
                             }
                           />
                         ) : (
-                          <div className="flex h-full items-center justify-center bg-slate-50">
+                          <div className="flex h-full items-center justify-center bg-white/[0.08]">
                             <PackageCheck className="h-10 w-10 text-slate-300" strokeWidth={1.2} />
                           </div>
                         )}
@@ -3968,7 +3968,7 @@ function PostListingPage() {
                           setPalletSizeManuallySet(true)
                           setPalletSizeNote("")
                         }}
-                        className="relative overflow-hidden rounded-2xl border-2 border-slate-200 bg-white shadow-sm transition hover:border-slate-300 hover:shadow-md"
+                        className="relative overflow-hidden rounded-2xl border-2 border-white/20 bg-white/[0.06] shadow-sm transition hover:border-white/30 hover:shadow-md"
                       >
                         <div className="relative aspect-[4/3] bg-white">
                           {card.image && !imgFailed ? (
@@ -3982,7 +3982,7 @@ function PostListingPage() {
                               }
                             />
                           ) : (
-                            <div className="flex h-full items-center justify-center bg-slate-50">
+                            <div className="flex h-full items-center justify-center bg-white/[0.08]">
                               <PackageCheck className="h-10 w-10 text-slate-300" strokeWidth={1.2} />
                             </div>
                           )}
@@ -3995,7 +3995,7 @@ function PostListingPage() {
                 {palletSizeNote && (
                   <p className="mt-2 text-xs font-semibold text-[#FF6B00]/90">{palletSizeNote}</p>
                 )}
-                <p className="mt-2 text-xs font-semibold text-[#002E5D]/40">
+                <p className="mt-2 text-xs font-semibold text-white/40">
                   Custom pallet sizes coming soon — for oversized items, choose Collection Only or Buyer Arranges Delivery above.
                 </p>
                 {!palletSizeNote && (
@@ -4020,19 +4020,19 @@ function PostListingPage() {
                   onChange={(event) => setPalletCount(event.target.value)}
                   type="number"
                   min="1"
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                  className="w-full rounded-2xl border border-white/20 bg-white/[0.08] px-4 py-3 text-sm font-semibold text-white placeholder:text-white/35 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
                 />
               </label>
 
               <input type="hidden" name="weight_kg" value={weightKg} />
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
-                <span className="font-black text-[#002E5D]">Total shipping weight: </span>
+              <div className="rounded-2xl border border-white/12 bg-white/[0.06] px-4 py-3 text-sm">
+                <span className="font-black text-white">Total shipping weight: </span>
                 {weightKg ? (
-                  <span className="font-semibold text-[#002E5D]">
+                  <span className="font-semibold text-white">
                     {weightKg} kg ({Math.round(Number(weightKg) - 20)} kg item + 20 kg pallet)
                   </span>
                 ) : (
-                  <span className="font-semibold text-slate-400">Not yet set — confirm item weight in Equipment Specifications below.</span>
+                  <span className="font-semibold text-white/40">Not yet set — confirm item weight in Equipment Specifications below.</span>
                 )}
               </div>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -4050,7 +4050,7 @@ function PostListingPage() {
                       type="number"
                       min="0"
                       placeholder="Seller to confirm"
-                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                      className="w-full rounded-2xl border border-white/20 bg-white/[0.08] px-4 py-3 text-sm font-semibold text-white placeholder:text-white/35 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
                     />
                   </label>
                 ))}
@@ -4064,7 +4064,7 @@ function PostListingPage() {
                   { name: "ground_floor_collection", checked: groundFloorCollection, setChecked: setGroundFloorCollection, label: "Ground-floor collection" },
                   { name: "pallet_ready", checked: palletReady, setChecked: setPalletReady, label: "Pallet ready" },
                 ].map((field) => (
-                  <label key={field.name} className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold">
+                  <label key={field.name} className="flex items-center gap-3 rounded-2xl border border-white/12 bg-white/[0.06] px-4 py-3 text-sm font-bold text-white">
                     <input
                       name={field.name}
                       type="checkbox"
@@ -4095,7 +4095,7 @@ function PostListingPage() {
                   value={accessRestrictions}
                   onChange={(event) => setAccessRestrictions(event.target.value)}
                   placeholder="Narrow access, loading bay, opening hours, parking, stairs or height limits."
-                  className="min-h-20 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                  className="min-h-20 w-full rounded-2xl border border-white/20 bg-white/[0.08] px-4 py-3 text-sm font-semibold text-white placeholder:text-white/35 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
                 />
               </label>
               <label className="block">
@@ -4105,7 +4105,7 @@ function PostListingPage() {
                   value={deliveryNotes}
                   onChange={(event) => setDeliveryNotes(event.target.value)}
                   placeholder="Optional"
-                  className="min-h-20 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                  className="min-h-20 w-full rounded-2xl border border-white/20 bg-white/[0.08] px-4 py-3 text-sm font-semibold text-white placeholder:text-white/35 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
                 />
               </label>
             </div>
@@ -4153,13 +4153,13 @@ function PostListingPage() {
         </details>
         )}
 
-        <section id="review-step" className="rounded-[1.6rem] border border-slate-200 bg-white p-4 text-[#002E5D] shadow-[0_24px_80px_rgba(0,0,0,0.22)] sm:p-6">
+        <section id="review-step" className="rounded-[1.6rem] border border-white/14 bg-[#061f3d]/86 p-4 text-white shadow-[0_24px_80px_rgba(0,0,0,0.28)] backdrop-blur sm:p-6">
           <h2 className="text-2xl font-black tracking-[-0.035em]">{category === "Catering Equipment" ? "5" : "4"}. Review & publish</h2>
 
           <div className="mt-4 grid gap-5 lg:grid-cols-[1.2fr_0.9fr]">
-            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+            <div className="overflow-hidden rounded-2xl border border-white/12 bg-white/[0.06]">
               <div className="grid gap-4 p-3 sm:grid-cols-[150px_1fr]">
-                <div className="overflow-hidden rounded-xl bg-slate-200">
+                <div className="overflow-hidden rounded-xl bg-white/[0.12]">
                   {imagePreview ? (
                     <NextImage
                       src={imagePreview}
@@ -4170,21 +4170,21 @@ function PostListingPage() {
                       className="h-36 w-full object-cover"
                     />
                   ) : (
-                    <div className="flex h-36 items-center justify-center text-sm font-black text-slate-400">
+                    <div className="flex h-36 items-center justify-center text-sm font-black text-white/40">
                       No photo yet
                     </div>
                   )}
                 </div>
                 <div className="space-y-2 text-sm font-bold">
                   <h3 className="text-lg font-black leading-tight">{title || "Listing title not added"}</h3>
-                  <p className="text-slate-500">{subcategory || category} • {condition}</p>
-                  <p className="text-slate-500">{reviewLocation}</p>
+                  <p className="text-white/55">{subcategory || category} • {condition}</p>
+                  <p className="text-white/55">{reviewLocation}</p>
                   {category === "Catering Equipment" && <p className="text-slate-500">{shippingSpecPowerType !== "Not sure" ? shippingSpecPowerType : "Power not confirmed"}</p>}
                   <div className="flex flex-wrap items-center gap-2 pt-2">
                     <span className="text-2xl font-black text-[#FF6B00]">{price ? formatPrice(price) : "Price not added"}</span>
-                    <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-black text-[#002E5D]">{condition}</span>
+                    <span className="rounded-full border border-white/20 bg-white/[0.08] px-3 py-1 text-xs font-black text-white">{condition}</span>
                   </div>
-                  <p className="text-xs font-semibold text-slate-500">{reviewDeliveryOption}</p>
+                  <p className="text-xs font-semibold text-white/55">{reviewDeliveryOption}</p>
                 </div>
               </div>
             </div>
@@ -4241,7 +4241,7 @@ function PostListingPage() {
               </label>
             )}
 
-            <label className="flex items-start gap-3 rounded-2xl border border-[#002E5D]/15 bg-slate-50 px-4 py-3 text-sm font-bold">
+            <label className="flex items-start gap-3 rounded-2xl border border-white/15 bg-white/[0.06] px-4 py-3 text-sm font-bold text-white">
               <input
                 name="listing_info_confirmed"
                 type="checkbox"
@@ -4251,7 +4251,7 @@ function PostListingPage() {
               />
               I confirm this listing information is accurate.
             </label>
-            <label className="flex items-start gap-3 rounded-2xl border border-[#002E5D]/15 bg-slate-50 px-4 py-3 text-sm font-bold">
+            <label className="flex items-start gap-3 rounded-2xl border border-white/15 bg-white/[0.06] px-4 py-3 text-sm font-bold text-white">
               <input
                 name="seller_owns_item_confirmed"
                 type="checkbox"
@@ -4262,7 +4262,7 @@ function PostListingPage() {
               />
               I own the item and have the right to sell it.
             </label>
-            <label className="flex items-start gap-3 rounded-2xl border border-[#002E5D]/15 bg-slate-50 px-4 py-3 text-sm font-bold">
+            <label className="flex items-start gap-3 rounded-2xl border border-white/15 bg-white/[0.06] px-4 py-3 text-sm font-bold text-white">
               <input
                 name="terms_confirmed"
                 type="checkbox"

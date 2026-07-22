@@ -93,12 +93,12 @@ function newEquipmentRow(): EquipmentRow {
 
 // Shared field style tokens matching the existing wizard
 const INPUT =
-  "w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+  "w-full rounded-2xl border border-white/20 bg-white/[0.08] px-4 py-3 text-sm font-semibold text-white placeholder:text-white/35 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
 const SELECT = INPUT
-const LABEL = "mb-1 block text-sm font-black text-[#002E5D]"
+const LABEL = "mb-1 block text-sm font-black text-white"
 const REQ = <span className="text-[#FF6B00]">*</span>
 const SECTION =
-  "rounded-[1.6rem] border border-slate-200 bg-white p-4 text-[#002E5D] shadow-[0_24px_80px_rgba(0,0,0,0.18)] sm:p-6"
+  "rounded-[1.6rem] border border-white/14 bg-[#061f3d]/86 p-4 text-white shadow-[0_24px_80px_rgba(0,0,0,0.28)] backdrop-blur sm:p-6"
 
 function SectionHeading({ title }: { title: string }) {
   return <h2 className="mb-4 text-2xl font-black tracking-[-0.035em]">{title}</h2>
@@ -134,7 +134,7 @@ function RadioGroup({
           className={`cursor-pointer rounded-2xl border px-4 py-2 text-sm font-black transition ${
             value === opt
               ? "border-[#FF6B00] bg-[#FF6B00]/10 text-[#B34700]"
-              : "border-slate-200 bg-white text-[#002E5D] hover:border-[#FF6B00]/40"
+              : "border-white/20 bg-white/[0.06] text-white/80 hover:border-[#FF6B00]/40"
           }`}
         >
           <input
@@ -172,7 +172,7 @@ function CheckboxGroup({
           className={`cursor-pointer rounded-2xl border px-4 py-2 text-sm font-black transition ${
             selected.includes(opt)
               ? "border-[#FF6B00] bg-[#FF6B00]/10 text-[#B34700]"
-              : "border-slate-200 bg-white text-[#002E5D] hover:border-[#FF6B00]/40"
+              : "border-white/20 bg-white/[0.06] text-white/80 hover:border-[#FF6B00]/40"
           }`}
         >
           <input
@@ -455,8 +455,8 @@ export default function TrailerDetailsForm({ initialData = {}, listingType = "" 
 
           {/* Van-only fields */}
           {isVanType && (
-            <div className="space-y-4 rounded-2xl border border-slate-100 bg-slate-50 p-4">
-              <p className="text-xs font-black uppercase tracking-widest text-slate-400">Vehicle details</p>
+            <div className="space-y-4 rounded-2xl border border-white/10 bg-white/[0.055] p-4">
+              <p className="text-xs font-black uppercase tracking-widest text-white/40">Vehicle details</p>
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Make and model">
                   <input type="text" className={INPUT} placeholder="e.g. Ford Transit Custom" value={makeModel} onChange={(e) => setMakeModel(e.target.value)} />
@@ -484,8 +484,8 @@ export default function TrailerDetailsForm({ initialData = {}, listingType = "" 
 
           {/* Trailer-only fields */}
           {isTrailerType && (
-            <div className="space-y-4 rounded-2xl border border-slate-100 bg-slate-50 p-4">
-              <p className="text-xs font-black uppercase tracking-widest text-slate-400">Trailer details</p>
+            <div className="space-y-4 rounded-2xl border border-white/10 bg-white/[0.055] p-4">
+              <p className="text-xs font-black uppercase tracking-widest text-white/40">Trailer details</p>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <p className={LABEL}>Axles</p>
@@ -619,7 +619,7 @@ export default function TrailerDetailsForm({ initialData = {}, listingType = "" 
           </div>
 
           {gasUsed === "Yes" && (
-            <div className="space-y-4 rounded-2xl border border-slate-100 bg-slate-50 p-4">
+            <div className="space-y-4 rounded-2xl border border-white/10 bg-white/[0.055] p-4">
               <div className="grid gap-4 sm:grid-cols-3">
                 <div>
                   <p className={LABEL}>Bottle type</p>
@@ -743,9 +743,9 @@ export default function TrailerDetailsForm({ initialData = {}, listingType = "" 
 
         <div className="space-y-3">
           {equipmentRows.map((row, index) => (
-            <div key={row.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div key={row.id} className="rounded-2xl border border-white/12 bg-white/[0.06] p-4">
               <div className="mb-2 flex items-center justify-between">
-                <span className="text-xs font-black uppercase tracking-widest text-slate-400">Item {index + 1}</span>
+                <span className="text-xs font-black uppercase tracking-widest text-white/40">Item {index + 1}</span>
                 <button
                   type="button"
                   onClick={() => removeEquipmentRow(row.id)}
@@ -808,7 +808,7 @@ export default function TrailerDetailsForm({ initialData = {}, listingType = "" 
           <button
             type="button"
             onClick={() => setEquipmentRows((rows) => [...rows, newEquipmentRow()])}
-            className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-3 text-sm font-black text-[#002E5D] hover:border-[#FF6B00]/40 hover:bg-[#FF6B00]/5"
+            className="rounded-2xl border border-dashed border-white/25 bg-white/[0.06] px-4 py-3 text-sm font-black text-white hover:border-[#FF6B00]/40 hover:bg-[#FF6B00]/5"
           >
             + Add equipment item
           </button>
