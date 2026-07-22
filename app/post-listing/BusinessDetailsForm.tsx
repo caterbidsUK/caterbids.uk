@@ -70,12 +70,12 @@ const YES_NO = ["Yes", "No"]
 const YES_SOME_NO = ["Yes", "Some", "No"]
 
 const INPUT =
-  "w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-[#002E5D] placeholder:text-slate-400 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+  "w-full rounded-2xl border border-white/20 bg-white/[0.08] px-4 py-3 text-sm font-semibold text-white placeholder:text-white/35 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
 const SELECT = INPUT
-const LABEL = "mb-1 block text-sm font-black text-[#002E5D]"
+const LABEL = "mb-1 block text-sm font-black text-white"
 const REQ = <span className="text-[#FF6B00]">*</span>
 const SECTION =
-  "rounded-[1.6rem] border border-slate-200 bg-white p-4 text-[#002E5D] shadow-[0_24px_80px_rgba(0,0,0,0.18)] sm:p-6"
+  "rounded-[1.6rem] border border-white/14 bg-[#061f3d]/86 p-4 text-white shadow-[0_24px_80px_rgba(0,0,0,0.28)] backdrop-blur sm:p-6"
 
 function SectionHeading({ title }: { title: string }) {
   return <h2 className="mb-4 text-2xl font-black tracking-[-0.035em]">{title}</h2>
@@ -119,7 +119,7 @@ function RadioGroup({
           className={`cursor-pointer rounded-2xl border px-4 py-2 text-sm font-black transition ${
             value === opt
               ? "border-[#FF6B00] bg-[#FF6B00]/10 text-[#B34700]"
-              : "border-slate-200 bg-white text-[#002E5D] hover:border-[#FF6B00]/40"
+              : "border-white/20 bg-white/[0.06] text-white/80 hover:border-[#FF6B00]/40"
           }`}
         >
           <input
@@ -157,7 +157,7 @@ function CheckboxGroup({
           className={`cursor-pointer rounded-2xl border px-4 py-2 text-sm font-black transition ${
             selected.includes(opt)
               ? "border-[#FF6B00] bg-[#FF6B00]/10 text-[#B34700]"
-              : "border-slate-200 bg-white text-[#002E5D] hover:border-[#FF6B00]/40"
+              : "border-white/20 bg-white/[0.06] text-white/80 hover:border-[#FF6B00]/40"
           }`}
         >
           <input
@@ -270,7 +270,7 @@ export default function BusinessDetailsForm({
           />
           <div>
             <p className="text-sm font-black">Keep this listing confidential</p>
-            <p className="mt-1 text-xs font-semibold leading-relaxed text-slate-500">
+            <p className="mt-1 text-xs font-semibold leading-relaxed text-white/55">
               Your trading name, full address and postcode will be hidden from public listings.
               Buyers will only see the business type and general town. Enquirers receive details
               after contacting you.
@@ -345,7 +345,7 @@ export default function BusinessDetailsForm({
       {/* Section 2: Financials */}
       <section className={SECTION}>
         <SectionHeading title="Financials" />
-        <p className="mb-4 text-xs font-semibold text-slate-500">
+        <p className="mb-4 text-xs font-semibold text-white/55">
           Leave blank if you prefer not to disclose — financial details help buyers make a decision.
         </p>
         <div className="space-y-4">
