@@ -232,6 +232,21 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
       <article>
         <ArticleHero post={post} excerpt={excerpt} postUrl={postUrl} />
 
+        {post.featured_image_url && (
+          <div className="px-4 pt-8 sm:px-6 lg:px-8">
+            <div className="mx-auto max-w-7xl overflow-hidden rounded-[2rem]">
+              <Image
+                src={post.featured_image_url}
+                alt={post.image_alt || post.title}
+                width={1200}
+                height={675}
+                className="w-full object-cover"
+                priority
+              />
+            </div>
+          </div>
+        )}
+
         <section className="px-4 py-10 sm:px-6 lg:px-8">
           <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[minmax(0,1fr)_23rem]">
             <div className="min-w-0">
