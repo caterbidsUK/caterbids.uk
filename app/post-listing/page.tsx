@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import NextImage from "next/image"
 import SiteLogo from "@/components/SiteLogo"
-import { useEffect, useState, useTransition, type Dispatch, type SetStateAction } from "react"
+import { useEffect, useRef, useState, useTransition, type Dispatch, type SetStateAction } from "react"
 import { Bell, CheckCircle2, ClipboardCheck, ImagePlus, Loader2, PackageCheck, ScanSearch, Star, UploadCloud, X } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { getCurrentUser } from "@/lib/supabase/auth"
@@ -22,6 +22,7 @@ import {
   WARRANTY_TYPE_OPTIONS,
 } from "@/lib/listing-trust"
 import { categoryByTitle, subcategoriesForCategory } from "@/lib/categories"
+import { isPalletFootprintOversized } from "@/lib/delivery/palletClass"
 import TrailerDetailsForm from "./TrailerDetailsForm"
 import BusinessDetailsForm from "./BusinessDetailsForm"
 
@@ -205,6 +206,7 @@ type CaterBotSpecLookupResponse = {
     pallet_required?: boolean
     suggested_pallet_size?: string
     delivery_notes?: string
+    dimension_source?: "scraped" | "hint" | "raw_text" | "none"
   }
   source?: CaterBotSourceValidationResponse["source"]
   matchType?: "exact" | "approximate" | "no_match"
@@ -564,7 +566,9 @@ const PALLET_CARDS = [
 
 function computePalletFromItem(
   itemHeightCm: number,
-  itemWeightKg: number
+  itemWeightKg: number,
+  itemWidthCm?: number,
+  itemDepthCm?: number
 ): {
   palletLengthCm: number
   palletWidthCm: number
@@ -578,11 +582,17 @@ function computePalletFromItem(
   const palletWeightKg = itemWeightKg + 20
   let tier: { slug: string; label: string } | { tooBig: true } | null = null
   if (itemHeightCm > 0 && itemWeightKg > 0) {
-    if (palletHeightCm > 220 || palletWeightKg > 1000) {
+    if (
+      itemWidthCm != null &&
+      itemDepthCm != null &&
+      isPalletFootprintOversized(itemWidthCm, itemDepthCm)
+    ) {
+      tier = { tooBig: true }
+    } else if (itemHeightCm > 220 || palletWeightKg > 1000) {
       tier = { tooBig: true }
     } else {
       for (const t of PALLET_TIERS) {
-        if (palletHeightCm <= t.maxHeightCm && palletWeightKg <= t.maxWeightKg) {
+        if (itemHeightCm <= t.maxHeightCm && palletWeightKg <= t.maxWeightKg) {
           tier = { slug: t.slug, label: t.label }
           break
         }
@@ -597,6 +607,9 @@ function deliveryRecommendationFromSpecs({
   lengthCm,
   widthCm,
   heightCm,
+  itemWidthCm,
+  itemDepthCm,
+  itemHeightCm,
   category,
   subcategory,
   powerType,
@@ -606,6 +619,9 @@ function deliveryRecommendationFromSpecs({
   lengthCm: string
   widthCm: string
   heightCm: string
+  itemWidthCm?: string
+  itemDepthCm?: string
+  itemHeightCm?: string
   category: string
   subcategory: string
   powerType: string
@@ -614,9 +630,25 @@ function deliveryRecommendationFromSpecs({
   const weight = positiveNumber(weightKg)
   const dimensions = [positiveNumber(lengthCm), positiveNumber(widthCm), positiveNumber(heightCm)]
   const maxDimension = Math.max(...dimensions, 0)
+  // Item height for tier selection: height limits include the 150mm wooden base, so compare item
+  // height directly without adding the base again. Fall back to deriving from pallet height.
+  const rawItemH = positiveNumber(itemHeightCm || "")
+  const itemH = rawItemH > 0 ? rawItemH : Math.max(0, positiveNumber(heightCm) - 15)
   const hasCompleteSpecs = weight > 0 && dimensions.every((value) => value > 0)
   const equipmentText = `${category} ${subcategory} ${powerType}`.toLowerCase()
   const needsCare = /(gas|lpg|propane|refriger|fridge|freezer)/.test(equipmentText)
+
+  // Footprint gate — must check BEFORE weight/height tiers.
+  const iW = positiveNumber(itemWidthCm || "")
+  const iD = positiveNumber(itemDepthCm || "")
+  if (iW > 0 && iD > 0 && isPalletFootprintOversized(iW, iD)) {
+    return {
+      label: hasVerifiedSource ? "CaterBot estimate" : "Seller confirmation needed",
+      recommendation: "Too large for a standard pallet (base is 1.2m x 1m). Choose Collection Only or Buyer Arranges Delivery.",
+      palletRecommended: false,
+      specialistRecommended: false,
+    }
+  }
 
   if (!hasCompleteSpecs) {
     return {
@@ -647,7 +679,7 @@ function deliveryRecommendationFromSpecs({
     }
   }
 
-  if (weight > 1000 || maxDimension >= 220) {
+  if (weight > 1000 || itemH > 220) {
     return {
       label: hasVerifiedSource ? "CaterBot estimate" : "Seller confirmation needed",
       recommendation: "Collection only unless a pallet-ready Interparcel service can safely handle the item.",
@@ -656,26 +688,20 @@ function deliveryRecommendationFromSpecs({
     }
   }
 
-  if (weight <= 150) {
-    return {
-      label: hasVerifiedSource ? "CaterBot estimate" : "Seller confirmation needed",
-      recommendation: "Mini Quarter pallet delivery may be suitable if pallet-ready.",
-      palletRecommended: true,
-      specialistRecommended: false,
-    }
-  }
-
-  if (weight <= 300) {
-    return {
-      label: hasVerifiedSource ? "CaterBot estimate" : "Seller confirmation needed",
-      recommendation: "Quarter pallet recommended.",
-      palletRecommended: true,
-      specialistRecommended: false,
+  const label = hasVerifiedSource ? "CaterBot estimate" : "Seller confirmation needed"
+  for (const t of PALLET_TIERS) {
+    if ((itemH === 0 || itemH <= t.maxHeightCm) && weight <= t.maxWeightKg) {
+      return {
+        label,
+        recommendation: `${t.label} delivery recommended.`,
+        palletRecommended: true,
+        specialistRecommended: false,
+      }
     }
   }
 
   return {
-    label: hasVerifiedSource ? "CaterBot estimate" : "Seller confirmation needed",
+    label,
     recommendation: "CaterBids Pallet Delivery may be suitable if pallet-ready.",
     palletRecommended: true,
     specialistRecommended: false,
@@ -853,9 +879,19 @@ function PostListingPage() {
   const [authChecked, setAuthChecked] = useState(false)
   const [isPublishing, startPublishing] = useTransition()
   const imagePreview = imagePreviews[0] || ""
+  // Ref guards the subcategory reset effect from clobbering a level-3 value written by CaterBot.
+  // Set synchronously in applySpecLookupResult; cleared by the effect or by a setTimeout fallback.
+  const skipEquipmentTypeResetRef = useRef(false)
+  // Stores the Safety/install note that Phase 1 auto-wrote so CaterBot can overwrite it on Merge.
+  // Seller edits leave current !== phase1NotesRef.current, which protects their text.
+  const phase1NotesRef = useRef("")
   const caterBotSearching = aiLoading || manualLinkChecking
 
   useEffect(() => {
+    if (skipEquipmentTypeResetRef.current) {
+      skipEquipmentTypeResetRef.current = false
+      return  // CaterBot changed subcategory — don't clobber the level-3 value it just wrote
+    }
     setEquipmentType("")
   }, [subcategory])
 
@@ -1322,14 +1358,10 @@ function PostListingPage() {
   }
 
   function applySuggestionToShippingSpecs(suggestion: QuickListAiResponse) {
-    const parsedDimensions = parseDimensionsToCm(suggestion.dimensions)
-    const suggestedWeightKg = extractSuggestionWeightKg(suggestion)
-
     setShippingSpecBrand(suggestion.brand || "")
     setShippingSpecModel(suggestion.model || suggestion.gc_number || "")
     setShippingSpecSerial(suggestion.serial_number || "")
     setShippingSpecGcNumber(suggestion.gc_number || "")
-    setShippingSpecCategory(shippingCategoryFrom(suggestion.subcategory || suggestion.category || suggestion.suggested_title))
     setShippingSpecPowerType(shippingPowerTypeFrom(suggestion.power_type || suggestion.gas_or_electric || suggestion.gas_type))
     setShippingSpecVoltage(suggestion.voltage || "")
     setShippingSpecCurrent(extractConfirmedNumber(suggestion.amps) || "")
@@ -1339,13 +1371,8 @@ function PostListingPage() {
       ""
     )
     setShippingSpecGasType(suggestion.gas_type || "")
-    if (parsedDimensions) {
-      setShippingSpecWidth(parsedDimensions[0])
-      setShippingSpecDepth(parsedDimensions[1])
-      setShippingSpecHeight(parsedDimensions[2])
-    }
-    setShippingSpecWeight(suggestedWeightKg || "")
     setShippingSpecForkliftRequired(aiBoolean(suggestion.tail_lift_required, false))
+    phase1NotesRef.current = suggestion.delivery_notes || ""
     setShippingSpecNotes(suggestion.delivery_notes || "")
   }
 
@@ -1505,9 +1532,22 @@ function PostListingPage() {
     const itemDims = parseDeliveryDimensionsToCm(suggestion.dimensions)
     const itemHeightCm = itemDims?.heightCm ? Number(itemDims.heightCm) : 0
     const itemWeightKg = Number(extractSuggestionWeightKg(suggestion) || 0)
+    // KNOWN ISSUE: widthCm/lengthCm (depth) assignment from AI dimension string relies on positional
+    // parsing when unlabeled. Borderline items near 120cm may misclassify. See docs/KNOWN_ISSUES.md.
+    const dimWidthCm = itemDims?.widthCm ? Number(itemDims.widthCm) : undefined
+    const dimDepthCm = itemDims?.lengthCm ? Number(itemDims.lengthCm) : undefined
+    if (dimWidthCm && dimDepthCm) {
+      const dimsLabeled = /\b[wdh]\b|width|depth|height/i.test((suggestion.dimensions || "").toLowerCase())
+      if (!dimsLabeled && isPalletFootprintOversized(dimWidthCm, dimDepthCm)) {
+        console.warn(
+          `CaterBot pallet footprint check fired on positionally-parsed AI dims — confirm width/depth | ` +
+          `dimWidthCm=${dimWidthCm} dimDepthCm=${dimDepthCm} raw="${suggestion.dimensions}"`
+        )
+      }
+    }
 
     if (itemHeightCm > 0 && itemWeightKg > 0) {
-      const pallet = computePalletFromItem(itemHeightCm, itemWeightKg)
+      const pallet = computePalletFromItem(itemHeightCm, itemWeightKg, dimWidthCm, dimDepthCm)
       if (pallet.tier && !('tooBig' in pallet.tier)) {
         return {
           lengthCm: String(pallet.palletLengthCm),
@@ -1710,31 +1750,17 @@ function PostListingPage() {
   }
 
   function applySuggestionToVisibleForm(suggestion: QuickListAiResponse) {
-    // Category is locked by the URL param — CaterBot must not change it.
-    // Use the current locked category to validate subcategory suggestions.
-    const subcategories = subcategoriesForCategory(category)
-    const nextSubcategory =
-      suggestion.subcategory && subcategories.includes(suggestion.subcategory)
-        ? suggestion.subcategory
-        : subcategories[0] || ""
     const nextDeliveryOption = deliveryOptionFromShippingClass(suggestion.shipping_class)
-    const deliveryDimensions = suggestionDeliveryDimensions(suggestion)
-    const aiWeight = extractSuggestionWeightKg(suggestion)
-    const aiPalletLength = deliveryDimensions.lengthCm
-    const aiPalletWidth = deliveryDimensions.widthCm
-    const aiPalletHeight = deliveryDimensions.heightCm
     const aiPalletCount = extractConfirmedNumber(suggestion.pallet_count)
     const preferredSourceUrl = preferredManualSourceUrl(suggestion)
     const seoTitle = buildSeoListingTitle(suggestion, normaliseCondition(suggestion.condition))
     const aiShortDescription = buildCaterBotShortDescription(suggestion, normaliseCondition(suggestion.condition))
 
     setTitle(seoTitle || suggestion.suggested_title || suggestion.title || "")
-    setSubcategory(nextSubcategory)
     setCondition(normaliseCondition(suggestion.condition))
     setDescription((current) => (current.trim() ? current : aiShortDescription))
     applySuggestionToShippingSpecs(suggestion)
     setPowerType(normalisePowerType(suggestion.power_type || suggestion.gas_or_electric || ""))
-    setDimensions(suggestion.dimensions)
     if (/pallet/i.test(nextDeliveryOption)) setPalletEnabled(true)
     const validatedSource = Boolean(suggestion.manual_source_validated)
     console.log("[DIAG applySuggestion]", { validatedSource, preferredSourceUrl, manual_source_validated: suggestion.manual_source_validated })
@@ -1763,20 +1789,6 @@ function PostListingPage() {
     if (suggestion.delivery_notes) {
       const cleaned = suggestion.delivery_notes.replace(/\s*CaterBot delivery suggestion:[^.]*\.\s*/gi, " ").trim()
       if (cleaned) setDeliveryNotes(cleaned)
-    }
-
-    if (aiWeight) {
-      setWeightKg(String(Math.ceil(Number(aiWeight) + 20)))
-      setDeliverySizeUnknown(false)
-    }
-
-    const palletDimsPlausible =
-      Number(aiPalletLength) >= 10 && Number(aiPalletWidth) >= 10 && Number(aiPalletHeight) >= 10
-    if (aiPalletLength && aiPalletWidth && aiPalletHeight && palletDimsPlausible) {
-      setLengthCm(aiPalletLength)
-      setWidthCm(aiPalletWidth)
-      setHeightCm(aiPalletHeight)
-      setDeliverySizeUnknown(false)
     }
 
     if (/pallet/i.test(suggestion.shipping_class)) {
@@ -1857,8 +1869,22 @@ function PostListingPage() {
 
     if (deliveryDimensions) {
       const itemHeightCm = positiveNumber(deliveryDimensions[2])
+      const dimWidthCm = positiveNumber(deliveryDimensions[0])
+      const dimDepthCm = positiveNumber(deliveryDimensions[1])
+      // KNOWN ISSUE: dimension assignment (width vs depth) relies on positional parsing when the
+      // source string has no axis labels. Borderline items near 120cm may misclassify.
+      // See docs/KNOWN_ISSUES.md — pallet-footprint-positional-parse.
+      const dimStringLabeled = /\b[wdh]\b|width|depth|height/i.test(
+        (source.extractedSpecs?.packedDimensions || source.extractedSpecs?.dimensions || "").toLowerCase()
+      )
+      if (!dimStringLabeled && isPalletFootprintOversized(dimWidthCm, dimDepthCm)) {
+        console.warn(
+          `CaterBot pallet footprint check fired on positionally-parsed dims — confirm width/depth assignment | ` +
+          `dimWidthCm=${dimWidthCm} dimDepthCm=${dimDepthCm} source="${source.extractedSpecs?.dimensions}"`
+        )
+      }
       if (itemHeightCm > 0) {
-        const pallet = computePalletFromItem(itemHeightCm, itemWeightKg)
+        const pallet = computePalletFromItem(itemHeightCm, itemWeightKg, dimWidthCm || undefined, dimDepthCm || undefined)
         setLengthCm(String(pallet.palletLengthCm))
         setWidthCm(String(pallet.palletWidthCm))
         setHeightCm(String(pallet.palletHeightCm))
@@ -1962,7 +1988,8 @@ function PostListingPage() {
     if (weight) setWeightKg((current) => (replace || !current.trim() ? palletWeight : current))
 
     if (itemHeightCm > 0) {
-      const pallet = computePalletFromItem(itemHeightCm, itemWeightKg)
+      // `length` = specs.depth_cm (confusing local name); `width` = specs.width_cm — both reliable labels
+      const pallet = computePalletFromItem(itemHeightCm, itemWeightKg, positiveNumber(width) || undefined, positiveNumber(length) || undefined)
       setLengthCm((current) => (replace || !current.trim() ? String(pallet.palletLengthCm) : current))
       setWidthCm((current) => (replace || !current.trim() ? String(pallet.palletWidthCm) : current))
       setHeightCm((current) => (replace || !current.trim() ? String(pallet.palletHeightCm) : current))
@@ -1992,9 +2019,14 @@ function PostListingPage() {
 
     setTextFromCaterBot(setTitle, specs?.title, replace)
     // Category is locked by the URL param — CaterBot must not change it.
+    // Set the skip-ref BEFORE setSubcategory so the useEffect sees it when subcategory changes.
+    // The setTimeout(0) is a safety fallback: if subcategory didn't actually change (already correct),
+    // the effect never fires to clear the ref, so the timer clears it before any user interaction.
+    skipEquipmentTypeResetRef.current = true
+    setTimeout(() => { skipEquipmentTypeResetRef.current = false }, 0)
     setSelectFromCaterBot(setSubcategory, specs?.type || visual?.visual_category, replace, ["Cooking Equipment"])
     if (specs?.equipment_type) {
-      setEquipmentType((current) => (current ? current : (specs.equipment_type ?? "")))
+      setEquipmentType((current) => (replace || !current ? (specs.equipment_type ?? "") : current))
     }
     setSelectFromCaterBot(setCondition, specs?.condition, replace, ["Used"])
     setTextFromCaterBot(
@@ -2043,7 +2075,7 @@ function PostListingPage() {
         specs?.safety_note || "",
         extracted?.power ? `Plate details: ${extracted.power}.` : "",
       ].filter(Boolean).join(" ")
-      setShippingSpecNotes((current) => (replace || !current ? notes : current))
+      setShippingSpecNotes((current) => (replace || !current || current === phase1NotesRef.current ? notes : current))
     }
 
     if (specs?.width_cm && specs.depth_cm && specs.height_cm) {
@@ -2062,7 +2094,13 @@ function PostListingPage() {
 
     const itemHeightCm = positiveNumber(appliedMeasurements.height)
     const itemWeightKg = positiveNumber(appliedMeasurements.weight)
-    const pallet = computePalletFromItem(itemHeightCm, itemWeightKg)
+    // appliedMeasurements.width = specs.width_cm; .length = specs.depth_cm (confusing local name, reliable source)
+    const pallet = computePalletFromItem(
+      itemHeightCm,
+      itemWeightKg,
+      positiveNumber(appliedMeasurements.width) || undefined,
+      positiveNumber(appliedMeasurements.length) || undefined
+    )
     if (pallet.tier && 'tooBig' in pallet.tier) {
       setPalletTooBig(true)
       setPalletEnabled(false)
@@ -2682,6 +2720,9 @@ function PostListingPage() {
     lengthCm,
     widthCm,
     heightCm,
+    itemWidthCm: shippingSpecWidth,
+    itemDepthCm: shippingSpecDepth,
+    itemHeightCm: shippingSpecHeight,
     category,
     subcategory,
     powerType,
@@ -2992,7 +3033,7 @@ function PostListingPage() {
                     ? "Exact match found — confirm before applying."
                     : pendingSpecLookup.matchType === "approximate"
                     ? "Possible match found — review before applying."
-                    : "No exact match found — enter details manually."}
+                    : "No trusted details found"}
                 </h3>
                 {pendingSpecLookup.matchType === "approximate" && (
                   <p className="mt-1 text-xs font-bold text-amber-700">
@@ -3787,8 +3828,24 @@ function PostListingPage() {
               </div>
             </label>
 
+            {category === "Catering Equipment" && palletTooBig && (
+              <div className="flex items-start gap-3 rounded-xl border border-[#FF6B00] bg-[#12294A] p-4">
+                <div className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[8px] bg-[#FF6B00]">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M12 2L2 21h20L12 2z" fill="none" stroke="#12294A" strokeWidth="2.2" strokeLinejoin="round"/>
+                    <path d="M12 10v5M12 17.5v.5" stroke="#12294A" strokeWidth="2.2" strokeLinecap="round"/>
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-[15px] font-medium text-white">Too large for pallet delivery</p>
+                  <p className="mt-0.5 text-[14px] text-[#F09595]">This item is wider than a standard pallet base (1.2m x 1m), so it can&apos;t be sent on a pallet.</p>
+                  <p className="mt-1 text-[13px] text-white/50">Choose <span className="text-[#FF6B00]">Collection</span> or <span className="text-[#FF6B00]">Buyer arranges delivery</span> below.</p>
+                </div>
+              </div>
+            )}
+
             {category === "Catering Equipment" && (
-              <label className={`flex items-start gap-3 rounded-2xl border px-4 py-3 transition ${palletTooBig ? "cursor-not-allowed border-red-200 bg-red-50 opacity-60" : "cursor-pointer border-white/12 bg-white/[0.06] hover:border-white/25 has-[:checked]:border-[#FF6B00]/40 has-[:checked]:bg-[#FF6B00]/5"}`}>
+              <label className={`flex items-start gap-3 rounded-2xl border px-4 py-3 transition ${palletTooBig ? "cursor-not-allowed border-white/8 bg-white/[0.03] opacity-45" : "cursor-pointer border-white/12 bg-white/[0.06] hover:border-white/25 has-[:checked]:border-[#FF6B00]/40 has-[:checked]:bg-[#FF6B00]/5"}`}>
                 <input
                   type="checkbox"
                   checked={palletEnabled}
@@ -3799,7 +3856,7 @@ function PostListingPage() {
                 <div>
                   <p className="text-sm font-black text-white">CaterBids Pallet Delivery</p>
                   {palletTooBig
-                    ? <p className="mt-0.5 text-xs font-bold text-red-400">This item is too large for pallet delivery — choose Collection or Buyer-arranged instead.</p>
+                    ? <p className="mt-0.5 text-xs text-white/40">Unavailable for this item</p>
                     : <p className="mt-0.5 text-xs font-semibold text-white/60">Interparcel pallet courier — requires pallet size and collection details below.</p>
                   }
                 </div>

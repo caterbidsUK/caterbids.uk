@@ -13,6 +13,12 @@ export type CaterBotSourceValidationInput = {
   fuelType?: string | null
   candidateTitle?: string | null
   candidateSnippet?: string | null
+  expectedSpecs?: {
+    expected_height_mm: number | null
+    expected_width_mm: number | null
+    expected_depth_mm: number | null
+    expected_weight_kg: number | null
+  } | null
 }
 
 export type CaterBotSourceValidationResult = {
@@ -617,8 +623,11 @@ export function extractedSpecsFrom(
     dimensionsFromLabeledFields(productWidth, productDepth, productHeight, "mm") ||
     dimensionsFromWDHLabels(text) ||
     firstMatch(text, [
-      /\b(?:dimensions?|size|w\s?x\s?d\s?x\s?h)[^\d]{0,24}(\d{2,4}\s?(?:mm|cm)?\s?[x×]\s?\d{2,4}\s?(?:mm|cm)?\s?[x×]\s?\d{2,4}\s?(?:mm|cm)?)/i,
-      /\b(?:dimensions?|size)[^\d]{0,40}(\d{2,4}\s*\(\s*[hwd]\s*\)\s?[x×]\s?\d{2,4}\s*\(\s*[hwd]\s*\)\s?[x×]\s?\d{2,4}\s*\(\s*[hwd]\s*\)\s?(?:mm|cm)?)/i,
+      // "Dimensions (mm): H405 x W384 x D484" — axis-letter glued to number, any H/W/D order.
+      // Lookbehind excludes "Chamber Dimensions", "Internal Dimensions", "Usable Dimensions", etc.
+      /(?<!chamber\s|internal\s|interior\s|inside\s|usable\s|cavity\s)\b(?:dimensions?|size)[^\d]{0,40}([HhWwDd]\s*\d{2,4}(?:[,.]\d+)?\s*(?:mm|cm)?\s*[x×]\s*[HhWwDd]\s*\d{2,4}(?:[,.]\d+)?\s*(?:mm|cm)?\s*[x×]\s*[HhWwDd]\s*\d{2,4}(?:[,.]\d+)?\s*(?:mm|cm)?)/i,
+      /(?<!chamber\s|internal\s|interior\s|inside\s|usable\s|cavity\s)\b(?:dimensions?|size|w\s?x\s?d\s?x\s?h)[^\d]{0,24}(\d{2,4}\s?(?:mm|cm)?\s?[x×]\s?\d{2,4}\s?(?:mm|cm)?\s?[x×]\s?\d{2,4}\s?(?:mm|cm)?)/i,
+      /(?<!chamber\s|internal\s|interior\s|inside\s|usable\s|cavity\s)\b(?:dimensions?|size)[^\d]{0,40}(\d{2,4}\s*\(\s*[hwd]\s*\)\s?[x×]\s?\d{2,4}\s*\(\s*[hwd]\s*\)\s?[x×]\s?\d{2,4}\s*\(\s*[hwd]\s*\)\s?(?:mm|cm)?)/i,
       // "710mm W x 740mm D x 1450mm H" — axis label after number+unit (common on UK supplier pages)
       /\b(\d{2,4}\s?(?:mm|cm)\s?[WwDdLl]\s?[x×]\s?\d{2,4}\s?(?:mm|cm)\s?[DdLl]\s?[x×]\s?\d{2,4}\s?(?:mm|cm)?\s?[Hh])\b/i,
       /\b(\d{2,4}\s?(?:mm|cm)?\s?[x×]\s?\d{2,4}\s?(?:mm|cm)?\s?[x×]\s?\d{2,4}\s?(?:mm|cm)?)\b/i,
@@ -855,6 +864,39 @@ function matchedFieldsFor({
   return fields
 }
 
+function isAccessoryOrSpareUrl(url: string): boolean {
+  const lower = url.toLowerCase()
+  let path = lower
+  try { path = new URL(lower.startsWith("http") ? lower : `https://${lower}`).pathname } catch {}
+
+  // Explicit spares/parts/accessories path directories
+  if (/\/spares?\/|\/spare[-_]parts?\/|\/parts?\/|\/accessor(?:y|ies)\//.test(path)) return true
+
+  // Component keywords that appear in spare-part slugs but never in product names
+  const componentKeywords: RegExp[] = [
+    /\b(?:cutting|chopping)[-_]?board\b/,
+    /\bgasket\b/,
+    /\bevaporator\b/,
+    /\bcondenser\b/,
+    /\bcompressor\b/,
+    /\bthermostat\b/,
+    /\bfan[-_]support\b/,
+    /\bfan[-_]blade\b/,
+    /\bfan[-_]motor\b/,
+    /\bwater[-_]box\b/,
+    /\bsplash[-_]guard\b/,
+    /\bgrease[-_]trap\b/,
+    /\bdoor[-_]seal\b/,
+    /\bshelf[-_](?:clip|bracket)\b/,
+  ]
+  if (componentKeywords.some((re) => re.test(path))) return true
+
+  // Slug ends with "-for-[model]" — accessory designed for a specific model number
+  if (/[-_]for[-_][a-z0-9]+\/?$/.test(path)) return true
+
+  return false
+}
+
 function isGenericOrBadUrl(url: string) {
   const lower = url.toLowerCase()
   if (!/^https?:\/\//i.test(url)) return true
@@ -864,6 +906,7 @@ function isGenericOrBadUrl(url: string) {
   if (lower.includes("manualslib.com/index.php?action=search")) return true
   if (lower.includes("facebook.com")) return true
   if (lower.includes("instagram.com")) return true
+  if (isAccessoryOrSpareUrl(url)) return true
 
   try {
     const parsed = new URL(url)
@@ -1176,6 +1219,7 @@ export async function validateCaterBotProductSource({
   fuelType,
   candidateTitle,
   candidateSnippet,
+  expectedSpecs,
 }: CaterBotSourceValidationInput): Promise<CaterBotSourceValidationResult> {
   const checkedAt = new Date().toISOString()
   const sourceName = sourceNameFor(url, brand || "", model || "")
@@ -1270,10 +1314,46 @@ export async function validateCaterBotProductSource({
       closeAliases.some(
         (modelText) => compactCombinedText.includes(modelText) || compactModel(finalUrl).includes(modelText)
       )
+    const equipmentTypeKnown = !!clean(equipmentType)
     const equipmentMatches = sourceMatchesEquipment(pageText, equipmentType)
     const fuelMatch = sourceMatchesFuel(pageText, fuelType)
     const usefulDetails = usefulDetailsFrom(`${finalUrl} ${sourceText}`)
     const extractedSpecs = extractedSpecsFrom(sourceText, model || undefined)
+
+    if (process.env.NODE_ENV === "development" && expectedSpecs) {
+      console.info(
+        `CaterBot source vs expected | url=${finalUrl} | source_dims=${extractedSpecs.dimensions || "—"} | source_weight=${extractedSpecs.weight || "—"} | expected=${expectedSpecs.expected_height_mm}×${expectedSpecs.expected_width_mm}×${expectedSpecs.expected_depth_mm}mm ${expectedSpecs.expected_weight_kg}kg`
+      )
+    }
+
+    // Weight-clash: if identification gave us an expected weight and the source reports
+    // a weight below 25% of that, this page is almost certainly a component/accessory,
+    // not the product itself. Reject before scoring.
+    if (expectedSpecs?.expected_weight_kg != null) {
+      const sourceWeightText = extractedSpecs.weight || ""
+      const sourceKgMatch = sourceWeightText.match(/\b(\d+(?:\.\d+)?)\s*kg\b/i)
+      const sourceKg = sourceKgMatch ? Number(sourceKgMatch[1]) : null
+      if (sourceKg != null && sourceKg < expectedSpecs.expected_weight_kg * 0.25) {
+        console.info("CaterBot rejected source", {
+          url: finalUrl,
+          reason: "weight-clash: source weight too low vs expected",
+          source_kg: sourceKg,
+          expected_kg: expectedSpecs.expected_weight_kg,
+          threshold_kg: expectedSpecs.expected_weight_kg * 0.25,
+        })
+        return rejectedSourceResult({
+          url: finalUrl,
+          brand,
+          model,
+          candidateTitle: pageTitle || candidateTitle,
+          checkedAt,
+          matchNotes: `CaterBot rejected this source: its weight (${sourceKg} kg) is far below the expected ${expectedSpecs.expected_weight_kg} kg — likely an accessory or component page, not the product itself.`,
+          usefulDetails,
+          extractedSpecs: specsWithSellerCheckFallback(extractedSpecs),
+        })
+      }
+    }
+
     const priorityRank = sourcePriorityRank(finalUrl, brand)
 
     if (exactModelMatches && !titleOrUrlExactModelMatches) {
@@ -1361,7 +1441,8 @@ export async function validateCaterBotProductSource({
       usefulDetails,
       extractedSpecs,
     })
-    const confidence = confidenceFromScore(score)
+    const baseConfidence = confidenceFromScore(score)
+    const confidence = !equipmentTypeKnown && baseConfidence === "high" ? "medium" : baseConfidence
     const matchedFields = matchedFieldsFor({
       brandMatches,
       exactModelMatches,
@@ -1445,6 +1526,10 @@ export async function validateCaterBotProductSource({
   }
 }
 
+// KNOWN ISSUE: findValidatedCaterBotSource (called by /api/ai-listing Phase 1) has no product
+// identification and no expectedSpecs — it is blind to spec clashes. Currently protected only by
+// URL pattern rejection (isAccessoryOrSpareUrl). Longer-term: thread identification into Phase 1
+// or consolidate the two source-selection pipelines.
 export async function findValidatedCaterBotSource({
   brand,
   model,

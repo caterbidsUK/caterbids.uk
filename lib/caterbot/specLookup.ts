@@ -9,6 +9,7 @@ import {
   validateCaterBotProductSource,
   type CaterBotSourceValidationResult,
 } from "@/lib/caterbot/sourceValidation"
+import { isPalletFootprintOversized } from "@/lib/delivery/palletClass"
 
 export type CaterBotSpecExtraction = {
   raw_text: string
@@ -29,6 +30,12 @@ export type CaterBotSpecExtraction = {
   heat_input_kw: number | null
   refrigerant: string
   frequency: string
+  power_rated_w: number | null
+  rated_current_a: number | null
+  frequency_hz: number | null
+  refrigerant_mass_g: number | null
+  gc_number: string
+  climatic_class: string
   confidence: number
 }
 
@@ -64,6 +71,7 @@ export type CaterBotStructuredSpecs = {
   pallet_required: boolean
   suggested_pallet_size: string
   delivery_notes: string
+  dimension_source: "scraped" | "hint" | "raw_text" | "none"
 }
 
 const KNOWN_BRANDS = [
@@ -421,14 +429,70 @@ function detectRefrigerantDetails(text: string) {
   )
 }
 
+function detectPowerRatedW(text: string): number | null {
+  const wMatch = text.match(/\b(\d{2,5})\s*[Ww]\b/)
+  if (wMatch) {
+    const v = Number(wMatch[1])
+    if (v > 0 && v < 100000) return v
+  }
+  const kwMatch = text.match(/\b(\d+(?:[.,]\d+)?)\s*[Kk][Ww]\b/)
+  if (kwMatch) {
+    const v = Number(kwMatch[1].replace(",", ".")) * 1000
+    if (v > 0 && v < 100000) return Math.round(v)
+  }
+  return null
+}
+
+function detectRatedCurrentA(text: string): number | null {
+  const match = text.match(/\b(\d+(?:[.,]\d+)?)\s*[Aa]\b/)
+  if (!match) return null
+  const v = Number(match[1].replace(",", "."))
+  return Number.isFinite(v) && v > 0 ? v : null
+}
+
+function detectFrequencyHzNum(text: string): number | null {
+  const match = text.match(/\b(50|60)\s*[Hh][Zz]\b/)
+  return match ? Number(match[1]) : null
+}
+
+function detectRefrigerantMassG(text: string): number | null {
+  const ctx = text.match(/refrigerant[^0-9]{0,40}(\d{2,5})\s*g\b/i)
+  if (ctx) return Number(ctx[1])
+  const nearby = text.match(/\b(\d{2,5})\s*g\s*(?:R\d|refrigerant)/i)
+  return nearby ? Number(nearby[1]) : null
+}
+
+function detectGcNumber(text: string): string {
+  const match = text.match(/\bGC[-\s]?([\d][\d\s-]{6,16}[\d])\b/i)
+  return match ? "GC" + match[1].replace(/[\s-]/g, "") : ""
+}
+
+function detectClimaticClass(text: string): string {
+  const labeled = text.match(/\bclim(?:atic)?\s*class[:\s]+([A-Za-z]{1,3}\d?)\b/i) ||
+    text.match(/\bclass[:\s]+([ST][NT]?\d?)\b/i)
+  return labeled ? cleanText(labeled[1].toUpperCase()) : ""
+}
+
 export function extractSpecPlateDetails({
   rawText,
   brandHint,
   modelHint,
+  powerRatedWHint,
+  ratedCurrentAHint,
+  frequencyHzHint,
+  refrigerantMassGHint,
+  gcNumberHint,
+  climaticClassHint,
 }: {
   rawText?: string | null
   brandHint?: string | null
   modelHint?: string | null
+  powerRatedWHint?: number | null
+  ratedCurrentAHint?: number | null
+  frequencyHzHint?: number | null
+  refrigerantMassGHint?: number | null
+  gcNumberHint?: string | null
+  climaticClassHint?: string | null
 }): CaterBotSpecExtraction {
   const text = cleanText(rawText || "")
   const normalised = normaliseCaterBotModel(text, [brandHint, modelHint].filter(Boolean).join(" "))
@@ -477,6 +541,12 @@ export function extractSpecPlateDetails({
     heat_input_kw: heatInputKw,
     refrigerant: refrigerantDetails.join(", "),
     frequency: detectFrequency(text),
+    power_rated_w: powerRatedWHint ?? detectPowerRatedW(text),
+    rated_current_a: ratedCurrentAHint ?? detectRatedCurrentA(text),
+    frequency_hz: frequencyHzHint ?? detectFrequencyHzNum(text),
+    refrigerant_mass_g: refrigerantMassGHint ?? detectRefrigerantMassG(text),
+    gc_number: gcNumberHint || detectGcNumber(text),
+    climatic_class: climaticClassHint || detectClimaticClass(text),
     confidence: Math.min(1, Number(confidence.toFixed(2))),
   }
 }
@@ -720,6 +790,22 @@ export function dimensionsFromText(value: string | null | undefined) {
   )
   if (wdh_after?.height_cm && wdh_after.width_cm && wdh_after.depth_cm) return wdh_after
 
+  // "H405 x W384 x D484 mm" — axis letter glued to number, any H/W/D order.
+  const hwdRawMatch = text.match(
+    /\b([HhWwDd])\s*(\d{2,4}(?:[,.]\d+)?)\s*(?:mm|cm)?\s*[x×]\s*([HhWwDd])\s*(\d{2,4}(?:[,.]\d+)?)\s*(?:mm|cm)?\s*[x×]\s*([HhWwDd])\s*(\d{2,4}(?:[,.]\d+)?)\s*(mm|cm)?/i
+  )
+  if (hwdRawMatch?.[1] && hwdRawMatch[2] && hwdRawMatch[3] && hwdRawMatch[4] && hwdRawMatch[5] && hwdRawMatch[6]) {
+    let h: number | null = null, w: number | null = null, d: number | null = null
+    for (let i = 0; i < 3; i++) {
+      const axis = hwdRawMatch[1 + i * 2].toUpperCase()
+      const val = parseDimensionNumber(hwdRawMatch[2 + i * 2], hwdRawMatch[7] || text)
+      if (axis === "H") h = val
+      else if (axis === "W") w = val
+      else if (axis === "D" || axis === "L") d = val
+    }
+    if (h && w && d) return { height_cm: h, width_cm: w, depth_cm: d }
+  }
+
   // Bare triplet with a required trailing unit: "25.2 x 50 x 50.2 cm" or "252 x 500 x 502 mm".
   // The trailing unit (not per-number) is the norm for extracted spec strings like those produced
   // by dimensionsFromLabeledFields in sourceValidation — the catch-all below would reject these
@@ -773,7 +859,8 @@ function plausibleDimensions(
 ): ReturnType<typeof dimensionsFromText> | null {
   const { height_cm, width_cm, depth_cm } = dims
   if (!height_cm || !width_cm || !depth_cm) return null
-  if (height_cm < 10 || width_cm < 10 || depth_cm < 10) return null
+  // No commercial catering item is under 20cm wide or deep; low countertop units can be under 20cm tall.
+  if (height_cm < 10 || width_cm < 20 || depth_cm < 20) return null
   return dims
 }
 
@@ -806,14 +893,24 @@ function palletSize(
   weight: number | null,
   dimensions: { height_cm: number | null; width_cm: number | null; depth_cm: number | null }
 ) {
-  const maxDimension = Math.max(dimensions.height_cm || 0, dimensions.width_cm || 0, dimensions.depth_cm || 0)
+  const heightCm = dimensions.height_cm || 0
+  const maxDimension = Math.max(heightCm, dimensions.width_cm || 0, dimensions.depth_cm || 0)
   if (!weight && !maxDimension) return "Needs seller check"
-  if ((weight || 0) > 1000 || maxDimension > 220) return "Needs seller check"
-  if ((weight || 0) <= 30 && maxDimension <= 120) return "Mini Quarter Pallet"
-  if ((weight || 0) <= 150) return "Mini Quarter Pallet"
-  if ((weight || 0) <= 300) return "Quarter Pallet"
-  if ((weight || 0) <= 500) return "Half Pallet"
-  if ((weight || 0) <= 750) return "Light Pallet"
+  // Height limits include the 150mm wooden pallet base (confirmed). Compare item height directly —
+  // do NOT add the base here; the tier maxHeightCm values already account for it.
+  if ((weight || 0) > 1000 || heightCm > 220) return "Needs seller check"
+  // Footprint gate: item must fit on standard 1200×1000mm pallet base in either orientation.
+  if (
+    dimensions.width_cm != null &&
+    dimensions.depth_cm != null &&
+    isPalletFootprintOversized(dimensions.width_cm, dimensions.depth_cm)
+  ) return "Oversized / Custom"
+  // Tier selection: smallest tier satisfying BOTH item height AND pallet weight (item + 20kg base).
+  const palletWeightKg = (weight || 0) + 20
+  if (heightCm <= 60  && palletWeightKg <= 150)  return "Mini Quarter Pallet"
+  if (heightCm <= 80  && palletWeightKg <= 300)  return "Quarter Pallet"
+  if (heightCm <= 110 && palletWeightKg <= 500)  return "Half Pallet"
+  if (palletWeightKg <= 750)                      return "Light Pallet"
   return "Full Pallet"
 }
 
@@ -1002,7 +1099,9 @@ function deliveryNotesForSpecs({
   if (/fridge|freezer|refriger|chiller/i.test(extraction.equipment_type)) {
     notes.push("Refrigeration equipment may need upright transport and specialist handling.")
   }
-  if (suggestedPalletSize && suggestedPalletSize !== "Needs seller check") {
+  if (suggestedPalletSize === "Oversized / Custom") {
+    notes.push("Too large for a standard pallet (base is 1.2m x 1m). Choose Collection Only or Buyer Arranges Delivery.")
+  } else if (suggestedPalletSize && suggestedPalletSize !== "Needs seller check") {
     notes.push(`CaterBot pallet suggestion: ${suggestedPalletSize}.`)
   }
   return notes.join(" ")
@@ -1077,21 +1176,31 @@ export function specsFromValidatedSource(
     : null
   const hintDims = dimensionHint ? plausibleDimensions(dimensionsFromText(dimensionHint)) : null
   const rawTextFallback = plausibleDimensions(dimensionsFromText(sourceText))
+  // Priority: real scraped evidence beats AI guess beats raw-text noise.
+  // hintDims is an unverified Phase 1 AI estimate — it must never win over a validated source page.
   const externalDimensions =
-    hintDims ??
     sourceDimsOnly ??
+    hintDims ??
     rawTextFallback ??
     { height_cm: null, width_cm: null, depth_cm: null }
+  const dimensionSource: CaterBotStructuredSpecs["dimension_source"] =
+    sourceDimsOnly ? "scraped" : hintDims ? "hint" : rawTextFallback ? "raw_text" : "none"
+  // Fix A: verified source page beats unverified snippet — same principle as the dimensionHint fix.
   const parsedNetWeight =
-    labelledKgFromText(weightHint, ["net weight", "net wt", "product weight", "empty weight", "weight"]) ||
     kgFromText(source?.extractedSpecs.weight) ||
+    labelledKgFromText(weightHint, ["net weight", "net wt", "product weight", "empty weight", "weight"]) ||
     labelledKgFromText(sourceText, ["net weight", "net wt", "product weight", "empty weight", "weight"]) ||
     null
-  const parsedGrossWeight =
-    labelledKgFromText(weightHint, ["gross weight", "gross wt", "shipping weight", "ship weight", "packed weight"]) ||
+  const rawParsedGrossWeight =
     kgFromText(source?.extractedSpecs.grossWeight) ||
+    labelledKgFromText(weightHint, ["gross weight", "gross wt", "shipping weight", "ship weight", "packed weight"]) ||
     labelledKgFromText(sourceText, ["gross weight", "gross wt", "shipping weight", "ship weight", "packed weight"]) ||
     null
+  // Fix B: gross (packed) weight cannot physically be less than net weight — discard if so.
+  const parsedGrossWeight =
+    rawParsedGrossWeight && parsedNetWeight && rawParsedGrossWeight < parsedNetWeight
+      ? null
+      : rawParsedGrossWeight
   const capacity =
     litresFromText(sourceText) ||
     litresFromText(source?.extractedSpecs.capacity) ||
@@ -1198,7 +1307,8 @@ export function specsFromValidatedSource(
     safety_note: safetyNote,
     pallet_required:
       suggestedPalletSize !== "Needs seller check" &&
-      suggestedPalletSize !== "Mini Quarter Pallet",
+      suggestedPalletSize !== "Mini Quarter Pallet" &&
+      suggestedPalletSize !== "Oversized / Custom",
     suggested_pallet_size: suggestedPalletSize,
     delivery_notes:
       knownSpecs?.delivery_notes ||
@@ -1211,6 +1321,7 @@ export function specsFromValidatedSource(
           hasWeight,
         }),
       ].filter(Boolean).join(" "),
+    dimension_source: dimensionSource,
   }
 }
 
@@ -1221,6 +1332,7 @@ export async function findBestSpecSource({
   fuelType,
   productTitle,
   rawText,
+  expectedSpecs,
 }: {
   brand: string
   model: string
@@ -1228,6 +1340,12 @@ export async function findBestSpecSource({
   fuelType?: string | null
   productTitle?: string | null
   rawText?: string | null
+  expectedSpecs?: {
+    expected_height_mm: number | null
+    expected_width_mm: number | null
+    expected_depth_mm: number | null
+    expected_weight_kg: number | null
+  } | null
 }) {
   const searchQueries = buildSpecLookupQueries({ brand, model, equipmentType, productTitle, rawText })
   const knownContext = `${brand} ${model} ${equipmentType || ""} ${productTitle || ""} ${rawText || ""}`
@@ -1247,6 +1365,7 @@ export async function findBestSpecSource({
         fuelType,
         candidateTitle: productTitle,
         candidateSnippet: rawText,
+        expectedSpecs,
       })
 
       if (validation.valid) {
@@ -1319,6 +1438,7 @@ export async function findBestSpecSource({
             fuelType,
             candidateTitle: result?.title,
             candidateSnippet: result?.snippet,
+            expectedSpecs,
           })
         })
     )

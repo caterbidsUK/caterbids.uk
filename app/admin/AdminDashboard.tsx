@@ -58,6 +58,7 @@ import {
   updateSiteSetting,
   updateUserRole,
 } from "./actions"
+import BlogImageUpload from "@/components/BlogImageUpload"
 import { type PaymentSettings, type SellerPlan, formatPlanPrice, paymentStatusLabel } from "@/lib/pricing"
 import { CONDITION_OPTIONS, DELIVERY_OPTION_OPTIONS, POWER_TYPE_OPTIONS, TESTED_STATUS_OPTIONS, WARRANTY_TYPE_OPTIONS } from "@/lib/listing-trust"
 import { MARKETPLACE_CATEGORY_TITLES, categoryByTitle, subcategoriesForCategory } from "@/lib/categories"
@@ -219,6 +220,8 @@ export type AdminBlogPost = {
   meta_description?: string | null
   target_keywords?: string[] | null
   article_markdown?: string | null
+  featured_image_url?: string | null
+  image_alt?: string | null
 }
 
 type AdminDashboardProps = {
@@ -1670,6 +1673,7 @@ function BlogPostForm({
   const [title, setTitle] = useState(post?.title || "")
   const [slug, setSlug] = useState(post?.slug || "")
   const [slugTouched, setSlugTouched] = useState(isEdit)
+  const [imageUrl, setImageUrl] = useState<string | null>(post?.featured_image_url || null)
 
   useEffect(() => {
     if (!slugTouched) setSlug(slugify(title))
@@ -1766,6 +1770,28 @@ function BlogPostForm({
               rows={2}
               className="w-full rounded-2xl border border-white/10 bg-white/8 px-4 py-3 text-sm font-semibold text-white placeholder-white/30 focus:border-[#FF6B00]/60 focus:outline-none"
               placeholder="140–160 character meta description"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-black uppercase tracking-widest text-white/50">
+              Featured Image{" "}
+              <span className="font-medium normal-case tracking-normal text-white/40">(required to publish)</span>
+            </label>
+            <BlogImageUpload value={imageUrl} onChange={setImageUrl} />
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-black uppercase tracking-widest text-white/50">
+              Image Alt Text{" "}
+              <span className="font-medium normal-case tracking-normal text-white/40">(required to publish)</span>
+            </label>
+            <input
+              name="image_alt"
+              defaultValue={post?.image_alt || ""}
+              type="text"
+              className="w-full rounded-2xl border border-white/10 bg-white/8 px-4 py-3 text-sm font-semibold text-white placeholder-white/30 focus:border-[#FF6B00]/60 focus:outline-none"
+              placeholder="Brief description of the image for screen readers and SEO"
             />
           </div>
 

@@ -10,7 +10,10 @@ import {
   getConfiguredCaterBotSearchProviderName,
   isCaterBotWebSearchConfigured,
 } from "@/lib/caterbot/webSearch"
-import { askGeminiForMissingSpecs } from "@/lib/caterbot/geminiEstimate"
+import { askGeminiForMissingSpecs, identifyCaterBotProduct, type CaterBotProductIdentification } from "@/lib/caterbot/geminiEstimate"
+import { lookupEquipmentModel, type EquipmentModelRow } from "@/lib/caterbot/knowledgeBase"
+import type { CaterBotStructuredSpecs } from "@/lib/caterbot/specLookup"
+import type { CaterBotSourceValidationResult } from "@/lib/caterbot/sourceValidation"
 
 export const runtime = "nodejs"
 
@@ -42,6 +45,12 @@ function extractJson(content: string) {
     voltage?: string
     heat_input_kw?: number
     refrigerant?: string
+    power_rated_w?: number
+    rated_current_a?: number
+    frequency_hz?: number
+    refrigerant_mass_g?: number
+    gc_number?: string
+    climatic_class?: string
     brand_candidates?: string[]
     model_candidates?: string[]
     serial_candidates?: string[]
@@ -79,6 +88,12 @@ type CaterBotSpecPlateAnalysis = {
   voltage: string
   heat_input_kw: number | null
   refrigerant: string
+  power_rated_w: number | null
+  rated_current_a: number | null
+  frequency_hz: number | null
+  refrigerant_mass_g: number | null
+  gc_number: string
+  climatic_class: string
   confidence: number
 }
 
@@ -113,6 +128,12 @@ function emptySpecPlateAnalysis(): CaterBotSpecPlateAnalysis {
     voltage: "",
     heat_input_kw: null,
     refrigerant: "",
+    power_rated_w: null,
+    rated_current_a: null,
+    frequency_hz: null,
+    refrigerant_mass_g: null,
+    gc_number: "",
+    climatic_class: "",
     confidence: 0,
   }
 }
@@ -198,6 +219,12 @@ Return strict JSON:
   "voltage": "",
   "heat_input_kw": null,
   "refrigerant": "",
+  "power_rated_w": null,
+  "rated_current_a": null,
+  "frequency_hz": null,
+  "refrigerant_mass_g": null,
+  "gc_number": "",
+  "climatic_class": "",
   "brand_candidates": [],
   "model_candidates": [],
   "serial_candidates": [],
@@ -211,6 +238,12 @@ Rules:
 - Do not invent a model, brand, weight, dimensions or refrigerant.
 - If any character in the model or serial could be ambiguous (e.g. U/G, 0/O, 1/I/7, 3/8, B/8), list alternative readings in model_candidates.
 - Prefer labels MODEL, MODEL NO, TYPE, CODE, ITEM, PRODUCT CODE and SKU over serial-only numbers.
+- power_rated_w: total rated input power in watts as a number (e.g. 400 for "400W", 1500 for "1.5kW"). Null if not visible.
+- rated_current_a: rated current in amps as a number (e.g. 3.0 for "3.0A"). Null if not visible.
+- frequency_hz: supply frequency as a number, 50 or 60. Null if not visible.
+- refrigerant_mass_g: refrigerant charge in grams as a number (e.g. 120 for "120g"). Null if not visible.
+- gc_number: Gas Council registration number printed on the plate (e.g. "GC394400123"). Empty string if not present.
+- climatic_class: climatic class designation if printed (e.g. "SN", "ST", "N", "T"). Empty string if not present.
 `.trim()
   const mainPrompt = `
 You are CaterBot looking at the main product photo for a used UK catering equipment listing.
@@ -284,6 +317,12 @@ Rules:
           voltage: clean(parsed.voltage),
           heat_input_kw: typeof parsed.heat_input_kw === "number" ? parsed.heat_input_kw : null,
           refrigerant: clean(parsed.refrigerant),
+          power_rated_w: typeof parsed.power_rated_w === "number" ? parsed.power_rated_w : null,
+          rated_current_a: typeof parsed.rated_current_a === "number" ? parsed.rated_current_a : null,
+          frequency_hz: typeof parsed.frequency_hz === "number" ? parsed.frequency_hz : null,
+          refrigerant_mass_g: typeof parsed.refrigerant_mass_g === "number" ? parsed.refrigerant_mass_g : null,
+          gc_number: clean(parsed.gc_number),
+          climatic_class: clean(parsed.climatic_class),
           confidence: Number(parsed.confidence || 0),
         }
   }
@@ -341,6 +380,12 @@ Rules:
         voltage: clean(parsed.voltage),
         heat_input_kw: typeof parsed.heat_input_kw === "number" ? parsed.heat_input_kw : null,
         refrigerant: clean(parsed.refrigerant),
+        power_rated_w: typeof parsed.power_rated_w === "number" ? parsed.power_rated_w : null,
+        rated_current_a: typeof parsed.rated_current_a === "number" ? parsed.rated_current_a : null,
+        frequency_hz: typeof parsed.frequency_hz === "number" ? parsed.frequency_hz : null,
+        refrigerant_mass_g: typeof parsed.refrigerant_mass_g === "number" ? parsed.refrigerant_mass_g : null,
+        gc_number: clean(parsed.gc_number),
+        climatic_class: clean(parsed.climatic_class),
         confidence: Number(parsed.confidence || 0),
       }
 }
@@ -355,6 +400,149 @@ function fallbackSearchQueries({ brand, model, equipmentType, titleHint }: { bra
     `"${identity}" weight dimensions`,
     `${identity} UK catering equipment weight dimensions`,
   ]
+}
+
+// ── KB row → structured specs ──────────────────────────────────────────────
+// Parses dimension strings like "1097 x 1555 x 760 mm (H x W x D)".
+// dimensionsFromText() assumes W×D×H for bare triplets and maps incorrectly
+// for our "(H x W x D)" annotated format — this custom parser handles it.
+function parseDimsFromKbString(dimStr: string | null): {
+  height_cm: number | null
+  width_cm: number | null
+  depth_cm: number | null
+} {
+  if (!dimStr) return { height_cm: null, width_cm: null, depth_cm: null }
+  const nums = Array.from(dimStr.matchAll(/(\d+(?:[.,]\d+)?)/g)).map((m) =>
+    Number(m[1].replace(",", "."))
+  )
+  if (nums.length < 3) return { height_cm: null, width_cm: null, depth_cm: null }
+  const factor = /\bmm\b/i.test(dimStr) ? 0.1 : 1
+  const [a, b, c] = nums
+  const isHWD = /\(\s*H\s*[x×]\s*W\s*[x×]\s*D\s*\)/i.test(dimStr)
+  const [height, width, depth] = isHWD ? [a, b, c] : [c, a, b] // default W×D×H
+  return {
+    height_cm: Number((height * factor).toFixed(1)),
+    width_cm: Number((width * factor).toFixed(1)),
+    depth_cm: Number((depth * factor).toFixed(1)),
+  }
+}
+
+function parseWeightKgFromString(str: string | null): number | null {
+  if (!str) return null
+  const m = str.match(/(\d+(?:[.,]\d+)?)\s*kg/i)
+  if (!m) return null
+  const v = Number(m[1].replace(",", "."))
+  return Number.isFinite(v) && v > 0 ? v : null
+}
+
+function kbTypeFromEquipmentType(equipmentType: string | null | undefined): string {
+  const et = (equipmentType || "").toLowerCase()
+  if (/fridge|refriger|freezer|chiller|cooler/.test(et)) return "Refrigeration"
+  if (/dishwasher|glasswasher|warewasher|pass.through|hood.type|sink|basin/.test(et))
+    return "Warewashing & Sinks"
+  if (/canopy|extract|ventilat|ductwork|plenum|baffle|grease.filter|odour/.test(et))
+    return "Canopies & Extraction"
+  if (/coffee|espresso|hot.water|boiler|dispenser|bar|beverage/.test(et))
+    return "Coffee & Bar Equipment"
+  return "Cooking Equipment"
+}
+
+function kbPalletSize(weightKg: number | null, maxDimCm: number): string {
+  if (!weightKg && !maxDimCm) return "Needs seller check"
+  if ((weightKg || 0) > 1000 || maxDimCm > 220) return "Needs seller check"
+  if ((weightKg || 0) <= 30 && maxDimCm <= 120) return "Mini Quarter Pallet"
+  if ((weightKg || 0) <= 150) return "Mini Quarter Pallet"
+  if ((weightKg || 0) <= 300) return "Quarter Pallet"
+  if ((weightKg || 0) <= 500) return "Half Pallet"
+  if ((weightKg || 0) <= 750) return "Light Pallet"
+  return "Full Pallet"
+}
+
+function specsFromKbRow(kbRow: EquipmentModelRow, _checkedAt: string): CaterBotStructuredSpecs {
+  const dims = parseDimsFromKbString(kbRow.dimensions)
+  const weightKg = parseWeightKgFromString(kbRow.weight_net)
+  const equipmentType = kbRow.equipment_type || ""
+  const type = kbTypeFromEquipmentType(equipmentType)
+  const category = kbRow.category || "Catering Equipment"
+  const { brand, model } = kbRow
+  const maxDimCm = Math.max(dims.height_cm || 0, dims.width_cm || 0, dims.depth_cm || 0)
+  const suggestedPalletSize = kbPalletSize(weightKg, maxDimCm)
+  const safetyNote = /fridge|refriger|freezer|chiller/i.test(equipmentType)
+    ? "Refrigeration equipment should be transported upright where possible and allowed to settle before use."
+    : ""
+  const deliveryNotes =
+    suggestedPalletSize && suggestedPalletSize !== "Needs seller check"
+      ? `CaterBot pallet suggestion: ${suggestedPalletSize}.`
+      : "Weight and dimensions not fully confirmed. Seller must check before booking delivery."
+  return {
+    title: `${brand} ${model} - Used`,
+    category,
+    type,
+    equipment_type: equipmentType || null,
+    condition: "Used",
+    brand,
+    model,
+    weight_kg: weightKg,
+    height_cm: dims.height_cm,
+    width_cm: dims.width_cm,
+    depth_cm: dims.depth_cm,
+    net_weight_kg: weightKg,
+    gross_weight_kg: parseWeightKgFromString(kbRow.weight_gross),
+    capacity_litres: null,
+    power_type: "",
+    voltage: kbRow.voltage || "",
+    phase: kbRow.phase || kbRow.electrical_phase || "",
+    watts: null,
+    amps: null,
+    gas_type: kbRow.gas_type || "",
+    gas_connection: "",
+    heat_input_kw: null,
+    refrigerant: "",
+    refrigerant_mass: "",
+    frequency: "",
+    power_details: "",
+    short_description: `${brand} ${model} ${equipmentType} for commercial catering use. Verified specs from CaterBids knowledge base. Seller should confirm condition and collection requirements before purchase.`,
+    safety_note: safetyNote,
+    pallet_required:
+      suggestedPalletSize !== "Needs seller check" && suggestedPalletSize !== "Mini Quarter Pallet",
+    suggested_pallet_size: suggestedPalletSize,
+    delivery_notes: deliveryNotes,
+    dimension_source: "scraped" as const,
+  }
+}
+
+function syntheticKbSource(kbRow: EquipmentModelRow, checkedAt: string): CaterBotSourceValidationResult {
+  return {
+    valid: true,
+    url: kbRow.source_url || "",
+    sourceName: "CaterBids Verified Knowledge Base",
+    sourceType: "verified_knowledge_base",
+    confidence: "high",
+    score: 100,
+    sourceTitle: `${kbRow.brand} ${kbRow.model} Verified Specs`,
+    sourceDomain: "caterbids.uk",
+    confidenceScore: 100,
+    matchedFields: [
+      "brand",
+      "exact_model",
+      ...(kbRow.category ? ["category"] : []),
+      ...(kbRow.equipment_type ? ["equipment_type"] : []),
+      ...(kbRow.dimensions ? ["dimensions"] : []),
+      ...(kbRow.weight_net ? ["weight"] : []),
+    ],
+    sourcePriorityRank: 0,
+    checkedAt,
+    matchNotes: "Exact match from CaterBids admin-verified knowledge base.",
+    usefulDetails: [
+      ...(kbRow.dimensions ? ["Dimensions"] : []),
+      ...(kbRow.weight_net ? ["Weight"] : []),
+    ],
+    extractedSpecs: {
+      dimensions: kbRow.dimensions ?? undefined,
+      weight: kbRow.weight_net ?? undefined,
+      grossWeight: kbRow.weight_gross ?? undefined,
+    },
+  }
 }
 
 function isMissingTableOrColumn(error: unknown) {
@@ -547,6 +735,12 @@ export async function POST(req: NextRequest) {
       rawText,
       brandHint: clean(specPlateAnalysis.brand || body.brandHint || body.brand || body.brand_hint || mainImageAnalysis.visible_brand),
       modelHint: clean(specPlateAnalysis.model || body.modelHint || body.model || body.model_hint || mainImageAnalysis.visible_model),
+      powerRatedWHint: specPlateAnalysis.power_rated_w,
+      ratedCurrentAHint: specPlateAnalysis.rated_current_a,
+      frequencyHzHint: specPlateAnalysis.frequency_hz,
+      refrigerantMassGHint: specPlateAnalysis.refrigerant_mass_g,
+      gcNumberHint: specPlateAnalysis.gc_number || null,
+      climaticClassHint: specPlateAnalysis.climatic_class || null,
     })
     const brand = extraction.brand
     const model = extraction.model
@@ -587,11 +781,111 @@ export async function POST(req: NextRequest) {
       })
     }
 
+    // ── Product identification — one Gemini text call, fires once before search ──
+    let identification: CaterBotProductIdentification | null = null
+    try {
+      identification = await identifyCaterBotProduct({
+        brand,
+        model,
+        rawText: extraction.raw_text,
+        equipmentTypeHint: equipmentType,
+        visualCategory: mainImageAnalysis.visual_category,
+        refrigerant: extraction.refrigerant || null,
+        powerRatedW: extraction.power_rated_w ?? null,
+      })
+    } catch {
+      // Identification is best-effort — silent on failure
+    }
+
+    const highConfidence = Boolean(identification && identification.id_confidence >= 0.7)
+    const identifiedExtraction = highConfidence && identification
+      ? { ...extraction, equipment_type: identification.equipment_type || extraction.equipment_type }
+      : extraction
+    const searchEquipmentType = highConfidence && identification
+      ? identification.equipment_type || equipmentType
+      : equipmentType
+
+    if (process.env.NODE_ENV === "development") {
+      console.info(
+        `CaterBot identification | type=${identification?.type || "—"} equipment_type=${identification?.equipment_type || "—"} confidence=${identification?.id_confidence ?? "—"} highConfidence=${highConfidence}`
+      )
+    }
+
+    // ── KB lookup: check verified equipment_models before web search ──────────
+    const KB_LOOKUP_ENABLED = false // re-enable once equipment_models is populated with admin-verified rows
+    const kbBrand = brand || clean(body.brandHint || body.brand)
+    if (KB_LOOKUP_ENABLED && kbBrand && model) {
+      const kbRow = await lookupEquipmentModel(kbBrand, model)
+      if (kbRow && !kbRow.needs_review) {
+        const kbSpecs = specsFromKbRow(kbRow, checkedAt)
+        const kbSource = syntheticKbSource(kbRow, checkedAt)
+        const kbSaveResult = await saveLookupResult({
+          supabase,
+          listingId: clean(body.listingId || body.listing_id),
+          sellerId: userId,
+          extraction,
+          specs: kbSpecs,
+          source: kbSource,
+          mainImageAnalysis,
+          specPlateAnalysis,
+          searchQueries: [],
+          sourceResults: [
+            {
+              title: kbSource.sourceTitle,
+              url: kbSource.url,
+              source_type: kbSource.sourceType,
+              trust_score: 100,
+              matched_fields: kbSource.matchedFields,
+            },
+          ],
+          checkedAt,
+        })
+        return NextResponse.json({
+          success: true,
+          matchType: "exact" as const,
+          image_analysis: {
+            main_image: mainImageAnalysis,
+            spec_plate: specPlateAnalysis,
+          },
+          extracted: extraction,
+          search_queries: [],
+          specs: kbSpecs,
+          sources: [
+            {
+              title: kbSource.sourceTitle,
+              url: kbSource.url || null,
+              source_type: kbSource.sourceType,
+              trust_score: 100,
+              matched_fields: kbSource.matchedFields,
+            },
+          ],
+          source: {
+            url: kbSource.url || null,
+            sourceName: kbSource.sourceName,
+            sourceType: kbSource.sourceType,
+            confidence: kbSource.confidence,
+            confidenceScore: kbSource.confidenceScore,
+            checkedAt: kbSource.checkedAt,
+            matchNotes: kbSource.matchNotes,
+            usefulDetails: kbSource.usefulDetails,
+            extractedSpecs: kbSource.extractedSpecs,
+          },
+          confidence_score: 100,
+          checkedAt,
+          searchProvider: "knowledge_base",
+          saved: kbSaveResult.saved,
+          saveError: kbSaveResult.error,
+          warnings: [],
+        })
+      }
+    }
+
     if (!brand) warnings.push("Brand not clearly found. CaterBot searched with the model only where possible.")
 
     if (!isCaterBotWebSearchConfigured()) {
-      const specs = specsFromValidatedSource(null, { ...extraction, equipment_type: equipmentType }, dimensionHint)
-      const queries = fallbackSearchQueries({ brand, model, equipmentType, titleHint: clean(body.titleHint || body.title_hint) })
+      const rawSpecs = specsFromValidatedSource(null, identifiedExtraction, dimensionHint)
+      const specs = highConfidence ? rawSpecs : { ...rawSpecs, category: "", type: "", equipment_type: null }
+      const queries = fallbackSearchQueries({ brand, model, equipmentType: searchEquipmentType, titleHint: clean(body.titleHint || body.title_hint) })
       return NextResponse.json({
         success: true,
         image_analysis: {
@@ -599,6 +893,7 @@ export async function POST(req: NextRequest) {
           spec_plate: specPlateAnalysis,
         },
         extracted: extraction,
+        identification,
         search_queries: queries,
         specs,
         sources: [],
@@ -613,13 +908,41 @@ export async function POST(req: NextRequest) {
     const lookup = await findBestSpecSource({
       brand: brand || clean(body.brandHint || body.brand),
       model,
-      equipmentType,
+      equipmentType: searchEquipmentType,
       fuelType: clean(body.fuel_type || body.fuelType),
-      productTitle: extraction.product_name || clean(body.titleHint || body.title_hint),
-      rawText: extraction.raw_text,
+      productTitle: identifiedExtraction.product_name || clean(body.titleHint || body.title_hint),
+      rawText: identifiedExtraction.raw_text,
+      expectedSpecs: identification
+        ? {
+            expected_height_mm: identification.expected_height_mm,
+            expected_width_mm: identification.expected_width_mm,
+            expected_depth_mm: identification.expected_depth_mm,
+            expected_weight_kg: identification.expected_weight_kg,
+          }
+        : null,
     })
     const source = lookup.selected
-    const specs = specsFromValidatedSource(source, extraction, dimensionHint || lookup.snippetDimensions || null, lookup.snippetWeightText || null)
+
+    if (!source) {
+      return NextResponse.json({
+        success: true,
+        matchType: "no_match" as const,
+        image_analysis: { main_image: mainImageAnalysis, spec_plate: specPlateAnalysis },
+        extracted: extraction,
+        identification,
+        search_queries: lookup.searchQueries,
+        specs: null,
+        sources: [],
+        source: null,
+        confidence_score: 0,
+        checkedAt,
+        searchProvider: lookup.provider || getConfiguredCaterBotSearchProviderName(),
+        warnings: ["CaterBot could not find verified specs for this model. Please fill in dimensions and weight manually."],
+      })
+    }
+
+    const rawSpecs = specsFromValidatedSource(source, identifiedExtraction, dimensionHint || lookup.snippetDimensions || null, lookup.snippetWeightText || null)
+    const specs = highConfidence ? rawSpecs : { ...rawSpecs, category: "", type: "", equipment_type: null }
 
     const needsDimensions = !specs.height_cm || !specs.width_cm || !specs.depth_cm
     const needsWeight = !specs.gross_weight_kg && !specs.net_weight_kg && !specs.weight_kg
@@ -707,6 +1030,7 @@ export async function POST(req: NextRequest) {
         spec_plate: specPlateAnalysis,
       },
       extracted: extraction,
+      identification,
       search_queries: lookup.searchQueries,
       specs,
       sources: source

@@ -1,3 +1,115 @@
+export type CaterBotProductIdentification = {
+  product_name: string
+  category: string
+  type: string
+  equipment_type: string
+  expected_height_mm: number | null
+  expected_width_mm: number | null
+  expected_depth_mm: number | null
+  expected_weight_kg: number | null
+  id_confidence: number
+}
+
+export async function identifyCaterBotProduct({
+  brand,
+  model,
+  rawText,
+  equipmentTypeHint,
+  visualCategory,
+  refrigerant,
+  powerRatedW,
+}: {
+  brand: string
+  model: string
+  rawText: string
+  equipmentTypeHint?: string | null
+  visualCategory?: string | null
+  refrigerant?: string | null
+  powerRatedW?: number | null
+}): Promise<CaterBotProductIdentification | null> {
+  const apiKey = process.env.AI_VISION_API_KEY
+  if (!apiKey?.startsWith("AIza")) return null
+
+  const evidenceLines = [
+    `Brand: ${brand || "unknown"}`,
+    `Model: ${model || "unknown"}`,
+    `OCR plate text: ${rawText.slice(0, 2000)}`,
+    visualCategory ? `Main image category: ${visualCategory}` : null,
+    equipmentTypeHint ? `Plate equipment type label: ${equipmentTypeHint}` : null,
+    refrigerant ? `Refrigerant: ${refrigerant}` : null,
+    powerRatedW != null ? `Rated power: ${powerRatedW}W` : null,
+  ].filter(Boolean).join("\n")
+
+  const prompt = `You are CaterBot identifying a UK commercial catering equipment item from its data plate and product photo.
+
+Evidence:
+${evidenceLines}
+
+Return strict JSON identifying what this item IS:
+{"product_name":"","category":"","type":"","equipment_type":"","expected_height_mm":null,"expected_width_mm":null,"expected_depth_mm":null,"expected_weight_kg":null,"id_confidence":0.0}
+
+category must be exactly one of: "Catering Equipment" | "Catering Vans & Trailers" | "Catering Businesses"
+
+type must match category:
+  Catering Equipment → "Refrigeration" | "Warewashing & Sinks" | "Canopies & Extraction" | "Cooking Equipment" | "Coffee & Bar Equipment"
+  Catering Vans & Trailers → "Mobile Catering Units"
+  Catering Businesses → "Hospitality Business"
+
+equipment_type must match type:
+  Refrigeration → "Commercial Fridges" | "Commercial Freezers" | "Prep / Counter Refrigerators" | "Bottle Coolers" | "Ice Machines" | "Cold Rooms"
+  Warewashing & Sinks → "Dishwashers" | "Glasswashers" | "Pass-Through Dishwashers" | "Sinks & Basins"
+  Canopies & Extraction → "Canopies" | "Ductwork & Fans" | "Filters & Odour Control"
+  Cooking Equipment → "Fryers" | "Ovens & Combi Ovens" | "Grills & Chargrills" | "Ranges & Hobs" | "Microwaves" | "Kebab / Doner Machines"
+  Coffee & Bar Equipment → "Coffee Machines" | "Coffee Grinders" | "Water Boilers & Dispensers"
+  Mobile Catering Units or Hospitality Business → ""
+
+Rules:
+- expected_height_mm, expected_width_mm, expected_depth_mm: manufacturer's external dimensions in mm for this exact model. null if unsure.
+- expected_weight_kg: manufacturer's net weight in kg for this exact model. null if unsure.
+- id_confidence: 0.0–1.0. Use 0.9+ when brand AND model are clearly readable and you are certain about the type. Use 0.5–0.7 for partial plates. Use below 0.5 when genuinely unsure.
+- Do NOT guess dimensions or weight — null is correct when uncertain.
+- Refrigerant R290, R600a, R134a, R404a, R452a → strong signal for Refrigeration.
+- A prep/counter fridge has a compressor under the counter and a prep surface on top.
+- Do not return a category/type/equipment_type outside the exact strings listed above.`
+
+  const geminiModel = process.env.AI_VISION_MODEL || "gemini-2.5-flash"
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-goog-api-key": apiKey },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          generationConfig: { response_mime_type: "application/json", temperature: 0.0 },
+        }),
+      }
+    )
+    if (!response.ok) return null
+    const data = await response.json()
+    const text: unknown = data?.candidates?.[0]?.content?.parts?.[0]?.text
+    if (typeof text !== "string" || !text) return null
+    const trimmed = text.trim()
+    const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i)
+    const parsed = JSON.parse(fenced?.[1] ?? trimmed) as Record<string, unknown>
+    const toNum = (v: unknown) => (typeof v === "number" ? v : null)
+    const toStr = (v: unknown) => (typeof v === "string" ? v.trim() : "")
+    return {
+      product_name: toStr(parsed.product_name),
+      category: toStr(parsed.category),
+      type: toStr(parsed.type),
+      equipment_type: toStr(parsed.equipment_type),
+      expected_height_mm: toNum(parsed.expected_height_mm),
+      expected_width_mm: toNum(parsed.expected_width_mm),
+      expected_depth_mm: toNum(parsed.expected_depth_mm),
+      expected_weight_kg: toNum(parsed.expected_weight_kg),
+      id_confidence: typeof parsed.id_confidence === "number" ? Math.min(1, Math.max(0, parsed.id_confidence)) : 0,
+    }
+  } catch {
+    return null
+  }
+}
+
 type GeminiSpecEstimate = {
   weight_kg: number | null
   height_cm: number | null

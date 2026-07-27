@@ -19,6 +19,8 @@ type BlogPostInsert = {
   linkedin_post: string | null
   x_post: string | null
   instagram_caption: string | null
+  featured_image_url: string | null
+  image_alt: string | null
   status: string
   created_at: string
   updated_at: string
@@ -59,6 +61,8 @@ type BlogCreateRequest = {
   linkedinPost?: unknown
   xPost?: unknown
   instagramCaption?: unknown
+  featuredImageUrl?: unknown
+  imageAlt?: unknown
   status?: unknown
 }
 
@@ -173,6 +177,8 @@ export async function POST(request: Request) {
       linkedin_post: cleanOptionalString(body.linkedinPost),
       x_post: cleanOptionalString(body.xPost),
       instagram_caption: cleanOptionalString(body.instagramCaption),
+      featured_image_url: safeHttpUrl(body.featuredImageUrl),
+      image_alt: cleanOptionalString(body.imageAlt),
       status: "published",
       created_at: now,
       updated_at: now,

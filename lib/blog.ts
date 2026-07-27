@@ -16,6 +16,8 @@ export type BlogPost = {
   linkedin_post: string | null
   x_post: string | null
   instagram_caption: string | null
+  featured_image_url: string | null
+  image_alt: string | null
   status: string
   created_at: string
   updated_at: string
