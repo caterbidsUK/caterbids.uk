@@ -219,7 +219,17 @@ function BlogCard({ post }: { post: BlogPost }) {
 
   return (
     <article className="group flex min-h-[24rem] flex-col overflow-hidden rounded-[1.75rem] border border-[#3B628F]/40 bg-[linear-gradient(180deg,#082D50,#062747)] shadow-[0_22px_80px_rgba(0,0,0,0.24)] transition hover:-translate-y-1 hover:border-[#FF6B00]/55">
-      <div className="h-2 bg-[#FF6B00]" />
+      {post.featured_image_url ? (
+        <Image
+          src={post.featured_image_url}
+          alt={post.image_alt || post.title}
+          width={600}
+          height={338}
+          className="h-48 w-full object-cover"
+        />
+      ) : (
+        <div className="h-2 bg-[#FF6B00]" />
+      )}
       <div className="flex flex-1 flex-col p-6">
         <div className="flex items-start justify-between gap-3">
           <span className="inline-flex items-center gap-2 rounded-full border border-[#FF6B00]/35 bg-[#FF6B00]/12 px-3 py-2 text-[0.7rem] font-black uppercase tracking-[0.12em] text-[#FFB37A]">

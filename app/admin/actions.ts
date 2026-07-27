@@ -737,9 +737,14 @@ export async function createBlogPost(
   const keywordsRaw = formString(formData, "target_keywords")
   const body = formString(formData, "body")
   const status = formString(formData, "status") === "published" ? "published" : "draft"
+  const featuredImageUrl = formString(formData, "featured_image_url") || null
+  const imageAlt = formString(formData, "image_alt") || null
 
   if (!title) return { error: "Title is required." }
   if (!body) return { error: "Article body is required." }
+  if (status === "published" && (!featuredImageUrl || !imageAlt)) {
+    return { error: "A featured image and alt text are required to publish." }
+  }
 
   const slug = normaliseBlogSlug(rawSlug || title)
 
@@ -762,6 +767,8 @@ export async function createBlogPost(
     target_keywords: targetKeywords,
     article_html: articleHtml,
     article_markdown: body,
+    featured_image_url: featuredImageUrl,
+    image_alt: imageAlt,
     image_prompt: null,
     cta: null,
     source_title: null,
@@ -810,8 +817,13 @@ export async function updateBlogPost(
   const keywordsRaw = formString(formData, "target_keywords")
   const body = formString(formData, "body")
   const status = formString(formData, "status") === "published" ? "published" : "draft"
+  const featuredImageUrl = formString(formData, "featured_image_url") || null
+  const imageAlt = formString(formData, "image_alt") || null
 
   if (!title) return { error: "Title is required." }
+  if (status === "published" && (!featuredImageUrl || !imageAlt)) {
+    return { error: "A featured image and alt text are required to publish." }
+  }
 
   const targetKeywords = keywordsRaw
     ? keywordsRaw.split(",").map((k) => k.trim()).filter(Boolean)
@@ -848,6 +860,8 @@ export async function updateBlogPost(
     target_keywords: targetKeywords,
     article_html: articleHtml,
     article_markdown: articleMarkdown,
+    featured_image_url: featuredImageUrl,
+    image_alt: imageAlt,
     status,
     updated_at: now,
     published_at: publishedAt,

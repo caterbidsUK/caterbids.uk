@@ -2,6 +2,15 @@ import { withSentryConfig } from "@sentry/nextjs";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "sbwsmaxyrkpvrwzddznh.supabase.co",
+        pathname: "/storage/v1/object/public/**",
+      },
+    ],
+  },
   async redirects() {
     return [
       // 8 near-identical "buying and selling" duplicates → canonical

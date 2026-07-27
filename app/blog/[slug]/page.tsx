@@ -186,7 +186,7 @@ export async function generateMetadata({ params }: BlogPostPageProps): Promise<M
       type: "article",
       publishedTime: post.published_at || post.created_at,
       section: post.category,
-      images: ["/images/caterbids-hero-showroom.png"],
+      images: [post.featured_image_url || "/images/caterbids-hero-showroom.png"],
     },
   }
 }
@@ -220,7 +220,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
         url: "https://www.caterbids.uk/brand/caterbids-logo.png",
       },
     },
-    image: "https://www.caterbids.uk/images/caterbids-hero-showroom.png",
+    image: post.featured_image_url ?? "https://www.caterbids.uk/images/caterbids-hero-showroom.png",
     mainEntityOfPage: postUrl,
   }
 
