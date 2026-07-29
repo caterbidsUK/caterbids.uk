@@ -266,7 +266,7 @@ export default async function AdminPage({
     safeData<AdminBlogPost>(
       admin
         .from("blog_posts" as any)
-        .select("id,title,slug,category,status,created_at,updated_at,published_at,meta_title,meta_description,target_keywords,article_markdown")
+        .select("id,title,slug,category,status,created_at,updated_at,published_at,meta_title,meta_description,target_keywords,article_markdown,featured_image_url,image_alt")
         .order("created_at", { ascending: false })
         .limit(80),
       "blog posts"
