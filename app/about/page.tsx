@@ -1,5 +1,12 @@
+import type { Metadata } from "next"
 import Link from "next/link"
 import SiteFooter from "@/components/SiteFooter"
+
+export const metadata: Metadata = {
+  title: "About CaterBids UK | Zero-Fee Catering Equipment Marketplace",
+  description:
+    "CaterBids UK is a free marketplace for buying and selling commercial catering equipment, vans and hospitality assets across the UK.",
+}
 
 export default function AboutPage() {
   return (

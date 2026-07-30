@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import Link from "next/link"
 import SiteFooter from "@/components/SiteFooter"
 import {
@@ -11,6 +12,12 @@ import {
   TriangleAlert,
   ShieldCheck,
 } from "lucide-react"
+
+export const metadata: Metadata = {
+  title: "Delivery & Pallet Options for Catering Equipment | CaterBids UK",
+  description:
+    "How pallet delivery works for commercial catering equipment on CaterBids UK — pallet sizes, seller prep, tail-lift access and inspecting on arrival.",
+}
 
 function SectionHeading({ icon, label, title }: { icon: React.ReactNode; label: string; title: string }) {
   return (

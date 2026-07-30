@@ -1,5 +1,12 @@
+import type { Metadata } from "next"
 import Link from "next/link"
 import SiteFooter from "@/components/SiteFooter"
+
+export const metadata: Metadata = {
+  title: "How It Works — Buy & Sell Catering Equipment Free | CaterBids UK",
+  description:
+    "Search used catering equipment listings, save favourites and list your own kit for free — CaterBids UK brings buyers and sellers together in one place.",
+}
 
 export default function HowItWorksPage() {
   return (

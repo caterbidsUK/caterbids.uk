@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import Link from "next/link"
 import SiteFooter from "@/components/SiteFooter"
 import {
@@ -11,6 +12,12 @@ import {
   ClipboardList,
   CheckCircle2,
 } from "lucide-react"
+
+export const metadata: Metadata = {
+  title: "Buyer Safety Guide | Buy Used Catering Equipment Safely | CaterBids UK",
+  description:
+    "Know your rights before you buy — CaterBids UK's buyer safety guide covers seller checks, equipment inspection, consumer law and what to do if things go wrong.",
+}
 
 function SectionHeading({ icon, label, title }: { icon: React.ReactNode; label: string; title: string }) {
   return (
