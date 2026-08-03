@@ -25,6 +25,7 @@ import {
   Zap,
 } from "lucide-react"
 import { BlogFooter, BlogHeader } from "@/components/BlogChrome"
+import SocialShareButtons from "@/components/social/SocialShareButtons"
 import {
   blogPostUrl,
   formatBlogDate,
@@ -274,6 +275,13 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
                 </section>
               )}
 
+              <SocialShareButtons
+                title={post.title}
+                url={postUrl}
+                heading="Share this article"
+                description="Help fellow caterers find useful content — share this article with your network."
+              />
+
               <BottomCta />
             </div>
 
@@ -289,13 +297,6 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
 }
 
 function ArticleHero({ post, excerpt, postUrl }: { post: BlogPost; excerpt: string; postUrl: string }) {
-  const shareLinks = [
-    ["Facebook", `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(postUrl)}`],
-    ["X", `https://twitter.com/intent/tweet?url=${encodeURIComponent(postUrl)}&text=${encodeURIComponent(post.title)}`],
-    ["LinkedIn", `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(postUrl)}`],
-    ["Email", `mailto:?subject=${encodeURIComponent(post.title)}&body=${encodeURIComponent(postUrl)}`],
-  ] as const
-
   return (
     <header className="relative overflow-hidden border-b border-white/10 bg-[linear-gradient(135deg,#001B36,#002E5D_58%,#001326)] px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
       <div className="absolute inset-y-0 right-0 hidden w-[46%] opacity-40 lg:block">
@@ -362,24 +363,8 @@ function ArticleHero({ post, excerpt, postUrl }: { post: BlogPost; excerpt: stri
                 <p className="text-xs font-semibold text-[#A7B5C9]">Catering Equipment Marketplace Specialists</p>
               </div>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {shareLinks.map(([label, href]) => (
-                <a
-                  key={label}
-                  href={href}
-                  target={label === "Email" ? undefined : "_blank"}
-                  rel={label === "Email" ? undefined : "noopener noreferrer"}
-                  className="rounded-xl border border-white/12 bg-white/8 px-3 py-2 text-xs font-black text-white/76 transition hover:border-[#FF6B00]/60 hover:text-[#FFB37A]"
-                >
-                  {label}
-                </a>
-              ))}
-              <button
-                type="button"
-                className="rounded-xl border border-white/12 bg-white/8 px-3 py-2 text-xs font-black text-white/76 transition hover:border-[#FF6B00]/60 hover:text-[#FFB37A]"
-              >
-                Copy link
-              </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <SocialShareButtons title={post.title} url={postUrl} inline />
               <button
                 type="button"
                 className="inline-flex items-center gap-1 rounded-xl border border-white/12 bg-white/8 px-3 py-2 text-xs font-black text-white/76 transition hover:border-[#FF6B00]/60 hover:text-[#FFB37A]"
