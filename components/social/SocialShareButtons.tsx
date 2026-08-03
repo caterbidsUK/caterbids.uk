@@ -1,5 +1,6 @@
 "use client"
 
+// share buttons component
 import { Check, Copy, Mail } from "lucide-react"
 import { useMemo, useState } from "react"
 
