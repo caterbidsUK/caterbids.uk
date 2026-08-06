@@ -120,6 +120,20 @@ function Pill({ icon, label, brandColor, onClick, href, external = true }: PillP
   )
 }
 
+// Cloudflare's Email Address Obfuscation rewrites mailto: hrefs to /cdn-cgi/l/email-protection.
+// Wrapping in <!--email_off--> / <!--/email_off--> suppresses it for the enclosed element.
+// React has no first-class HTML comment API, so we emit them via dangerouslySetInnerHTML on
+// empty spans — Cloudflare's HTML stream processor still finds the markers inside the spans.
+function CfEmailOff({ children }: { children: React.ReactNode }) {
+  return (
+    <>
+      <span dangerouslySetInnerHTML={{ __html: "<!--email_off-->" }} />
+      {children}
+      <span dangerouslySetInnerHTML={{ __html: "<!--/email_off-->" }} />
+    </>
+  )
+}
+
 export default function SocialShareButtons({
   listingId,
   title,
@@ -223,14 +237,16 @@ export default function SocialShareButtons({
         href={`https://www.linkedin.com/sharing/share-offsite/?url=${encode(shareUrl)}`}
         onClick={() => track("linkedin")}
       />
-      <Pill
-        icon={<Mail size={22} />}
-        label="Email"
-        brandColor="#FF6B00"
-        href={`mailto:?subject=${encode(title)}&body=${encode(`${shareText}\n\n${shareUrl}`)}`}
-        external={false}
-        onClick={() => track("email")}
-      />
+      <CfEmailOff>
+        <Pill
+          icon={<Mail size={22} />}
+          label="Email"
+          brandColor="#FF6B00"
+          href={`mailto:?subject=${encode(title)}&body=${encode(`${shareText}\n\n${shareUrl}`)}`}
+          external={false}
+          onClick={() => track("email")}
+        />
+      </CfEmailOff>
     </div>
   )
 
