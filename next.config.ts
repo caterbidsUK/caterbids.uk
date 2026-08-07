@@ -60,6 +60,12 @@ const nextConfig: NextConfig = {
         destination: "/blog/commercial-combi-oven-valuation-guide",
         permanent: true,
       },
+      // slug contained an accidental admin note; corrected in DB, old URL submitted to GSC
+      {
+        source: "/blog/commercial-food-preparation-equipment-guide-already-live-published-28-july-2026",
+        destination: "/blog/commercial-food-preparation-equipment-guide",
+        permanent: true,
+      },
     ]
   },
 };
