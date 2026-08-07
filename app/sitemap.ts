@@ -1,26 +1,13 @@
 import type { MetadataRoute } from "next"
+import { CATERING_CATEGORIES, MARKETPLACE_CATEGORIES } from "@/lib/categories"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://caterbids.uk"
 
-const categorySlugs = [
-  "catering-equipment",
-  "catering-vans-trailers",
-  "catering-businesses",
-  "cooking-equipment",
-  "refrigeration",
-  "food-preparation",
-  "warewashing-sinks",
-  "coffee-bar-equipment",
-  "display-serving",
-  "stainless-steel-storage",
-  "parts-spares",
-]
-
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticPages: MetadataRoute.Sitemap = [
     { url: baseUrl,                             changeFrequency: "daily",   priority: 1.0 },
-    { url: `${baseUrl}/search`,                 changeFrequency: "hourly",  priority: 0.9 },
+    { url: `${baseUrl}/search`,                 changeFrequency: "hourly",  priority: 0.3 },
     { url: `${baseUrl}/blog`,                   changeFrequency: "weekly",  priority: 0.8 },
     { url: `${baseUrl}/how-it-works`,           changeFrequency: "monthly", priority: 0.7 },
     { url: `${baseUrl}/pricing`,                changeFrequency: "monthly", priority: 0.7 },
@@ -38,33 +25,40 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${baseUrl}/legal/prohibited-items`, changeFrequency: "yearly",  priority: 0.3 },
   ]
 
-  const categoryPages: MetadataRoute.Sitemap = categorySlugs.map((slug) => ({
-    url: `${baseUrl}/category/${slug}`,
+  const categoryPages: MetadataRoute.Sitemap = [
+    ...MARKETPLACE_CATEGORIES,
+    ...CATERING_CATEGORIES,
+  ].map((cat) => ({
+    url: `${baseUrl}/category/${cat.slug}`,
     changeFrequency: "daily" as const,
-    priority: 0.8,
+    priority: 0.6,
   }))
 
   const admin = createAdminClient()
 
-  // Blog posts — published only
+  // Blog posts — published only, excluding test-category posts
   let blogEntries: MetadataRoute.Sitemap = []
   try {
     const { data, error } = await (admin.from("blog_posts" as any) as any)
-      .select("slug, updated_at, created_at")
+      .select("slug, updated_at, created_at, category")
       .eq("status", "published")
       .order("created_at", { ascending: false })
     if (error) throw error
-    blogEntries = (data as Array<{ slug: string; updated_at: string | null; created_at: string }>).map((post) => ({
-      url: `${baseUrl}/blog/${post.slug}`,
-      lastModified: post.updated_at || post.created_at,
-      changeFrequency: "monthly" as const,
-      priority: 0.7,
-    }))
+    blogEntries = (
+      data as Array<{ slug: string; updated_at: string | null; created_at: string; category: string | null }>
+    )
+      .filter((post) => post.category?.toLowerCase() !== "test")
+      .map((post) => ({
+        url: `${baseUrl}/blog/${post.slug}`,
+        lastModified: post.updated_at || post.created_at,
+        changeFrequency: "monthly" as const,
+        priority: 0.7,
+      }))
   } catch (err) {
     console.error("sitemap: blog_posts query failed:", err)
   }
 
-  // Listings — live status, excluding test-profile sellers
+  // Listings — live status only, excluding test-profile sellers
   let listingEntries: MetadataRoute.Sitemap = []
   try {
     const { data: testProfiles } = await admin
@@ -86,7 +80,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       url: `${baseUrl}/listing?id=${encodeURIComponent(listing.id)}`,
       lastModified: listing.updated_at ?? undefined,
       changeFrequency: "weekly" as const,
-      priority: 0.7,
+      priority: 0.8,
     }))
   } catch (err) {
     console.error("sitemap: listings query failed:", err)
