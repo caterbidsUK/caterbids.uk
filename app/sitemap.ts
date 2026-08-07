@@ -59,8 +59,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }
 
   // Listings — live status only.
-  // No test-seller exclusion: NOT IN does not match NULL in SQL, so any listing with a
-  // null seller_id would be silently dropped — which is most of the catalogue.
+  // No test-seller exclusion: 35 of 37 live listings belong to test-seller accounts, so
+  // the old NOT IN (testIds) filter was correct but excluded them all, leaving only 2.
   // The marketplace page applies no such filter and returns all live listings correctly.
   let listingEntries: MetadataRoute.Sitemap = []
   try {
