@@ -58,23 +58,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     console.error("sitemap: blog_posts query failed:", err)
   }
 
-  // Listings — live status only, excluding test-profile sellers
+  // Listings — live status only.
+  // No test-seller exclusion: NOT IN does not match NULL in SQL, so any listing with a
+  // null seller_id would be silently dropped — which is most of the catalogue.
+  // The marketplace page applies no such filter and returns all live listings correctly.
   let listingEntries: MetadataRoute.Sitemap = []
   try {
-    const { data: testProfiles } = await admin
-      .from("profiles")
-      .select("id")
-      .eq("is_test", true)
-    const testIds = ((testProfiles || []) as Array<{ id: string }>).map((p) => p.id)
-
-    let query = (admin.from("listings" as any) as any)
+    const { data, error } = await (admin.from("listings" as any) as any)
       .select("id, updated_at")
       .eq("status", "live")
-    if (testIds.length > 0) {
-      query = query.not("seller_id", "in", `(${testIds.join(",")})`)
-    }
-
-    const { data, error } = await query
     if (error) throw error
     listingEntries = (data as Array<{ id: string; updated_at: string | null }>).map((listing) => ({
       url: `${baseUrl}/listing?id=${encodeURIComponent(listing.id)}`,
