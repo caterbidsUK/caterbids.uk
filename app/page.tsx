@@ -67,7 +67,7 @@ type StepCard = {
   icon: ReactNode
 }
 
-const searchAllHref = "/search?q=all&category=All%20Categories&location=All%20UK"
+const searchAllHref = "/marketplace"
 const sellHref = "/post-listing/start"
 
 const heroFeatureCards = [
