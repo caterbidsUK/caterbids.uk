@@ -1796,7 +1796,7 @@ function ListingContent() {
 
             {/* Desktop nav — hidden on mobile (bottom nav handles mobile) */}
             <nav className="ml-auto hidden items-center gap-5 text-sm font-bold text-white/80 lg:flex" aria-label="Primary">
-              <Link href="/search" className="transition hover:text-[#FF6B00]">Marketplace</Link>
+              <Link href="/marketplace" className="transition hover:text-[#FF6B00]">Marketplace</Link>
               <Link href="/post-listing/start" className="transition hover:text-[#FF6B00]">Sell</Link>
               <Link href={currentUserId ? "/account" : "/login"} className="transition hover:text-[#FF6B00]">Account</Link>
               <Link

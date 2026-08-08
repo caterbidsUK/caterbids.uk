@@ -105,7 +105,7 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
             </p>
             <div className="mt-9 flex flex-col gap-3 sm:flex-row">
               <Link
-                href="/search?q=all&category=All%20Categories&location=All%20UK"
+                href="/marketplace"
                 className="inline-flex min-h-14 items-center justify-center gap-3 rounded-2xl bg-[#FF6B00] px-6 text-base font-black text-white shadow-[0_22px_54px_rgba(255,107,0,0.3)] transition hover:brightness-110 focus:outline-none focus:ring-4 focus:ring-[#FF6B00]/30"
               >
                 Browse the Marketplace

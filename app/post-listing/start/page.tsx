@@ -5,7 +5,7 @@ import SiteLogo from "@/components/SiteLogo"
 import SiteFooter from "@/components/SiteFooter"
 import { createClient } from "@/lib/supabase/server"
 
-const searchAllHref = "/search?q=all&category=All%20Categories&location=All%20UK"
+const searchAllHref = "/marketplace"
 
 const CATEGORIES = [
   {

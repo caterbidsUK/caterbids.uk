@@ -310,7 +310,7 @@ function HeroSection({ accountHref, accountLabel, freeRemaining, freeCap }: { ac
               <ArrowRight className="h-7 w-7 transition group-hover:translate-x-1" strokeWidth={2.2} />
             </Link>
             <Link
-              href="/search?q=all&category=All%20Categories&location=All%20UK"
+              href="/marketplace"
               className="group flex min-h-16 items-center justify-center gap-4 rounded-[1.7rem] border border-white/38 bg-white/7 px-8 text-xl font-black text-white shadow-[0_20px_65px_rgba(0,0,0,0.26)] backdrop-blur-md transition hover:border-[#FF6B00]/80 hover:bg-white/12 focus:outline-none focus:ring-4 focus:ring-white/20 sm:min-w-72"
             >
               <Search className="h-8 w-8" strokeWidth={2.1} />
@@ -479,7 +479,7 @@ function CategorySection({ counts }: { counts: Record<CategoryKey, number | null
       title: "Catering Equipment",
       description: "Ovens, fridges, fryers and more",
       image: "/home-equipment-card.png",
-      href: "/search?q=all&category=Catering%20Equipment&location=All%20UK",
+      href: "/category/catering-equipment",
       fallbackLabel: "Browse equipment",
       icon: <Utensils className="h-8 w-8" strokeWidth={1.8} />,
     },
@@ -488,7 +488,7 @@ function CategorySection({ counts }: { counts: Record<CategoryKey, number | null
       title: "Vans & Trailers",
       description: "Catering vans, trailers and vehicles",
       image: "/home-van-card.png",
-      href: "/search?q=all&category=Catering%20Vans%20%26%20Trailers&location=All%20UK",
+      href: "/category/catering-vans-trailers",
       fallbackLabel: "Browse vans & trailers",
       icon: <Truck className="h-8 w-8" strokeWidth={1.8} />,
     },
@@ -497,7 +497,7 @@ function CategorySection({ counts }: { counts: Record<CategoryKey, number | null
       title: "Hospitality Businesses",
       description: "Cafes, restaurants and takeaways",
       image: "/home-business-card.png",
-      href: "/search?q=all&category=Catering%20Businesses&location=All%20UK",
+      href: "/category/catering-businesses",
       fallbackLabel: "Browse businesses",
       icon: <Store className="h-8 w-8" strokeWidth={1.8} />,
     },
