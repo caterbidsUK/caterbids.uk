@@ -821,6 +821,7 @@ export async function updateBlogPost(
   const status = formString(formData, "status") === "published" ? "published" : "draft"
   const featuredImageUrl = formString(formData, "featured_image_url") || null
   const imageAlt = formString(formData, "image_alt") || null
+  const rawSlug = formString(formData, "slug")
   const proTip = formString(formData, "pro_tip") || null
 
   if (!title) return { error: "Title is required." }
@@ -836,6 +837,14 @@ export async function updateBlogPost(
   const { data: current } = await (admin.from("blog_posts" as any) as any)
     .select("slug,published_at,article_html").eq("id", postId).maybeSingle()
 
+  const oldSlug = current?.slug || ""
+  const newSlug = normaliseBlogSlug(rawSlug || title)
+  if (newSlug !== oldSlug) {
+    const { data: clash } = await (admin.from("blog_posts" as any) as any)
+      .select("id").eq("slug", newSlug).neq("id", postId).maybeSingle()
+    if (clash) return { error: "That slug is already in use by another post." }
+  }
+
   // If body is empty (e.g. AI-generated post with no stored markdown),
   // preserve the existing article_html rather than wiping it.
   let articleHtml: string
@@ -850,13 +859,14 @@ export async function updateBlogPost(
     articleMarkdown = null
   }
 
-  const slug = current?.slug || ""
+  const slug = newSlug
   const publishedAt = status === "published"
     ? (current?.published_at || now)
     : null
 
   const { error } = await (admin.from("blog_posts" as any) as any).update({
     title,
+    slug,
     category,
     meta_title: metaTitle,
     meta_description: metaDescription || null,
@@ -884,6 +894,7 @@ export async function updateBlogPost(
 
   revalidatePath("/admin")
   revalidatePath("/blog")
-  if (slug) revalidatePath(`/blog/${slug}`)
+  if (oldSlug) revalidatePath(`/blog/${oldSlug}`)
+  if (slug && slug !== oldSlug) revalidatePath(`/blog/${slug}`)
   return { success: true, slug }
 }
