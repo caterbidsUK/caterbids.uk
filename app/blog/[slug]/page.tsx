@@ -251,7 +251,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
         <section className="px-4 py-10 sm:px-6 lg:px-8">
           <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[minmax(0,1fr)_23rem]">
             <div className="min-w-0">
-              <ProTipCallout />
+              <ProTipCallout text={post.pro_tip} />
 
               <section
                 className="mt-6 rounded-[2rem] border border-[#D6E5F7] bg-[#F8FBFF] p-6 text-[#001A35] shadow-[0_24px_80px_rgba(0,0,0,0.2)] sm:p-9 [&_a]:font-black [&_a]:text-[#FF6B00] [&_blockquote]:my-7 [&_blockquote]:rounded-2xl [&_blockquote]:border-l-4 [&_blockquote]:border-[#FF6B00] [&_blockquote]:bg-[#FFF3EA] [&_blockquote]:px-5 [&_blockquote]:py-4 [&_blockquote]:font-semibold [&_code]:rounded-lg [&_code]:bg-slate-100 [&_code]:px-1.5 [&_h2]:relative [&_h2]:mt-10 [&_h2]:border-l-4 [&_h2]:border-[#FF6B00] [&_h2]:pl-4 [&_h2]:text-3xl [&_h2]:font-black [&_h2]:tracking-[-0.035em] [&_h3]:mt-8 [&_h3]:text-2xl [&_h3]:font-black [&_img]:my-6 [&_img]:rounded-2xl [&_img]:border [&_img]:border-slate-200 [&_li]:my-2 [&_ol]:my-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:my-5 [&_p]:text-base [&_p]:font-semibold [&_p]:leading-8 [&_pre]:overflow-x-auto [&_pre]:rounded-2xl [&_pre]:bg-slate-950 [&_pre]:p-4 [&_pre]:text-white [&_strong]:font-black [&_table]:my-7 [&_table]:w-full [&_table]:overflow-hidden [&_table]:rounded-2xl [&_table]:border [&_table]:border-slate-200 [&_td]:border-t [&_td]:border-slate-200 [&_td]:p-3 [&_th]:bg-[#EAF3FF] [&_th]:p-3 [&_th]:text-left [&_ul]:my-6 [&_ul]:list-disc [&_ul]:pl-6 [&_ul_li::marker]:text-[#FF6B00]"
@@ -525,17 +525,15 @@ function SidebarListingsBlock({ title, listings }: { title: string; listings: Si
   )
 }
 
-function ProTipCallout() {
+function ProTipCallout({ text }: { text: string | null | undefined }) {
+  if (!text?.trim()) return null
   return (
     <section className="rounded-[1.75rem] border border-[#FF6B00]/28 bg-[#FFF3EA] p-5 text-[#001A35] shadow-2xl">
       <span className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-[#C45000]">
         <Sparkles className="h-4 w-4" aria-hidden="true" />
         Pro Tip
       </span>
-      <p className="mt-2 text-base font-bold leading-relaxed">
-        Include clear photos of the equipment, the manufacturer data plate and any service records. Detailed listings
-        help serious buyers make faster decisions.
-      </p>
+      <p className="mt-2 text-base font-bold leading-relaxed">{text}</p>
     </section>
   )
 }

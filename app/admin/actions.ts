@@ -739,6 +739,7 @@ export async function createBlogPost(
   const status = formString(formData, "status") === "published" ? "published" : "draft"
   const featuredImageUrl = formString(formData, "featured_image_url") || null
   const imageAlt = formString(formData, "image_alt") || null
+  const proTip = formString(formData, "pro_tip") || null
 
   if (!title) return { error: "Title is required." }
   if (!body) return { error: "Article body is required." }
@@ -769,6 +770,7 @@ export async function createBlogPost(
     article_markdown: body,
     featured_image_url: featuredImageUrl,
     image_alt: imageAlt,
+    pro_tip: proTip,
     image_prompt: null,
     cta: null,
     source_title: null,
@@ -819,6 +821,7 @@ export async function updateBlogPost(
   const status = formString(formData, "status") === "published" ? "published" : "draft"
   const featuredImageUrl = formString(formData, "featured_image_url") || null
   const imageAlt = formString(formData, "image_alt") || null
+  const proTip = formString(formData, "pro_tip") || null
 
   if (!title) return { error: "Title is required." }
   if (status === "published" && (!featuredImageUrl || !imageAlt)) {
@@ -862,6 +865,7 @@ export async function updateBlogPost(
     article_markdown: articleMarkdown,
     featured_image_url: featuredImageUrl,
     image_alt: imageAlt,
+    pro_tip: proTip,
     status,
     updated_at: now,
     published_at: publishedAt,

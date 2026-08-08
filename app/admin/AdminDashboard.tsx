@@ -222,6 +222,7 @@ export type AdminBlogPost = {
   article_markdown?: string | null
   featured_image_url?: string | null
   image_alt?: string | null
+  pro_tip?: string | null
 }
 
 type AdminDashboardProps = {
@@ -1674,6 +1675,7 @@ function BlogPostForm({
   const [slug, setSlug] = useState(post?.slug || "")
   const [slugTouched, setSlugTouched] = useState(isEdit)
   const [imageUrl, setImageUrl] = useState<string | null>(post?.featured_image_url || null)
+  const [proTip, setProTip] = useState(post?.pro_tip || "")
 
   useEffect(() => {
     if (!slugTouched) setSlug(slugify(title))
@@ -1770,6 +1772,23 @@ function BlogPostForm({
               rows={2}
               className="w-full rounded-2xl border border-white/10 bg-white/8 px-4 py-3 text-sm font-semibold text-white placeholder-white/30 focus:border-[#FF6B00]/60 focus:outline-none"
               placeholder="140–160 character meta description"
+            />
+          </div>
+
+          <div>
+            <div className="mb-1.5 flex items-baseline justify-between">
+              <label className="text-xs font-black uppercase tracking-widest text-white/50">Pro Tip <span className="font-medium normal-case tracking-normal text-white/40">(optional)</span></label>
+              <span className={`text-xs font-semibold tabular-nums ${proTip.length > 200 ? "text-red-400" : proTip.length > 160 ? "text-amber-400" : "text-white/30"}`}>
+                {proTip.length}/200
+              </span>
+            </div>
+            <textarea
+              name="pro_tip"
+              value={proTip}
+              onChange={(e) => setProTip(e.target.value)}
+              rows={3}
+              className="w-full rounded-2xl border border-white/10 bg-white/8 px-4 py-3 text-sm font-semibold text-white placeholder-white/30 focus:border-[#FF6B00]/60 focus:outline-none"
+              placeholder="A short, topic-specific tip shown above the article body. Leave blank to hide the box."
             />
           </div>
 
