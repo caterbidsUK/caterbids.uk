@@ -620,7 +620,7 @@ function BottomCta() {
         <Link href="/post-listing/start" className="inline-flex min-h-14 items-center justify-center rounded-2xl bg-[#FF6B00] px-5 text-sm font-black text-white transition hover:brightness-110">
           Start Your Free Listing
         </Link>
-        <Link href="/search?q=all&category=All%20Categories&location=All%20UK" className="inline-flex min-h-14 items-center justify-center rounded-2xl border border-white/18 bg-white/8 px-5 text-sm font-black text-white transition hover:border-[#FF6B00]/55">
+        <Link href="/marketplace" className="inline-flex min-h-14 items-center justify-center rounded-2xl border border-white/18 bg-white/8 px-5 text-sm font-black text-white transition hover:border-[#FF6B00]/55">
           Browse the Marketplace
         </Link>
         <Link href="/post-listing/start" className="inline-flex min-h-14 items-center justify-center rounded-2xl border border-white/18 bg-white/8 px-5 text-sm font-black text-white transition hover:border-[#FF6B00]/55">

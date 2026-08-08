@@ -5,10 +5,10 @@ const columns: { title: string; links: [string, string][] }[] = [
   {
     title: "Marketplace",
     links: [
-      ["Browse Equipment", "/search"],
+      ["Browse Equipment", "/marketplace"],
       ["Catering Equipment", "/category/catering-equipment"],
-      ["Vans & Trailers", "/search?q=all&category=Catering%20Vans%20%26%20Trailers"],
-      ["All Categories", "/search"],
+      ["Vans & Trailers", "/category/catering-vans-trailers"],
+      ["All Categories", "/marketplace"],
     ],
   },
   {

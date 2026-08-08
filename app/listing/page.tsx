@@ -26,8 +26,13 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
 
     if (!data) return fallback
 
-    const rawTitle = (data.title as string | null) ?? ""
-    const rawDesc = (data.description as string | null) ?? ""
+    // DB titles may contain HTML entities (e.g. &amp;) from legacy input paths.
+    // Next.js re-encodes metadata strings, so decode first to avoid double-encoding.
+    const decodeHtml = (s: string) =>
+      s.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#0?39;/g, "'")
+
+    const rawTitle = decodeHtml((data.title as string | null) ?? "")
+    const rawDesc = decodeHtml((data.description as string | null) ?? "")
 
     const suffix = " | CaterBids"
     const maxTitle = 60 - suffix.length // 48 chars for the listing title portion
