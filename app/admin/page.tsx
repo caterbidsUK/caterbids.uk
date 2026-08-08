@@ -23,30 +23,34 @@ type SearchParams = Record<string, string | string[] | undefined>
 
 const ADMIN_TABS = ["overview", "listings", "users", "orders", "blog", "verification", "settings", "audit"] as const
 
-async function safeCount(query: PromiseLike<any>, label: string) {
+async function safeCount(query: PromiseLike<any>, label: string, errors?: string[]) {
   try {
     const result = await query
     if (result.error) {
       console.warn(`Admin ${label} count failed:`, result.error.message)
+      errors?.push(`${label} count: ${result.error.message}`)
       return 0
     }
     return result.count || 0
   } catch (error) {
     console.warn(`Admin ${label} count unavailable:`, error)
+    errors?.push(`${label} count unavailable`)
     return 0
   }
 }
 
-async function safeData<T>(query: PromiseLike<any>, label: string) {
+async function safeData<T>(query: PromiseLike<any>, label: string, errors?: string[]) {
   try {
     const result = await query
     if (result.error) {
       console.warn(`Admin ${label} query failed:`, result.error.message)
+      errors?.push(`${label}: ${result.error.message}`)
       return [] as T[]
     }
     return (result.data || []) as T[]
   } catch (error) {
     console.warn(`Admin ${label} query unavailable:`, error)
+    errors?.push(`${label} unavailable`)
     return [] as T[]
   }
 }
@@ -144,6 +148,9 @@ export default async function AdminPage({
   const msgSenderFilter    = tf ? `sender_id.is.null,sender_id.not.in.(${tf})` : null
   const msgRecipFilter     = tf ? `recipient_id.is.null,recipient_id.not.in.(${tf})` : null
 
+  // Collect errors from all queries — surfaced in the admin UI as a red banner.
+  const queryErrors: string[] = []
+
   const [
     listingsTotal,
     liveListings,
@@ -170,17 +177,20 @@ export default async function AdminPage({
       listingUserFilter
         ? admin.from("listings").select("*", { count: "exact", head: true }).or(listingUserFilter)
         : admin.from("listings").select("*", { count: "exact", head: true }),
-      "listings"
+      "listings",
+      queryErrors
     ),
     safeCount(
       listingUserFilter
         ? admin.from("listings").select("*", { count: "exact", head: true }).eq("status", "live").or(listingUserFilter)
         : admin.from("listings").select("*", { count: "exact", head: true }).eq("status", "live"),
-      "live listings"
+      "live listings",
+      queryErrors
     ),
     safeCount(
       admin.from("profiles").select("*", { count: "exact", head: true }).eq("is_test", false),
-      "users"
+      "users",
+      queryErrors
     ),
     safeCount(
       admin
@@ -188,19 +198,22 @@ export default async function AdminPage({
         .select("*", { count: "exact", head: true })
         .eq("is_test", false)
         .or("verified.eq.true,email_verified.eq.true,is_email_verified.eq.true,verified_user_badge.eq.true"),
-      "verified users"
+      "verified users",
+      queryErrors
     ),
     safeCount(
       orderBuyerFilter
         ? admin.from("orders").select("*", { count: "exact", head: true }).or(orderBuyerFilter).or(orderSellerFilter!)
         : admin.from("orders").select("*", { count: "exact", head: true }),
-      "orders"
+      "orders",
+      queryErrors
     ),
     safeData<AdminListing>(
       listingUserFilter
         ? (admin.from("listings").select("*").or(listingUserFilter).order("created_at", { ascending: false }).limit(80) as any)
         : (admin.from("listings").select("*").order("created_at", { ascending: false }).limit(80) as any),
-      "listings"
+      "listings",
+      queryErrors
     ),
     safeData<AdminUser>(
       admin
@@ -208,13 +221,15 @@ export default async function AdminPage({
         .select("*")
         .order("created_at", { ascending: false })
         .limit(120) as any,
-      "users"
+      "users",
+      queryErrors
     ),
     safeData<AdminOrder>(
       orderBuyerFilter
         ? (admin.from("orders").select("*").or(orderBuyerFilter).or(orderSellerFilter!).order("created_at", { ascending: false }).limit(80) as any)
         : (admin.from("orders").select("*").order("created_at", { ascending: false }).limit(80) as any),
-      "orders"
+      "orders",
+      queryErrors
     ),
     safeData<AdminVerification>(
       admin
@@ -222,7 +237,8 @@ export default async function AdminPage({
         .select("*")
         .order("updated_at", { ascending: false })
         .limit(80),
-      "verification"
+      "verification",
+      queryErrors
     ),
     safeData<AdminSiteSetting>(
       admin
@@ -230,21 +246,24 @@ export default async function AdminPage({
         .select("*")
         .order("key", { ascending: true })
         .limit(100),
-      "site settings"
+      "site settings",
+      queryErrors
     ),
     safeData<AdminPaymentSettings>(
       admin
         .from("payment_settings" as never)
         .select("*")
         .limit(1),
-      "payment settings"
+      "payment settings",
+      queryErrors
     ),
     safeData<AdminSellerPlan>(
       admin
         .from("seller_plans" as never)
         .select("*")
         .order("price", { ascending: true }),
-      "seller plans"
+      "seller plans",
+      queryErrors
     ),
     safeData<AdminAuditLog>(
       admin
@@ -252,24 +271,29 @@ export default async function AdminPage({
         .select("*")
         .order("created_at", { ascending: false })
         .limit(50),
-      "audit logs"
+      "audit logs",
+      queryErrors
     ),
     safeCount(
       msgSenderFilter
         ? admin.from("messages").select("*", { count: "exact", head: true }).or(msgSenderFilter).or(msgRecipFilter!)
         : admin.from("messages").select("*", { count: "exact", head: true }),
-      "messages"
+      "messages",
+      queryErrors
     ),
-    safeCount(admin.from("equipment_spec_reports" as any).select("*", { count: "exact", head: true }), "equipment spec reports"),
-    safeCount(admin.from("trust_moderation_flags" as any).select("*", { count: "exact", head: true }), "trust reports"),
-    safeCount(admin.from("blog_posts" as any).select("*", { count: "exact", head: true }), "blog posts"),
+    safeCount(admin.from("equipment_spec_reports" as any).select("*", { count: "exact", head: true }), "equipment spec reports", queryErrors),
+    safeCount(admin.from("trust_moderation_flags" as any).select("*", { count: "exact", head: true }), "trust reports", queryErrors),
+    safeCount(admin.from("blog_posts" as any).select("*", { count: "exact", head: true }), "blog posts count", queryErrors),
+    // Use select("*") so this query survives a stale PostgREST schema cache after manual
+    // column additions (explicit column lists fail if PostgREST hasn't reloaded yet).
     safeData<AdminBlogPost>(
       admin
         .from("blog_posts" as any)
-        .select("id,title,slug,category,status,created_at,updated_at,published_at,meta_title,meta_description,target_keywords,article_markdown,featured_image_url,image_alt,pro_tip")
+        .select("*")
         .order("created_at", { ascending: false })
         .limit(80),
-      "blog posts"
+      "blog posts",
+      queryErrors
     ),
     getFoundingMemberCount(),
     safeData<AdminFoundingMember>(
@@ -279,7 +303,8 @@ export default async function AdminPage({
         .eq("plan_name", "Founding Trade Member")
         .eq("active", true)
         .order("created_at", { ascending: true }),
-      "founding members"
+      "founding members",
+      queryErrors
     ),
   ])
 
@@ -402,6 +427,7 @@ export default async function AdminPage({
       reportsTotal={reportsTotal}
       marketplaceLive={marketplaceLive}
       setupWarnings={setupWarnings}
+      queryErrors={queryErrors}
       listingFeatureControlsReady={listingFeatureControlsReady}
       listingUrgentControlsReady={listingUrgentControlsReady}
       filters={{

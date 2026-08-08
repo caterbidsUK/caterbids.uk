@@ -248,6 +248,7 @@ type AdminDashboardProps = {
   reportsTotal: number
   marketplaceLive: boolean
   setupWarnings: string[]
+  queryErrors: string[]
   listingFeatureControlsReady: boolean
   listingUrgentControlsReady: boolean
   filters: {
@@ -460,6 +461,7 @@ export default function AdminDashboard({
   reportsTotal,
   marketplaceLive,
   setupWarnings,
+  queryErrors,
   listingFeatureControlsReady,
   listingUrgentControlsReady,
   filters,
@@ -591,6 +593,20 @@ export default function AdminDashboard({
               <AdminControlCard label="Blog Posts" value={blogPosts.length.toLocaleString("en-GB")} helper="Published and draft posts" icon={<FileText className="h-5 w-5" />} href="/admin?tab=blog" />
               <AdminControlCard label="Marketplace" value={marketplaceLive ? "Live" : "Hidden"} helper={marketplaceLive ? "Public browsing enabled" : "Private setup mode"} icon={<Globe2 className="h-5 w-5" />} href="/marketplace" />
             </section>
+
+        {queryErrors.length > 0 && (
+          <section className="rounded-3xl border border-red-500/30 bg-red-500/12 p-4 text-sm font-bold text-red-100">
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-red-400">Data query errors — counts below may be wrong</p>
+            <div className="mt-2 space-y-1.5">
+              {queryErrors.map((err) => (
+                <p key={err} className="font-mono text-xs text-red-200/80">{err}</p>
+              ))}
+            </div>
+            <p className="mt-3 text-xs text-white/50">
+              Check server logs. If a column was recently added, run NOTIFY pgrst, &apos;reload schema&apos; in the Supabase SQL editor.
+            </p>
+          </section>
+        )}
 
         {setupWarnings.length > 0 && (
           <section className="rounded-3xl border border-amber-300/30 bg-amber-400/10 p-4 text-sm font-bold text-amber-50">
