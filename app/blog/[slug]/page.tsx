@@ -539,73 +539,18 @@ function ProTipCallout({ text }: { text: string | null | undefined }) {
 }
 
 function EnhancedArticleBlocks() {
-  const features = [
-    ["Verified Buyers", UserCheck],
-    ["Targeted Audience", Search],
-    ["UK-Wide Exposure", MapPin],
-    ["Fast Enquiries", MessageCircle],
-  ] as const
-
   return (
-    <div className="mt-6 space-y-6">
-      <section className="rounded-[2rem] border border-[#D6E5F7] bg-white p-6 text-[#001A35] shadow-2xl sm:p-8">
-        <h2 className="text-3xl font-black tracking-[-0.035em]">Understand Your Equipment&apos;s Value</h2>
-        <div className="mt-5 grid gap-5 md:grid-cols-[1fr_16rem] md:items-center">
-          <p className="text-base font-semibold leading-8 text-slate-700">
-            Check brand, model, age, condition, power requirements and recent comparable sales before choosing a price.
-            Strong detail helps buyers compare your item with confidence.
-          </p>
-          <div className="rounded-3xl border border-slate-200 bg-[#EAF3FF] p-5">
-            <p className="text-xs font-black uppercase tracking-[0.18em] text-[#FF6B00]">Valuation snapshot</p>
-            <div className="mt-4 h-28 rounded-2xl bg-[linear-gradient(180deg,#fff,#dbeafe)] p-4">
-              <div className="h-full rounded-xl border-l-4 border-b-4 border-[#002E5D]">
-                <div className="ml-3 mt-10 h-1.5 w-10 rounded-full bg-[#FF6B00]" />
-                <div className="ml-14 mt-[-18px] h-1.5 w-12 rounded-full bg-[#FF6B00]" />
-                <div className="ml-28 mt-[-26px] h-1.5 w-16 rounded-full bg-[#FF6B00]" />
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="rounded-[2rem] border border-white/12 bg-[#062747] p-6 shadow-2xl sm:p-8">
-        <h2 className="text-3xl font-black tracking-[-0.035em] text-white">Prepare Your Equipment</h2>
-        <ul className="mt-5 grid gap-3 text-sm font-bold text-[#D5E0F0] sm:grid-cols-2">
-          {["Clean stainless surfaces", "Disconnect safely", "Photograph the data plate", "Box loose parts", "Measure and weigh", "Prepare for pallet collection"].map((item) => (
-            <li key={item} className="flex gap-3">
-              <CheckCircle2 className="h-5 w-5 shrink-0 text-[#FF6B00]" aria-hidden="true" />
-              {item}
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section className="rounded-[2rem] border border-[#D6E5F7] bg-[#F3F8FF] p-6 text-[#001A35] shadow-2xl sm:p-8">
-        <h2 className="text-3xl font-black tracking-[-0.035em]">Write a Great Listing</h2>
-        <p className="mt-4 text-base font-semibold leading-8 text-slate-700">
-          Lead with the equipment type, brand, model, condition and location. Add power, dimensions and delivery notes
-          so serious buyers know whether the item fits their site.
-        </p>
-        <div className="mt-5 rounded-2xl border border-blue-100 bg-white p-4">
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-[#FF6B00]">Buyer Tip</p>
-          <p className="mt-2 text-sm font-bold leading-relaxed text-slate-700">
-            Clear descriptions reduce back-and-forth messages and help buyers decide faster.
-          </p>
-        </div>
-      </section>
-
-      <section className="rounded-[2rem] border border-white/12 bg-[#062747] p-6 shadow-2xl sm:p-8">
-        <h2 className="text-3xl font-black tracking-[-0.035em] text-white">Get It Seen by Serious Buyers</h2>
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {features.map(([label, Icon]) => (
-            <div key={label} className="rounded-2xl border border-white/12 bg-white/8 p-4">
-              <Icon className="h-6 w-6 text-[#FF6B00]" aria-hidden="true" />
-              <p className="mt-3 text-sm font-black text-white">{label}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-    </div>
+    <section className="mt-6 rounded-[2rem] border border-white/12 bg-[#062747] p-6 shadow-2xl sm:p-8">
+      <h2 className="text-3xl font-black tracking-[-0.035em] text-white">Prepare Your Equipment</h2>
+      <ul className="mt-5 grid gap-3 text-sm font-bold text-[#D5E0F0] sm:grid-cols-2">
+        {["Clean stainless surfaces", "Disconnect safely", "Photograph the data plate", "Box loose parts", "Measure and weigh", "Prepare for pallet collection"].map((item) => (
+          <li key={item} className="flex gap-3">
+            <CheckCircle2 className="h-5 w-5 shrink-0 text-[#FF6B00]" aria-hidden="true" />
+            {item}
+          </li>
+        ))}
+      </ul>
+    </section>
   )
 }
 
