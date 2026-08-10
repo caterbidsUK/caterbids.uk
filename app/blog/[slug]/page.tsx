@@ -258,8 +258,6 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
                 dangerouslySetInnerHTML={{ __html: articleHtml || "<p>This article is being prepared.</p>" }}
               />
 
-              <EnhancedArticleBlocks />
-
               {sourceIsSafe && (
                 <section className="mt-6 rounded-[2rem] border border-white/12 bg-[#062747] p-5">
                   <h2 className="text-sm font-black uppercase tracking-[0.2em] text-[#FF6B00]">Source</h2>
@@ -283,6 +281,8 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
               />
 
               <BottomCta />
+
+              <EnhancedArticleBlocks />
             </div>
 
             <BlogSidebar sidebarListings={sidebarListings} />
