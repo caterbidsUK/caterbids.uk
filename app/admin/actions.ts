@@ -548,6 +548,58 @@ export async function setUserTestFlag(formData: FormData) {
   revalidatePath("/admin")
 }
 
+export async function deleteUser(
+  formData: FormData
+): Promise<{ error: string } | { success: true }> {
+  const context = await requireAdmin()
+  const userId = formString(formData, "user_id")
+  const confirmEmail = formString(formData, "confirm_email")
+
+  if (!userId) return { error: "User ID missing." }
+  if (context.userId === userId) return { error: "You cannot delete your own account." }
+
+  const admin = createAdminClient()
+
+  const { data: targetProfile, error: profileError } = await (admin.from("profiles" as any) as any)
+    .select("email, role")
+    .eq("id", userId)
+    .maybeSingle()
+
+  if (profileError) return { error: `Could not fetch user: ${profileError.message}` }
+  if (!targetProfile) return { error: "User not found." }
+
+  const targetEmail = String((targetProfile as { email?: string | null }).email || "").trim().toLowerCase()
+  if (isProtectedSuperAdminEmail(targetEmail)) {
+    return { error: "Cannot delete a protected super-admin account." }
+  }
+  if (confirmEmail.trim().toLowerCase() !== targetEmail) {
+    return { error: "Email confirmation did not match. No changes made." }
+  }
+
+  // Soft-delete listings first — listings.user_id/seller_id have no FK cascade
+  const { error: listingsError } = await (admin.from("listings" as any) as any)
+    .update({ status: "removed", updated_at: new Date().toISOString() })
+    .or(`user_id.eq.${userId},seller_id.eq.${userId}`)
+
+  if (listingsError) return { error: `Could not remove listings: ${listingsError.message}` }
+
+  // Delete from auth.users — cascades to profiles and all FK-cascading tables
+  const { error: deleteError } = await admin.auth.admin.deleteUser(userId)
+  if (deleteError) return { error: `Auth deletion failed: ${deleteError.message}` }
+
+  await writeAdminAuditLog({
+    adminUserId: context.userId,
+    adminEmail: context.email,
+    action: "user.delete",
+    entityType: "profile",
+    entityId: userId,
+    metadata: { targetEmail, listingsMarkedRemoved: true },
+  })
+
+  revalidatePath("/admin")
+  return { success: true }
+}
+
 export async function adminSaveListingEdits(
   _prevState: { success?: boolean; error?: string } | null,
   formData: FormData

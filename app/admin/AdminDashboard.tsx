@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import SiteLogo from "@/components/SiteLogo"
 import { useActionState, useEffect, useState, useTransition, type ReactNode } from "react"
 import {
@@ -45,6 +46,7 @@ import {
   adminSaveListingEdits,
   createBlogPost,
   deleteBlogPost,
+  deleteUser,
   updateBlogPost,
   setPhoneVerificationStatus,
   setUserTestFlag,
@@ -1395,6 +1397,13 @@ function UserCard({ user, adminEmail, adminId, compact = false }: { user: AdminU
             View user listings
           </Link>
           <MessageUserButton userId={user.id} />
+          <DeleteUserButton
+            userId={user.id}
+            userEmail={user.email || ""}
+            userDisplayName={userName(user)}
+            isSelf={user.id === adminId}
+            isProtected={protectedSuperAdmin}
+          />
           <details className="md:col-span-2 xl:col-span-3">
             <summary className={`${ADMIN_ACTION_LINK} cursor-pointer list-none`}>
               <UserCog className="h-4 w-4" />
@@ -1613,6 +1622,108 @@ function SetPhoneStatusButton({
         {label}
       </button>
     </form>
+  )
+}
+
+function DeleteUserButton({
+  userId,
+  userEmail,
+  userDisplayName,
+  isSelf,
+  isProtected,
+}: {
+  userId: string
+  userEmail: string
+  userDisplayName: string
+  isSelf: boolean
+  isProtected: boolean
+}) {
+  const router = useRouter()
+  const [open, setOpen] = useState(false)
+  const [confirmEmail, setConfirmEmail] = useState("")
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [isPending, setIsPending] = useState(false)
+
+  if (isSelf || isProtected) return null
+
+  const emailMatches = confirmEmail.trim().toLowerCase() === userEmail.trim().toLowerCase()
+
+  function reset() {
+    setConfirmEmail("")
+    setDeleteError(null)
+  }
+
+  async function handleDelete() {
+    setDeleteError(null)
+    setIsPending(true)
+    try {
+      const fd = new FormData()
+      fd.set("user_id", userId)
+      fd.set("confirm_email", confirmEmail.trim())
+      const result = await deleteUser(fd)
+      if ("error" in result) {
+        setDeleteError(result.error)
+      } else {
+        setOpen(false)
+        reset()
+        router.refresh()
+      }
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Delete failed — check the browser console.")
+    } finally {
+      setIsPending(false)
+    }
+  }
+
+  return (
+    <div className={open ? "md:col-span-2 xl:col-span-3" : ""}>
+      {!open ? (
+        <button
+          onClick={() => setOpen(true)}
+          className={`${ADMIN_ACTION_BUTTON} border-red-300/30 bg-red-500/10 text-red-100 hover:border-red-400/50 hover:bg-red-500/20`}
+        >
+          <Trash2 className="h-4 w-4" />
+          Delete user
+        </button>
+      ) : (
+        <div className="rounded-2xl border border-red-500/30 bg-red-950/30 p-4 flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-black text-red-300 flex items-center gap-2">
+              <Trash2 className="h-4 w-4" />
+              Delete user permanently
+            </p>
+            <button
+              onClick={() => { setOpen(false); reset() }}
+              className="text-white/40 hover:text-white/70 text-xs font-bold"
+            >
+              Cancel
+            </button>
+          </div>
+          <p className="text-xs leading-relaxed text-white/60">
+            Deletes <span className="font-bold text-white">{userDisplayName}</span>{" "}
+            (<span className="text-white/80">{userEmail}</span>) from auth, profile, and all related data.
+            Their listings will be set to <span className="font-bold text-white">removed</span> first.
+            This cannot be undone.
+          </p>
+          <input
+            type="email"
+            placeholder={`Type ${userEmail} to confirm`}
+            value={confirmEmail}
+            onChange={(e) => { setConfirmEmail(e.target.value); setDeleteError(null) }}
+            className="rounded-xl border border-red-500/30 bg-[#1a0505] px-3 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-red-400/60"
+          />
+          {deleteError && <p className="text-red-400 text-xs">{deleteError}</p>}
+          <button
+            onClick={handleDelete}
+            disabled={!emailMatches || isPending}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-black text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Trash2 className="h-4 w-4" />
+            {isPending ? "Deleting…" : "Delete permanently"}
+          </button>
+        </div>
+      )}
+    </div>
   )
 }
 
