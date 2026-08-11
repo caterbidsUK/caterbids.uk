@@ -294,18 +294,18 @@ export async function createListing(
     }
   }
 
-  const { data: sellerProfile } = await supabase
-    .from('profiles')
-    .select('phone,phone_number')
-    .eq('id', user.id)
-    .maybeSingle()
-  const sellerAccountPhone = sellerProfile?.phone_number || sellerProfile?.phone
-
-  if (!sellerAccountPhone && !input.seller_phone) {
+  const oauthProviders = ["google", "apple", "facebook"]
+  const providerList: string[] = Array.isArray(user.app_metadata?.providers)
+    ? (user.app_metadata.providers as string[])
+    : []
+  const isOAuthProvider =
+    oauthProviders.includes(String(user.app_metadata?.provider || "").toLowerCase()) ||
+    providerList.some((p) => oauthProviders.includes(p.toLowerCase()))
+  if (!user.email_confirmed_at && !isOAuthProvider) {
     return {
       success: false,
-      error: 'Add a mobile number in Account > Trust & Verification before publishing. Manual admin verification can stay pending during launch.',
-      code: 'PHONE_REQUIRED',
+      error: 'Verify your email address before publishing. Check your inbox for a verification link.',
+      code: 'EMAIL_REQUIRED',
     }
   }
 
