@@ -51,9 +51,12 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-      style={{ background: '#001633' }}
+      style={{ background: '#002E5D' }}
     >
-      <body className="flex min-h-full flex-col bg-[#001633] font-sans text-white">
+      <head>
+        <style dangerouslySetInnerHTML={{ __html: 'html,body{background:#002E5D!important;margin:0}' }} />
+      </head>
+      <body className="flex min-h-full flex-col bg-[#001633] font-sans text-white" style={{ background: '#002E5D' }}>
         <div
           id="cb-splash"
           style={{
