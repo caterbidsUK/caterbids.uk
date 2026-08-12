@@ -68,11 +68,11 @@ export default function RootLayout({
           }}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.png" alt="CaterBidsUK" style={{ display: 'block', width: '280px', maxWidth: '80vw', height: 'auto' }} />
+          <img src="/logo.png" alt="CaterBidsUK" fetchPriority="high" style={{ display: 'block', width: '280px', maxWidth: '80vw', height: 'auto' }} />
         </div>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){var s=document.getElementById('cb-splash');if(!s)return;function hide(){s.style.opacity='0';s.style.pointerEvents='none';setTimeout(function(){if(s.parentNode)s.parentNode.removeChild(s);},380);}if(document.readyState==='complete'){hide();}else{window.addEventListener('load',hide,{once:true});}})();`,
+            __html: `(function(){var s=document.getElementById('cb-splash');if(!s)return;var t=Date.now();function hide(){s.style.opacity='0';s.style.pointerEvents='none';setTimeout(function(){if(s.parentNode)s.parentNode.removeChild(s);},400);}function check(){var w=Math.max(0,400-(Date.now()-t));setTimeout(hide,w);}if(document.readyState==='complete'){check();}else{window.addEventListener('load',check,{once:true});}})();`,
           }}
         />
         {children}
