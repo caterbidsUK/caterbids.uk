@@ -51,8 +51,30 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      style={{ background: '#001633' }}
     >
       <body className="flex min-h-full flex-col bg-[#001633] font-sans text-white">
+        <div
+          id="cb-splash"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: '#002E5D',
+            transition: 'opacity 0.35s ease',
+          }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="CaterBidsUK" style={{ display: 'block', width: '280px', maxWidth: '80vw', height: 'auto' }} />
+        </div>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){var s=document.getElementById('cb-splash');if(!s)return;function hide(){s.style.opacity='0';s.style.pointerEvents='none';setTimeout(function(){if(s.parentNode)s.parentNode.removeChild(s);},380);}if(document.readyState==='complete'){hide();}else{window.addEventListener('load',hide,{once:true});}})();`,
+          }}
+        />
         {children}
         <BottomNav />
         {gaId && (
