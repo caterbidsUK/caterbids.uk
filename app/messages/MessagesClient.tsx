@@ -735,7 +735,7 @@ function ListingMiniCard({ conversation }: { conversation: InboxConversation }) 
       </div>
       {conversation.listing_id ? (
         <Link
-          href={`/listing?id=${conversation.listing_id}`}
+          href={(conversation.listing as (typeof conversation.listing & { slug?: string | null }) | null)?.slug ? `/listing/${(conversation.listing as (typeof conversation.listing & { slug?: string | null })).slug}` : `/listing?id=${conversation.listing_id}`}
           className="rounded-xl border border-white/12 px-3 py-2 text-xs font-black text-white hover:border-[#FF6B00]/60 hover:text-[#FF6B00]"
         >
           View Listing

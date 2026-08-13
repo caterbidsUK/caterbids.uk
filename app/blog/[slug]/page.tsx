@@ -91,6 +91,7 @@ function readingTime(post: BlogPost) {
 
 type SidebarListing = {
   id: string
+  slug?: string | null
   title: string
   price: string
   location: string
@@ -121,7 +122,7 @@ async function loadSidebarListings(): Promise<SidebarListingsData> {
     const { data: testProfiles } = await admin.from("profiles").select("id").eq("is_test", true)
     const testIds = ((testProfiles || []) as Array<{ id: string }>).map((p) => p.id)
 
-    const SELECT = "id, title, price, location, images, image_url, featured, is_featured, featured_until, seller_id, created_at"
+    const SELECT = "id, slug, title, price, location, images, image_url, featured, is_featured, featured_until, seller_id, created_at"
 
     // Block 1 — Featured Equipment: candidates with featured=true or is_featured=true, expiry checked in JS
     let featuredQuery = (admin.from("listings" as any) as any)
@@ -486,7 +487,7 @@ function formatSidebarPrice(price: string): string {
 function SidebarListingCard({ listing }: { listing: SidebarListing }) {
   return (
     <Link
-      href={`/listing?id=${encodeURIComponent(listing.id)}`}
+      href={listing.slug ? `/listing/${listing.slug}` : `/listing?id=${encodeURIComponent(listing.id)}`}
       className="flex gap-3 rounded-2xl border border-white/10 bg-white/8 p-3 transition hover:border-[#FF6B00]/55"
     >
       <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-white/10">

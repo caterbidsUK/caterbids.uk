@@ -1020,12 +1020,14 @@ function SearchContent() {
                   Array.isArray(item.images) && item.images.length > 0
                     ? item.images.find((url) => typeof url === "string" && Boolean(url))
                     : item.image_url
+                const itemSlug = (item as Listing & { slug?: string | null }).slug
+                const itemHref = itemSlug ? `/listing/${itemSlug}` : `/listing?id=${encodeURIComponent(itemId)}`
                 return (
                   <ListingCard
                     key={itemId || `caterbids-${index}`}
                     item={item}
                     isSaved={savedFavouriteIds.has(`caterbids:${itemId}`)}
-                    onClick={() => router.push(`/listing?id=${encodeURIComponent(itemId)}`)}
+                    href={itemHref}
                     onToggleFavourite={() =>
                       toggleFavourite({
                         id: `caterbids:${itemId}`,
@@ -1036,7 +1038,7 @@ function SearchContent() {
                         category: item.category,
                         condition: item.condition || "",
                         imageUrl: itemImage || "",
-                        url: `/listing?id=${itemId}`,
+                        url: itemHref,
                         savedAt: new Date().toISOString(),
                       })
                     }
@@ -1176,12 +1178,12 @@ function EmptyResults({
 function ListingCard({
   item,
   isSaved,
-  onClick,
+  href,
   onToggleFavourite,
 }: {
   item: Listing
   isSaved: boolean
-  onClick: () => void
+  href: string
   onToggleFavourite: () => void
 }) {
   const title = item.title || "Untitled listing"
@@ -1198,9 +1200,8 @@ function ListingCard({
       <div className="flex gap-3 sm:gap-4">
 
         {/* Thumbnail */}
-        <button
-          type="button"
-          onClick={onClick}
+        <Link
+          href={href}
           aria-label={`View ${title}`}
           className="relative h-[88px] w-[88px] shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-[#001A35] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6B00] sm:h-28 sm:w-28"
         >
@@ -1222,12 +1223,11 @@ function ListingCard({
               <span className="text-[8px] font-black uppercase text-white">Featured</span>
             </span>
           )}
-        </button>
+        </Link>
 
         {/* Title + meta */}
-        <button
-          type="button"
-          onClick={onClick}
+        <Link
+          href={href}
           className="flex min-w-0 flex-1 flex-col justify-between py-0.5 text-left focus-visible:outline-none"
         >
           <div>
@@ -1251,7 +1251,7 @@ function ListingCard({
               Listed {new Date(item.created_at).toLocaleDateString("en-GB")}
             </span>
           )}
-        </button>
+        </Link>
 
         {/* Price + actions */}
         <div className="flex shrink-0 flex-col items-end justify-between gap-2 py-0.5">
@@ -1269,13 +1269,12 @@ function ListingCard({
             >
               <Heart className={`h-4 w-4 ${isSaved ? "fill-[#FF6B00]" : ""}`} />
             </button>
-            <button
-              type="button"
-              onClick={onClick}
+            <Link
+              href={href}
               className="hidden rounded-2xl bg-[#FF6B00] px-4 py-2 text-xs font-black text-white transition hover:brightness-110 sm:block"
             >
               View
-            </button>
+            </Link>
           </div>
         </div>
 

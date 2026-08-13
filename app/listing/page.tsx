@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
+import { permanentRedirect } from "next/navigation"
 import { createAdminClient } from "@/lib/supabase/admin"
 import ListingPageClient from "./ListingPageClient"
 
@@ -59,7 +60,29 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
   }
 }
 
-export default function ListingPage() {
+export default async function ListingPage({ searchParams }: Props) {
+  const params = await searchParams
+  const id = Array.isArray(params.id) ? params.id[0] : params.id
+
+  if (id) {
+    let slug: string | null = null
+    try {
+      const admin = createAdminClient()
+      const { data } = await (admin.from("listings" as any) as any)
+        .select("slug")
+        .eq("id", id)
+        .maybeSingle()
+      slug = (data as { slug?: string | null } | null)?.slug ?? null
+    } catch {
+      // DB lookup failed — fall through and let the client component handle it
+    }
+
+    if (slug) {
+      const featuredParam = params.featured === "success" ? "?featured=success" : ""
+      permanentRedirect(`/listing/${slug}${featuredParam}`)
+    }
+  }
+
   return (
     <Suspense
       fallback={

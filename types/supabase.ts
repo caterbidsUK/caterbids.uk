@@ -452,6 +452,7 @@ export interface Database {
           sold_at: string | null
           trailer_details: Json | null
           business_details: Json | null
+          slug: string | null
           is_confidential: boolean
         }
         Insert: {
@@ -561,6 +562,7 @@ export interface Database {
           sold_at?: string | null
           trailer_details?: Json | null
           business_details?: Json | null
+          slug?: string | null
           is_confidential?: boolean
         }
         Update: {
@@ -670,6 +672,7 @@ export interface Database {
           sold_at?: string | null
           trailer_details?: Json | null
           business_details?: Json | null
+          slug?: string | null
           is_confidential?: boolean
         }
         Relationships: [

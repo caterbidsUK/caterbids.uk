@@ -75,7 +75,7 @@ export default function FeaturedListingCard({ listing }: { listing: Listing }) {
           {location}
         </p>
         <Link
-          href={`/listing?id=${encodeURIComponent(String(listing.id))}`}
+          href={(listing as Listing & { slug?: string | null }).slug ? `/listing/${(listing as Listing & { slug?: string | null }).slug}` : `/listing?id=${encodeURIComponent(String(listing.id))}`}
           className="mt-4 flex min-h-12 items-center justify-center gap-3 rounded-2xl bg-[#FF6B00] px-5 text-sm font-black text-white shadow-[0_16px_36px_rgba(255,107,0,0.24)] transition hover:brightness-110 focus:outline-none focus:ring-4 focus:ring-[#FF6B00]/25"
         >
           View Details

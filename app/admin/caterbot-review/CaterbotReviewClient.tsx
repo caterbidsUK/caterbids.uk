@@ -15,6 +15,7 @@ import {
 
 type ReviewListing = {
   id: string
+  slug?: string | null
   title: string | null
   created_at: string | null
   status: string | null
@@ -171,7 +172,7 @@ function RowCard({ listing, onSaved, onDeleted }: { listing: ReviewListing; onSa
           )}
           <div className="min-w-0">
             <Link
-              href={`/listing?id=${listing.id}`}
+              href={listing.slug ? `/listing/${listing.slug}` : `/listing?id=${listing.id}`}
               target="_blank"
               className="text-sm font-black text-white hover:text-[#FF6B00] flex items-center gap-1"
             >

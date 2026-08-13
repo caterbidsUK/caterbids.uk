@@ -297,7 +297,7 @@ export default function CategoryPageClient({ params }: CategoryPageProps) {
                 return (
                   <Link
                     key={safeId(item.id)}
-                    href={`/listing?id=${encodeURIComponent(safeId(item.id))}`}
+                    href={(item as Listing & { slug?: string | null }).slug ? `/listing/${(item as Listing & { slug?: string | null }).slug}` : `/listing?id=${encodeURIComponent(safeId(item.id))}`}
                     className="premium-card group overflow-hidden rounded-3xl"
                   >
                     <div className="relative flex h-56 items-center justify-center bg-[#001B35]">

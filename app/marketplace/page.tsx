@@ -60,7 +60,7 @@ export default async function MarketplacePage({ searchParams }: Props) {
   const supabase = await createClient()
   const { data, count, error } = await supabase
     .from("listings")
-    .select("id, title, price, category, location, city, images, image_url, subcategory, condition", { count: "exact" })
+    .select("id, title, price, category, location, city, images, image_url, subcategory, condition, slug", { count: "exact" })
     .eq("status", "live")
     .order("created_at", { ascending: false })
     .range(from, to)
@@ -165,7 +165,7 @@ export default async function MarketplacePage({ searchParams }: Props) {
                 return (
                   <Link
                     key={item.id}
-                    href={`/listing?id=${encodeURIComponent(item.id)}`}
+                    href={(item as { id: string; slug?: string | null }).slug ? `/listing/${(item as { id: string; slug?: string | null }).slug}` : `/listing?id=${encodeURIComponent(item.id)}`}
                     className="premium-card group overflow-hidden rounded-3xl"
                   >
                     <div className="relative h-56 bg-[#001B35]">

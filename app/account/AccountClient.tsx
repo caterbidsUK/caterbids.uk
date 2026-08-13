@@ -237,7 +237,7 @@ export default function AccountClient({
     }
   }, [userId])
 
-  type SellerListing = { id: string; title: string; featured: boolean | null; is_featured: boolean | null; featured_until: string | null }
+  type SellerListing = { id: string; slug?: string | null; title: string; featured: boolean | null; is_featured: boolean | null; featured_until: string | null }
   const [sellerListings, setSellerListings] = useState<SellerListing[]>([])
 
   useEffect(() => {
@@ -245,7 +245,7 @@ export default function AccountClient({
     const supabase = createClient()
     supabase
       .from("listings" as never)
-      .select("id, title, featured, is_featured, featured_until")
+      .select("id, slug, title, featured, is_featured, featured_until")
       .eq("seller_id", userId)
       .order("created_at", { ascending: false })
       .limit(20)
@@ -729,7 +729,7 @@ export default function AccountClient({
                 return (
                   <a
                     key={item.id}
-                    href={`/listing?id=${encodeURIComponent(item.id)}`}
+                    href={item.slug ? `/listing/${item.slug}` : `/listing?id=${encodeURIComponent(item.id)}`}
                     className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm hover:bg-white/8"
                   >
                     <span className="min-w-0 flex-1 truncate font-bold text-white">{item.title}</span>

@@ -16,6 +16,7 @@ type Listing = {
   status: string | null
   featured: boolean | null
   featured_until: string | null
+  slug?: string | null
 }
 
 function formatPrice(price: string | null) {
@@ -109,7 +110,7 @@ export default function PostListingSuccessPage() {
 
       const { data } = await supabase
         .from("listings")
-        .select("id, title, price, images, image_url, status, featured, featured_until")
+        .select("id, title, price, images, image_url, status, featured, featured_until, slug")
         .eq("id", id as string)
         .eq("seller_id", user.id)
         .single()
@@ -136,7 +137,7 @@ export default function PostListingSuccessPage() {
 
   const image = heroImage(listing)
   const price = formatPrice(listing.price)
-  const listingPath = `/listing?id=${encodeURIComponent(listing.id)}`
+  const listingPath = listing.slug ? `/listing/${listing.slug}` : `/listing?id=${encodeURIComponent(listing.id)}`
   const shareUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? "https://caterbids.uk"}${listingPath}`
 
   return (

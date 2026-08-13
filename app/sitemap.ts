@@ -66,15 +66,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   let listingEntries: MetadataRoute.Sitemap = []
   try {
     const { data, error } = await (admin.from("listings" as any) as any)
-      .select("id, updated_at")
+      .select("id, slug, updated_at")
       .eq("status", "live")
     if (error) throw error
-    listingEntries = (data as Array<{ id: string; updated_at: string | null }>).map((listing) => ({
-      url: `${baseUrl}/listing?id=${encodeURIComponent(listing.id)}`,
-      lastModified: listing.updated_at ?? undefined,
-      changeFrequency: "weekly" as const,
-      priority: 0.8,
-    }))
+    listingEntries = (data as Array<{ id: string; slug: string | null; updated_at: string | null }>)
+      .filter((listing) => listing.slug)
+      .map((listing) => ({
+        url: `${baseUrl}/listing/${listing.slug}`,
+        lastModified: listing.updated_at ?? undefined,
+        changeFrequency: "weekly" as const,
+        priority: 0.8,
+      }))
   } catch (err) {
     console.error("sitemap: listings query failed:", err)
   }

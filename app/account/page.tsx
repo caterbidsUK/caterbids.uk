@@ -1013,7 +1013,7 @@ function RecentListings({ listings }: { listings: Listing[] }) {
             const canEdit = listing.status !== "sold" && listing.status !== "deleted"
             return (
               <div key={listing.id} className="grid grid-cols-[76px_minmax(0,1fr)] gap-3 py-4 sm:grid-cols-[84px_minmax(0,1fr)_auto] sm:items-center">
-                <Link href={`/listing?id=${listing.id}`} className="h-20 overflow-hidden rounded-2xl bg-white/8 transition hover:opacity-80">
+                <Link href={(listing as { id: string; slug?: string | null }).slug ? `/listing/${(listing as { id: string; slug?: string | null }).slug}` : `/listing?id=${listing.id}`} className="h-20 overflow-hidden rounded-2xl bg-white/8 transition hover:opacity-80">
                   {image ? (
                     <img src={image} alt="" className="h-full w-full object-cover" />
                   ) : (
@@ -1023,7 +1023,7 @@ function RecentListings({ listings }: { listings: Listing[] }) {
                   )}
                 </Link>
                 <div className="min-w-0">
-                  <Link href={`/listing?id=${listing.id}`} className="block">
+                  <Link href={(listing as { id: string; slug?: string | null }).slug ? `/listing/${(listing as { id: string; slug?: string | null }).slug}` : `/listing?id=${listing.id}`} className="block">
                     <h3 className="overflow-hidden text-sm font-black leading-snug text-white [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] hover:text-[#FF9A4A] md:text-base">
                       {listing.title}
                     </h3>

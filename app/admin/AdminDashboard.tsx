@@ -76,6 +76,7 @@ export type AdminStat = {
 
 export type AdminListing = {
   id: string
+  slug?: string | null
   seller_id?: string | null
   user_id?: string | null
   title?: string | null
@@ -865,7 +866,7 @@ function RecentListingsTable({ listings }: { listings: AdminListing[] }) {
       ) : (
         <div className="overflow-hidden rounded-3xl border border-white/10">
           {listings.map((listing) => (
-            <Link key={listing.id} href={`/listing?id=${encodeURIComponent(listing.id)}`} className="grid gap-3 border-b border-white/10 bg-[#062747]/60 p-3 last:border-b-0 sm:grid-cols-[64px_1fr_auto] sm:items-center">
+            <Link key={listing.id} href={listing.slug ? `/listing/${listing.slug}` : `/listing?id=${encodeURIComponent(listing.id)}`} className="grid gap-3 border-b border-white/10 bg-[#062747]/60 p-3 last:border-b-0 sm:grid-cols-[64px_1fr_auto] sm:items-center">
               <div className="h-16 w-16 overflow-hidden rounded-2xl bg-white/8">
                 {listingImage(listing) ? <img src={listingImage(listing)} alt={listing.title || "Listing"} className="h-full w-full object-cover" /> : null}
               </div>
@@ -1249,7 +1250,7 @@ function ListingCard({
               </div>
             </div>
             <div className="grid gap-2 sm:grid-cols-2 lg:min-w-[260px]">
-              <Link href={`/listing?id=${encodeURIComponent(listing.id)}`} className="rounded-2xl border border-white/10 bg-white/8 px-3 py-2 text-center text-xs font-black">
+              <Link href={listing.slug ? `/listing/${listing.slug}` : `/listing?id=${encodeURIComponent(listing.id)}`} className="rounded-2xl border border-white/10 bg-white/8 px-3 py-2 text-center text-xs font-black">
                 View listing
               </Link>
               <button type="button" onClick={() => setEditOpen(true)} className={ADMIN_ACTION_BUTTON}>

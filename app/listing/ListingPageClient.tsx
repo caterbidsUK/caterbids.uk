@@ -371,10 +371,10 @@ function logSupabaseListingMessageError(error: unknown) {
   console.warn("Supabase listing message warning:", error)
 }
 
-function ListingContent() {
+function ListingContent({ listingId: propId }: { listingId?: string }) {
   const router = useRouter()
   const params = useSearchParams()
-  const id = params.get("id")
+  const id = propId ?? params.get("id")
   const [showFeaturedSuccess, setShowFeaturedSuccess] = useState(params.get("featured") === "success")
 
   const [listing, setListing] = useState<Listing | null>(null)
@@ -1441,15 +1441,16 @@ function ListingContent() {
               {myListings.map((item, index) => {
                 const itemId = safeListingId(item.id)
                 const itemImage = listingImageUrls(item)[0]
+                const itemSlug = (item as Listing & { slug?: string | null }).slug
+                const itemHref = itemSlug ? `/listing/${itemSlug}` : `/listing?id=${encodeURIComponent(itemId)}`
 
                 return (
                 <article
                   key={itemId || `listing-${index}`}
                   className="premium-card premium-card-hover overflow-hidden rounded-3xl"
                 >
-                  <button
-                    type="button"
-                    onClick={() => router.push(`/listing?id=${encodeURIComponent(itemId)}`)}
+                  <Link
+                    href={itemHref}
                     className="block w-full text-left"
                   >
                     {itemImage ? (
@@ -1492,7 +1493,7 @@ function ListingContent() {
                         {item.description || "No description added."}
                       </p>
                     </div>
-                  </button>
+                  </Link>
 
                   <div className="px-3 pb-3">
                     <SocialShareButtons
@@ -1500,7 +1501,7 @@ function ListingContent() {
                       title={item.title || "CaterBidsUK listing"}
                       price={formatPrice(item.price)}
                       location={item.city || item.location || "UK"}
-                      url={`/listing?id=${encodeURIComponent(itemId)}`}
+                      url={itemHref}
                       compact
                     />
                   </div>
@@ -1855,7 +1856,8 @@ function ListingContent() {
                 type="button"
                 onClick={() => {
                   setShowFeaturedSuccess(false)
-                  router.replace(`/listing?id=${encodeURIComponent(id || "")}`, { scroll: false })
+                  const listingSlug = (listing as Listing & { slug?: string | null })?.slug
+                  router.replace(listingSlug ? `/listing/${listingSlug}` : `/listing?id=${encodeURIComponent(id || "")}`, { scroll: false })
                 }}
                 className="shrink-0 rounded-xl p-1.5 text-white/80 hover:text-white"
                 aria-label="Dismiss"
@@ -3253,7 +3255,7 @@ function ListingContent() {
   )
 }
 
-export default function ListingPage() {
+export default function ListingPage({ listingId }: { listingId?: string } = {}) {
   return (
     <Suspense
       fallback={
@@ -3262,7 +3264,7 @@ export default function ListingPage() {
         </div>
       }
     >
-      <ListingContent />
+      <ListingContent listingId={listingId} />
     </Suspense>
   )
 }

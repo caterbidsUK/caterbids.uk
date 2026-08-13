@@ -82,7 +82,7 @@ export async function GET() {
     const { data, error } = await admin
       .from("listings")
       .select(
-        "id, title, created_at, status, spec_brand, spec_model, height_cm, width_cm, length_cm, weight_kg, manual_source_url, spec_source_url, manual_source_name, manual_source_type, manual_source_validated, ai_spec_confidence, manual_source_match_notes, caterbot_admin_verified"
+        "id, slug, title, created_at, status, spec_brand, spec_model, height_cm, width_cm, length_cm, weight_kg, manual_source_url, spec_source_url, manual_source_name, manual_source_type, manual_source_validated, ai_spec_confidence, manual_source_match_notes, caterbot_admin_verified"
       )
       .not("spec_brand", "is", null)
       .order("created_at", { ascending: false })
