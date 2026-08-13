@@ -53,31 +53,7 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
       style={{ background: '#002E5D' }}
     >
-      <head>
-        <style dangerouslySetInnerHTML={{ __html: 'html,body{background:#002E5D!important;margin:0}' }} />
-      </head>
       <body className="flex min-h-full flex-col bg-[#001633] font-sans text-white" style={{ background: '#002E5D' }}>
-        <div
-          id="cb-splash"
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 9999,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: '#002E5D',
-            transition: 'opacity 0.35s ease',
-          }}
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.png" alt="CaterBidsUK" fetchPriority="high" style={{ display: 'block', width: '280px', maxWidth: '80vw', height: 'auto' }} />
-        </div>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `(function(){var s=document.getElementById('cb-splash');if(!s)return;var t=Date.now();function hide(){s.style.opacity='0';s.style.pointerEvents='none';setTimeout(function(){if(s.parentNode)s.parentNode.removeChild(s);},400);}function check(){var w=Math.max(0,400-(Date.now()-t));setTimeout(hide,w);}if(document.readyState==='complete'){check();}else{window.addEventListener('load',check,{once:true});}})();`,
-          }}
-        />
         {children}
         <BottomNav />
         {gaId && (

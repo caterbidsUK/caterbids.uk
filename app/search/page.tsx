@@ -466,70 +466,100 @@ function SearchContent() {
         }
       }
 
-      function localListings(soldIds: Set<string>) {
+      // cityFilter defaults to initialCity; pass "" for the location-agnostic fallback pass
+      function localListings(soldIds: Set<string>, cityFilter = initialCity) {
         const saved = readLocalListings()
         return saved.filter((item) => {
           const itemId = listingId(item.id)
           const cityText = `${item.city || ""} ${item.location || ""}`.toLowerCase()
           const matchesWords = listingMatchesSearch(item, query)
-          const matchesCity = !initialCity || cityText.includes(initialCity.toLowerCase())
+          const matchesCity = !cityFilter || cityText.includes(cityFilter.toLowerCase())
           const isLive = !item.status || item.status === "live" || item.status === "payment_pending"
           const isSold = item.status === "sold" || soldIds.has(itemId)
           return matchesWords && matchesCity && isLive && !isSold
         })
       }
 
+      function applyCategory(items: Listing[]) {
+        if (activeFilter === "all") return items
+        const activeCategory = categoryBySlug(activeFilter)
+        if (!activeCategory) return items
+        return items.filter((item) => {
+          const haystack = `${item.category || ""} ${item.subcategory || ""} ${item.title || ""}`.toLowerCase()
+          if (activeCategory.slug === "catering-equipment") {
+            return (
+              haystack.includes("equipment") ||
+              CATERING_CATEGORIES.some((category) =>
+                haystack.includes(category.title.toLowerCase()) ||
+                category.subcategories.some((subcategory) => haystack.includes(subcategory.toLowerCase()))
+              )
+            )
+          }
+          return (
+            haystack.includes(activeCategory.title.toLowerCase()) ||
+            activeCategory.subcategories.some((subcategory) => haystack.includes(subcategory.toLowerCase()))
+          )
+        })
+      }
+
+      function mergeRemote(local: Listing[], remote: Listing[]) {
+        const remoteIds = new Set(remote.map((item) => listingId(item.id)))
+        return [...local.filter((item) => !remoteIds.has(listingId(item.id))), ...remote]
+      }
+
       const soldIds = await soldListingIds()
       const supabase = createClient()
-      let queryBuilder = supabase
-        .from('listings')
-        .select('*')
-        .or('status.is.null,status.eq.live,status.eq.payment_pending')
-        .order('created_at', { ascending: false })
 
-      if (query && !isBroadMarketplaceQuery(query)) {
-        const words = meaningfulSearchWords(query)
-        const orConditions = words.map(word =>
-          `title.ilike.%${word}%,price.ilike.%${word}%,location.ilike.%${word}%,description.ilike.%${word}%,subcategory.ilike.%${word}%`
-        ).join(',')
-        if (orConditions) queryBuilder = queryBuilder.or(orConditions)
+      // Build the keyword portion of the query (no city filter yet)
+      function buildBaseQuery() {
+        let q = supabase
+          .from('listings')
+          .select('*')
+          .or('status.is.null,status.eq.live,status.eq.payment_pending')
+          .order('created_at', { ascending: false })
+        if (query && !isBroadMarketplaceQuery(query)) {
+          const words = meaningfulSearchWords(query)
+          const orConditions = words.map(word =>
+            `title.ilike.%${word}%,price.ilike.%${word}%,location.ilike.%${word}%,description.ilike.%${word}%,subcategory.ilike.%${word}%`
+          ).join(',')
+          if (orConditions) q = q.or(orConditions)
+        }
+        return q
       }
 
-      if (initialCity) {
-        queryBuilder = queryBuilder.or(`city.ilike.%${initialCity}%,location.ilike.%${initialCity}%`)
-      }
+      // Quote the ilike pattern per PostgREST's quoting rules so no user-supplied character
+      // is ever in a structural position in the filter string. A value wrapped in "..." is
+      // parsed as a single token regardless of commas, dots, parens, or percent signs it
+      // contains. Embedded double-quotes are escaped to "" per PostgREST convention.
+      // PostgreSQL still interprets the % wildcards we add because ilike always treats %
+      // as a wildcard in the pattern, before or after PostgREST strips the outer quotes.
+      const escapedCity = initialCity.replace(/"/g, '""')
+      const primaryQuery = initialCity
+        ? buildBaseQuery().or(`city.ilike."%${escapedCity}%",location.ilike."%${escapedCity}%"`)
+        : buildBaseQuery()
 
-      const { data, error } = await queryBuilder
+      const { data, error } = await primaryQuery
       if (error) {
         console.warn('Listings unavailable:', error.message || error)
         setListings(localListings(soldIds))
         return
       }
 
-      const local = localListings(soldIds)
-      const remote = (data || []) as Listing[]
-      const remoteIds = new Set(remote.map((item) => listingId(item.id)))
-      let filtered = [...local.filter((item) => !remoteIds.has(listingId(item.id))), ...remote]
+      const filtered = applyCategory(mergeRemote(localListings(soldIds), (data || []) as Listing[]))
 
-      if (activeFilter !== "all") {
-        const activeCategory = categoryBySlug(activeFilter)
-        if (activeCategory) {
-          filtered = filtered.filter((item: Listing) => {
-            const haystack = `${item.category || ""} ${item.subcategory || ""} ${item.title || ""}`.toLowerCase()
-            if (activeCategory.slug === "catering-equipment") {
-              return (
-                haystack.includes("equipment") ||
-                CATERING_CATEGORIES.some((category) =>
-                  haystack.includes(category.title.toLowerCase()) ||
-                  category.subcategories.some((subcategory) => haystack.includes(subcategory.toLowerCase()))
-                )
-              )
-            }
-            return (
-              haystack.includes(activeCategory.title.toLowerCase()) ||
-              activeCategory.subcategories.some((subcategory) => haystack.includes(subcategory.toLowerCase()))
-            )
-          })
+      // Outcome-based location fallback: if the city filter produced nothing, retry without it.
+      // Only show "No matching listings found" when the unfiltered search also returns nothing.
+      if (filtered.length === 0 && initialCity) {
+        const { data: fallbackData, error: fallbackError } = await buildBaseQuery()
+        if (!fallbackError) {
+          const fallbackFiltered = applyCategory(
+            mergeRemote(localListings(soldIds, ""), (fallbackData || []) as Listing[])
+          )
+          if (fallbackFiltered.length > 0) {
+            setListings(fallbackFiltered)
+            setNotice("No listings matched that location, so we're showing all UK listings.")
+            return
+          }
         }
       }
 
