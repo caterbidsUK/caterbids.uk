@@ -3,6 +3,8 @@ import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 import BottomNav from "@/components/BottomNav";
+import LiveChat from "@/components/LiveChat";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -42,11 +44,26 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  let liveChatEnabled = false
+  try {
+    const admin = createAdminClient()
+    const { data, error } = await (admin.from("site_settings" as any) as any)
+      .select("value")
+      .eq("key", "live_chat_enabled")
+      .maybeSingle()
+    if (error) throw error
+    // value is raw boolean (initial INSERT) or {text,value,type} object (after admin save)
+    const v = data?.value
+    liveChatEnabled = v === true || (v !== null && typeof v === "object" && (v as any).value === true)
+  } catch (err) {
+    console.error("[RootLayout] site_settings read failed for live_chat_enabled — defaulting to false:", err)
+  }
+
   return (
     <html
       lang="en"
@@ -56,6 +73,7 @@ export default function RootLayout({
       <body className="flex min-h-full flex-col bg-[#001633] font-sans text-white" style={{ background: '#002E5D' }}>
         {children}
         <BottomNav />
+        <LiveChat enabled={liveChatEnabled} />
         {gaId && (
           <>
             <Script

@@ -322,6 +322,14 @@ const SETTING_CONFIG: Record<
     valueType: "boolean",
     connected: false,
   },
+  live_chat_enabled: {
+    title: "Live Chat",
+    inputLabel: "Tawk.to chat widget",
+    placeholder: "Off",
+    notePlaceholder: "Show the live chat bubble on all public pages",
+    valueType: "boolean",
+    connected: true,
+  },
 }
 
 function formatDate(value?: string | null) {
@@ -2609,7 +2617,7 @@ function SettingsPanel({ settings, compact = false }: { settings: AdminSiteSetti
                     <option value="false">Off</option>
                     <option value="true">On</option>
                   </select>
-                  <p className="mt-2 text-xs font-bold text-white/50">Temporarily hide public selling/listing actions while testing.</p>
+                  <p className="mt-2 text-xs font-bold text-white/50">{config.notePlaceholder}</p>
                 </>
               ) : (
                 <input

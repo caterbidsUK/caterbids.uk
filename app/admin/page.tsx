@@ -107,6 +107,12 @@ function settingDefaults(settings: AdminSiteSetting[]) {
       description: "",
       updated_at: null,
     },
+    {
+      key: "live_chat_enabled",
+      value: false,
+      description: "Show the Tawk.to live chat widget on all public pages",
+      updated_at: null,
+    },
   ]
 
   const byKey = new Map(settings.map((setting) => [setting.key, setting]))
