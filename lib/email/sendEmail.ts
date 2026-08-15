@@ -82,6 +82,7 @@ async function sendWithGmail(input: SendEmailInput, from: string): Promise<SendE
 
     return { ok: true, provider: "gmail", error: null }
   } catch (error) {
+    console.error("[sendEmail] Gmail SMTP error:", error)
     return {
       ok: false,
       provider: "gmail",
@@ -118,6 +119,13 @@ async function sendWithResend(input: SendEmailInput, from: string): Promise<Send
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => "")
+      console.error("[sendEmail] Resend rejected the request:", {
+        status: response.status,
+        statusText: response.statusText,
+        body: errorText,
+        from,
+        to: input.to,
+      })
       return {
         ok: false,
         provider: "resend",
@@ -128,6 +136,7 @@ async function sendWithResend(input: SendEmailInput, from: string): Promise<Send
 
     return { ok: true, provider: "resend", error: null }
   } catch (error) {
+    console.error("[sendEmail] Resend fetch error:", error)
     return {
       ok: false,
       provider: "resend",
@@ -152,6 +161,7 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
   }
 
   debugEmailConfig("none", gmailMissing)
+  console.error("[sendEmail] No email provider configured. Missing env vars:", gmailMissing)
 
   return {
     ok: false,

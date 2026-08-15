@@ -105,6 +105,11 @@ export async function POST(request: NextRequest) {
   }
 
   if (generated.error) {
+    console.error("[email-otp] generateLink returned error:", {
+      message: generated.error.message,
+      status: (generated.error as { status?: number }).status,
+      email,
+    })
     return NextResponse.json(
       { error: generated.error.message || "Could not create a login code. Please try again." },
       { status: 400 }
@@ -118,6 +123,12 @@ export async function POST(request: NextRequest) {
 
   const emailResult = await sendLoginEmail({ email, otp })
   if (!emailResult.ok) {
+    console.error("[email-otp] sendLoginEmail failed:", {
+      provider: emailResult.provider,
+      status: emailResult.status,
+      error: emailResult.error,
+      to: email,
+    })
     return NextResponse.json({ error: emailResult.error || "Could not send login email." }, { status: 503 })
   }
 

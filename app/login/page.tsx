@@ -261,7 +261,13 @@ function LoginContent() {
       const { data, error: verifyError } = await supabase.auth.verifyOtp({
         email: trimmedEmail,
         token,
-        type: "magiclink",
+        type: "email",
+      })
+
+      console.log("[verifyEmailOtp] result:", {
+        ok: !verifyError,
+        hasSession: Boolean(data?.session),
+        error: verifyError?.message ?? null,
       })
 
       if (verifyError) {
@@ -486,7 +492,7 @@ function LoginContent() {
             <div className="mt-5 rounded-3xl border border-slate-200 bg-slate-50 p-4">
               <form onSubmit={lastSignupEmail ? verifyEmailOtp : sendEmailOtp} className="space-y-3 border-t border-slate-100 p-4">
                 <div className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-slate-600">
-                  Enter your email and we&apos;ll send a visible login code plus a secure magic link.
+                  Enter your email and we&apos;ll send a secure login code.
                 </div>
                 <input
                   type="email"
