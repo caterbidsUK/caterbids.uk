@@ -1068,7 +1068,7 @@ function AdminListingEditModal({ listing, onClose }: { listing: AdminListing; on
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className={lbl}>Category</label>
-                <select name="category" value={selectedCategory} onChange={(e) => { setSelectedCategory(e.target.value); setSelectedSubcategory(""); setSelectedEquipmentType("") }} className={inp}>
+                <select name="category" value={selectedCategory} onChange={(e) => { const newCat = e.target.value; setSelectedCategory(newCat); setSelectedSubcategory(subcategoriesForCategory(newCat)[0] ?? ""); setSelectedEquipmentType("") }} className={inp}>
                   {MARKETPLACE_CATEGORY_TITLES.map((opt) => (
                     <option key={opt} value={opt}>{opt}</option>
                   ))}
@@ -1082,7 +1082,6 @@ function AdminListingEditModal({ listing, onClose }: { listing: AdminListing; on
                   onChange={(e) => { setSelectedSubcategory(e.target.value); setSelectedEquipmentType("") }}
                   className={inp}
                 >
-                  <option value="">— None —</option>
                   {subcategories.map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>

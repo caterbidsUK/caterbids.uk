@@ -612,8 +612,12 @@ export async function adminSaveListingEdits(
   const title = formString(formData, "title")
   const price = formString(formData, "price")
   const location = formString(formData, "location")
+  const subcategoryValue = formString(formData, "subcategory")
   if (!title || !price || !location) {
     return { error: "Title, price and location are required." }
+  }
+  if (!subcategoryValue) {
+    return { error: "Select a Type (Level 2) before saving." }
   }
 
   const admin = createAdminClient()
@@ -643,7 +647,7 @@ export async function adminSaveListingEdits(
     location,
     city: formString(formData, "city") || null,
     category: formString(formData, "category") || "Catering Equipment",
-    subcategory: formString(formData, "subcategory") || null,
+    subcategory: subcategoryValue,
     equipment_type: formString(formData, "equipment_type") || null,
     condition: formString(formData, "condition") || "Used",
     power_type: formString(formData, "power_type") || "Unknown",
