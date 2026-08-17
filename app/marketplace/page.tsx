@@ -1,7 +1,8 @@
+import type { CSSProperties } from "react"
 import type { Metadata } from "next"
 import Image from "next/image"
 import Link from "next/link"
-import { Tag } from "lucide-react"
+import { Tag, Utensils, Truck, Building2 } from "lucide-react"
 import { createPublicClient } from "@/lib/supabase/server"
 import { MARKETPLACE_CATEGORIES, CATERING_CATEGORIES } from "@/lib/categories"
 
@@ -63,7 +64,13 @@ const CATEGORY_ICON_SLUGS = new Set([
   "parts-spares",
 ])
 
-const categoryMaskStyle = (slug: string): React.CSSProperties => ({
+const MARKETPLACE_LUCIDE_ICONS = {
+  "catering-equipment": Utensils,
+  "catering-vans-trailers": Truck,
+  "catering-businesses": Building2,
+} as const
+
+const categoryMaskStyle = (slug: string): CSSProperties => ({
   backgroundColor: "currentColor",
   WebkitMaskImage: `url('/icons/categories/${slug}.svg')`,
   maskImage: `url('/icons/categories/${slug}.svg')`,
@@ -142,18 +149,29 @@ export default async function MarketplacePage({ searchParams }: Props) {
         <section className="mb-10">
           <h2 className="mb-4 text-xs font-black uppercase tracking-[0.22em] text-white/55">Browse by category</h2>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-            {ALL_CATEGORIES.map((cat) => (
-              <Link
-                key={cat.slug}
-                href={`/category/${cat.slug}`}
-                className="rounded-2xl border border-white/10 bg-white/[0.07] px-3 py-3 text-sm font-bold text-white/80 transition hover:border-[#FF6B00]/50 hover:bg-white/[0.10] hover:text-white"
-              >
-                <span className="block">{cat.title}</span>
-                <span className="mt-1 line-clamp-2 block text-xs font-medium leading-relaxed text-white/45">
-                  {cat.description}
-                </span>
-              </Link>
-            ))}
+            {ALL_CATEGORIES.map((cat) => {
+              const LucideIcon = MARKETPLACE_LUCIDE_ICONS[cat.slug as keyof typeof MARKETPLACE_LUCIDE_ICONS] ?? null
+              const hasMaskIcon = CATEGORY_ICON_SLUGS.has(cat.slug)
+              return (
+                <Link
+                  key={cat.slug}
+                  href={`/category/${cat.slug}`}
+                  className="rounded-2xl border border-white/10 bg-white/[0.07] px-3 py-3 text-sm font-bold text-white/80 transition hover:border-[#FF6B00]/50 hover:bg-white/[0.10] hover:text-white"
+                >
+                  {LucideIcon && <LucideIcon className="mb-2 h-5 w-5 text-[#FF6B00]" />}
+                  {hasMaskIcon && (
+                    <span
+                      className="mb-2 block h-5 w-5 text-[#FF6B00]"
+                      style={categoryMaskStyle(cat.slug)}
+                    />
+                  )}
+                  <span className="block">{cat.title}</span>
+                  <span className="mt-1 line-clamp-2 block text-xs font-medium leading-relaxed text-white/45">
+                    {cat.description}
+                  </span>
+                </Link>
+              )
+            })}
           </div>
         </section>
 
