@@ -398,13 +398,17 @@ export default function TrailerDetailsForm({ initialData = {}, listingType = "" 
       {/* Hidden input — picked up by new FormData(form) in handlePublish / EditListingForm */}
       <input type="hidden" name="trailer_details" value={JSON.stringify(buildTrailerDetails())} />
 
+      <p className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-semibold text-white/60">
+        Everything below is optional. Fill in what you know and leave the rest.
+      </p>
+
       {/* ── SECTION 1: ASSET BASICS ─────────────────────────────────────── */}
       <section className={SECTION}>
         <SectionHeading title="Asset basics" />
         <div className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-3">
             <div>
-              <p className={LABEL}>Price basis {REQ}</p>
+              <p className={LABEL}>Price basis</p>
               <RadioGroup
                 name="_td_price_basis"
                 options={["Fixed", "ONO", "POA"]}
@@ -413,7 +417,7 @@ export default function TrailerDetailsForm({ initialData = {}, listingType = "" 
               />
             </div>
             <div>
-              <p className={LABEL}>VAT status {REQ}</p>
+              <p className={LABEL}>VAT status</p>
               <RadioGroup
                 name="_td_vat_status"
                 options={["VAT included", "Plus VAT", "Not VAT registered"]}
@@ -424,7 +428,7 @@ export default function TrailerDetailsForm({ initialData = {}, listingType = "" 
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Year built" required>
+            <Field label="Year built">
               <input
                 type="number"
                 className={INPUT}
@@ -509,13 +513,13 @@ export default function TrailerDetailsForm({ initialData = {}, listingType = "" 
 
           {/* Always-shown chassis fields */}
           <div className="grid gap-4 sm:grid-cols-3">
-            <Field label="VIN / chassis number" required>
+            <Field label="VIN / chassis number">
               <input type="text" className={INPUT} placeholder="17-character VIN" value={vin} onChange={(e) => setVin(e.target.value)} />
             </Field>
-            <Field label="Gross weight (kg)" required>
+            <Field label="Gross weight (kg)">
               <input type="number" className={INPUT} placeholder="e.g. 3500" value={grossWeightKg} onChange={(e) => setGrossWeightKg(e.target.value)} />
             </Field>
-            <Field label="Unladen weight (kg)" required>
+            <Field label="Unladen weight (kg)">
               <input type="number" className={INPUT} placeholder="e.g. 1800" value={unladenWeightKg} onChange={(e) => setUnladenWeightKg(e.target.value)} />
             </Field>
           </div>
@@ -527,13 +531,13 @@ export default function TrailerDetailsForm({ initialData = {}, listingType = "" 
         <SectionHeading title="Size and access" />
         <div className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-3">
-            <Field label="External length (m)" required>
+            <Field label="External length (m)">
               <input type="number" step="0.01" className={INPUT} placeholder="e.g. 5.5" value={externalLengthM} onChange={(e) => setExternalLengthM(e.target.value)} />
             </Field>
-            <Field label="External width (m)" required>
+            <Field label="External width (m)">
               <input type="number" step="0.01" className={INPUT} placeholder="e.g. 2.1" value={externalWidthM} onChange={(e) => setExternalWidthM(e.target.value)} />
             </Field>
-            <Field label="External height (m)" required>
+            <Field label="External height (m)">
               <input type="number" step="0.01" className={INPUT} placeholder="e.g. 2.8" value={externalHeightM} onChange={(e) => setExternalHeightM(e.target.value)} />
             </Field>
           </div>
@@ -542,11 +546,11 @@ export default function TrailerDetailsForm({ initialData = {}, listingType = "" 
             <Field label="Internal length (m)">
               <input type="number" step="0.01" className={INPUT} placeholder="e.g. 4.8" value={internalLengthM} onChange={(e) => setInternalLengthM(e.target.value)} />
             </Field>
-            <Field label="Number of hatches" required>
+            <Field label="Number of hatches">
               <input type="number" className={INPUT} placeholder="e.g. 2" min={0} value={hatchCount} onChange={(e) => setHatchCount(e.target.value)} />
             </Field>
             <div>
-              <p className={LABEL}>Hatch side {REQ}</p>
+              <p className={LABEL}>Hatch side</p>
               <RadioGroup
                 name="_td_hatch_side"
                 options={["Nearside", "Offside", "Rear", "Multiple"]}
@@ -853,7 +857,7 @@ export default function TrailerDetailsForm({ initialData = {}, listingType = "" 
               <RadioGroup name="_td_fire_ext" options={["Yes", "No"]} value={fireExtinguisher} onChange={setFireExtinguisher} />
             </div>
             <div>
-              <p className={LABEL}>Ready to trade {REQ}</p>
+              <p className={LABEL}>Ready to trade</p>
               <RadioGroup name="_td_ready" options={["Yes", "Needs work", "Shell only"]} value={readyToTrade} onChange={setReadyToTrade} />
             </div>
           </div>

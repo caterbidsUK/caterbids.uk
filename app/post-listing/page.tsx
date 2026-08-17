@@ -3290,7 +3290,7 @@ function PostListingPage() {
 
               {subcategoriesForCategory(category).length > 0 && (
                 <label className="block">
-                  <span className="mb-1 block text-sm font-black">Type <span className="text-[#FF6B00]">*</span></span>
+                  <span className="mb-1 block text-sm font-black">Type</span>
                   <select
                     name="subcategory"
                     className="w-full rounded-2xl border border-white/20 bg-white/[0.08] px-4 py-3 text-sm font-semibold text-white focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
@@ -3327,7 +3327,7 @@ function PostListingPage() {
 
             <div className="grid gap-3 lg:grid-cols-3">
               <label className="block">
-                <span className="mb-1 block text-sm font-black">Condition <span className="text-[#FF6B00]">*</span></span>
+                <span className="mb-1 block text-sm font-black">Condition</span>
                 <select
                   name="condition"
                   className="w-full rounded-2xl border border-white/20 bg-white/[0.08] px-4 py-3 text-sm font-semibold text-white focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
@@ -3457,7 +3457,7 @@ function PostListingPage() {
             )}
 
             <label className="block">
-              <span className="mb-1 block text-sm font-black">Short description <span className="text-[#FF6B00]">*</span></span>
+              <span className="mb-1 block text-sm font-black">Short description</span>
               <textarea
                 name="description"
                 placeholder="Describe the item, key features, age, and any notes for buyers..."
@@ -3704,7 +3704,7 @@ function PostListingPage() {
           </div>
 
           <div className="mt-4">
-            <p className="mb-2 text-sm font-black">Power type <span className="text-[#FF6B00]">*</span></p>
+            <p className="mb-2 text-sm font-black">Power type</p>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {SHIPPING_POWER_TYPES.map((option) => (
                 <label
