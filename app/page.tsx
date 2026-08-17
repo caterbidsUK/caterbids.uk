@@ -23,7 +23,7 @@ import {
   Utensils,
 } from "lucide-react"
 
-import { createClient } from "@/lib/supabase/server"
+import { createClient, createPublicClient } from "@/lib/supabase/server"
 import type { Database } from "@/types/supabase"
 import FeaturedCarousel from "@/components/FeaturedCarousel"
 import { getFreeListingsRemaining } from "@/lib/counters"
@@ -147,10 +147,18 @@ async function loadHomepageData() {
   }
 
   try {
-    const supabase = await createClient()
-    const [{ data: authData }, { data, error }] = await Promise.all([
-      supabase.auth.getUser(),
-      supabase
+    const sessionClient = await createClient()
+    const publicClient = createPublicClient()
+
+    // Auth uses the session client so an expired JWT resolves to null user
+    // rather than throwing. Listings use the public client so an expired
+    // session cookie never blocks a public read.
+    const [authResult, { data, error }] = await Promise.all([
+      sessionClient.auth.getUser().catch((err) => {
+        console.error("[homepage] auth.getUser() failed — rendering as logged-out:", err?.message ?? err)
+        return { data: { user: null } }
+      }),
+      publicClient
         .from("listings")
         .select("*")
         .or("status.eq.live,status.is.null")
@@ -158,9 +166,11 @@ async function loadHomepageData() {
         .limit(1000),
     ])
 
+    const userId = authResult.data?.user?.id ?? null
+
     if (error) {
-      console.warn("Homepage listings unavailable:", error.message || error)
-      return { ...empty, userId: authData.user?.id || null }
+      console.error("[homepage] Listings query failed:", error.message, error.code)
+      return { ...empty, userId }
     }
 
     const stripDataUrls = (listing: Listing): Listing => ({
@@ -174,7 +184,7 @@ async function loadHomepageData() {
     const featured = listings.filter(isCurrentFeatured).slice(0, 10)
 
     return {
-      userId: authData.user?.id || null,
+      userId,
       listings,
       featuredListings: featured.length > 0 ? featured : listings.slice(0, 3),
       categoryCounts: {

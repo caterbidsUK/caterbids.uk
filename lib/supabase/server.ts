@@ -35,6 +35,16 @@ export async function createClient() {
   })
 }
 
+// Cookie-free client using the anon key only.
+// Use this for public data queries on server-rendered pages where a user's
+// expired session cookie must never block a public read.
+export function createPublicClient() {
+  const { url, key } = getSupabaseEnv()
+  return createServerClient(url, key, {
+    cookies: { getAll: () => [], setAll: () => {} },
+  })
+}
+
 export function createMiddlewareClient(request: NextRequest) {
   let response = NextResponse.next({
     request: {

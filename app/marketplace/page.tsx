@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 import Image from "next/image"
 import Link from "next/link"
 import { Tag } from "lucide-react"
-import { createClient } from "@/lib/supabase/server"
+import { createPublicClient } from "@/lib/supabase/server"
 import { MARKETPLACE_CATEGORIES, CATERING_CATEGORIES } from "@/lib/categories"
 
 const PER_PAGE = 24
@@ -51,13 +51,37 @@ function firstImage(images: unknown, imageUrl: unknown): string | null {
 
 const ALL_CATEGORIES = [...MARKETPLACE_CATEGORIES, ...CATERING_CATEGORIES]
 
+const CATEGORY_ICON_SLUGS = new Set([
+  "cooking-equipment",
+  "refrigeration",
+  "food-preparation",
+  "warewashing-sinks",
+  "canopies-extraction",
+  "coffee-bar-equipment",
+  "display-serving",
+  "stainless-steel-storage",
+  "parts-spares",
+])
+
+const categoryMaskStyle = (slug: string): React.CSSProperties => ({
+  backgroundColor: "currentColor",
+  WebkitMaskImage: `url('/icons/categories/${slug}.svg')`,
+  maskImage: `url('/icons/categories/${slug}.svg')`,
+  WebkitMaskSize: "contain",
+  maskSize: "contain",
+  WebkitMaskRepeat: "no-repeat",
+  maskRepeat: "no-repeat",
+  WebkitMaskPosition: "center",
+  maskPosition: "center",
+})
+
 export default async function MarketplacePage({ searchParams }: Props) {
   const { page } = await searchParams
   const pageNum = Math.max(1, parseInt(String(page || "1"), 10))
   const from = (pageNum - 1) * PER_PAGE
   const to = from + PER_PAGE - 1
 
-  const supabase = await createClient()
+  const supabase = createPublicClient()
   const { data, count, error } = await supabase
     .from("listings")
     .select("id, title, price, category, location, city, images, image_url, subcategory, condition, slug", { count: "exact" })
@@ -66,7 +90,7 @@ export default async function MarketplacePage({ searchParams }: Props) {
     .range(from, to)
 
   if (error) {
-    console.error("Marketplace listings error:", error.message)
+    console.error("[marketplace/page] Listings query failed:", error.message, error.code)
   }
 
   type ListingRow = {
