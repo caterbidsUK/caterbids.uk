@@ -5,7 +5,7 @@ import Link from "next/link"
 import SiteLogo from "@/components/SiteLogo"
 import { createClient } from '@/lib/supabase/client'
 import { getCurrentUser } from '@/lib/supabase/auth'
-import { useEffect, useState, Suspense } from "react"
+import { useEffect, useRef, useState, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import {
   ArrowLeft,
@@ -406,6 +406,7 @@ function ListingContent({ listingId: propId }: { listingId?: string }) {
   const [sellerReviews, setSellerReviews] = useState<SellerReviewRow[]>([])
   const [showAllReviews, setShowAllReviews] = useState(false)
   const [specReportSent, setSpecReportSent] = useState(false)
+  const touchStartXRef = useRef<number | null>(null)
 
   function userOwnsListing(item: Partial<Listing> | null | undefined) {
     const userId = safeListingId(item?.user_id)
@@ -1558,6 +1559,13 @@ function ListingContent({ listingId: propId }: { listingId?: string }) {
   }
 
   const listingImages = listingImageUrls(listing)
+
+  function navigateImage(dir: 1 | -1) {
+    if (listingImages.length < 2) return
+    const idx = Math.max(0, listingImages.indexOf(activeImage))
+    setActiveImage(listingImages[(idx + dir + listingImages.length) % listingImages.length])
+  }
+
   const publicLocation = publicListingLocation(listing)
   const viewCount = supportedViewCount(listing)
   const buyerChecklist = buyerChecklistForListing(listing)
@@ -1779,7 +1787,7 @@ function ListingContent({ listingId: propId }: { listingId?: string }) {
 
   if (safeListingId(listing.id) || id) {
     return (
-      <main className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(255,107,0,0.12),_transparent_30%),linear-gradient(180deg,#001A35_0%,#002E5D_48%,#001A35_100%)] pb-28 text-white md:pb-12">
+      <main className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(255,107,0,0.12),_transparent_30%),linear-gradient(180deg,#001A35_0%,#002E5D_48%,#001A35_100%)] pb-36 text-white md:pb-12">
         {editListingPanel}
 
         <header className="sticky top-0 z-40 border-b border-white/10 bg-[#001A35]/92 backdrop-blur-xl">
@@ -1871,7 +1879,17 @@ function ListingContent({ listingId: propId }: { listingId?: string }) {
         <div className="mx-auto grid max-w-6xl gap-6 overflow-hidden px-4 py-5 sm:px-6 lg:grid-cols-[minmax(0,1.12fr)_minmax(360px,0.88fr)] lg:items-start lg:py-8">
           <section className="min-w-0 space-y-5">
             <div className="overflow-hidden rounded-[2rem] border border-white/12 bg-[#062747]/85 shadow-2xl shadow-black/25">
-              <div className="relative flex aspect-[4/3] min-h-[330px] items-center justify-center bg-[#001A35] p-2 sm:aspect-[16/10] lg:min-h-[560px]">
+              <div
+                className="relative flex aspect-[4/3] min-h-[330px] items-center justify-center bg-[#001A35] p-2 sm:aspect-[16/10] lg:min-h-[560px]"
+                onTouchStart={(e) => { touchStartXRef.current = e.touches[0].clientX }}
+                onTouchEnd={(e) => {
+                  if (touchStartXRef.current === null) return
+                  const dx = e.changedTouches[0].clientX - touchStartXRef.current
+                  touchStartXRef.current = null
+                  if (Math.abs(dx) < 40) return
+                  navigateImage(dx < 0 ? 1 : -1)
+                }}
+              >
                 {activeImage ? (
                   <div className="h-full w-full overflow-hidden rounded-[1.6rem] bg-white/5">
                     <img
@@ -1901,30 +1919,32 @@ function ListingContent({ listingId: propId }: { listingId?: string }) {
               </div>
 
               {listingImages.length > 1 && (
-                <div className="flex items-center justify-center gap-2 px-4 py-4">
+                <div className="flex items-center justify-center px-4">
                   {listingImages.map((img, index) => (
                     <button
                       key={`${img}-${index}`}
                       type="button"
                       onClick={() => setActiveImage(img)}
-                      className={`h-3 w-3 rounded-full transition ${
-                        activeImage === img ? "bg-[#FF6B00]" : "bg-white/25 hover:bg-white/45"
-                      }`}
+                      className="flex h-11 w-11 items-center justify-center"
                       aria-label={`Show listing image ${index + 1}`}
-                    />
+                    >
+                      <span className={`block h-3 w-3 rounded-full transition ${
+                        activeImage === img ? "bg-[#FF6B00]" : "bg-white/25 hover:bg-white/45"
+                      }`} />
+                    </button>
                   ))}
                 </div>
               )}
             </div>
 
             {listingImages.length > 1 && (
-              <div className="hidden grid-cols-5 gap-3 lg:grid">
+              <div className="flex gap-3 overflow-x-auto pb-1 lg:grid lg:grid-cols-5 lg:overflow-visible lg:pb-0">
                 {listingImages.slice(0, 5).map((img, index) => (
                   <button
                     key={`${img}-thumb-${index}`}
                     type="button"
                     onClick={() => setActiveImage(img)}
-                    className={`overflow-hidden rounded-2xl border bg-white/5 p-1 ${
+                    className={`w-20 flex-shrink-0 overflow-hidden rounded-2xl border bg-white/5 p-1 lg:w-auto lg:flex-shrink ${
                       activeImage === img ? "border-[#FF6B00]" : "border-white/12"
                     }`}
                   >
@@ -2662,7 +2682,7 @@ function ListingContent({ listingId: propId }: { listingId?: string }) {
           </aside>
         </div>
 
-        <div className="fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-[#001A35]/95 p-3 backdrop-blur-xl md:hidden">
+        <div className="fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-[#001A35]/95 px-3 pt-3 backdrop-blur-xl md:hidden" style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}>
           <div className="mx-auto flex max-w-3xl gap-3">
             {isListingOwner ? (
               <button
