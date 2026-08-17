@@ -602,7 +602,7 @@ export default function AdminDashboard({
               <AdminControlCard label="Messages" value={messagesTotal.toLocaleString("en-GB")} helper="Internal message rows" icon={<MessageSquare className="h-5 w-5" />} href="/messages" />
               <AdminControlCard label="Reported Items" value={reportsTotal.toLocaleString("en-GB")} helper="Spec/trust reports loaded" icon={<Flag className="h-5 w-5" />} href="/admin/trust" />
               <AdminControlCard label="Blog Posts" value={blogPosts.length.toLocaleString("en-GB")} helper="Published and draft posts" icon={<FileText className="h-5 w-5" />} href="/admin?tab=blog" />
-              <AdminControlCard label="Marketplace" value={marketplaceLive ? "Live" : "Hidden"} helper={marketplaceLive ? "Public browsing enabled" : "Private setup mode"} icon={<Globe2 className="h-5 w-5" />} href="/marketplace" />
+              <AdminControlCard label="Marketplace" value={marketplaceLive ? "Live" : "Hidden"} helper={marketplaceLive ? "Public browsing enabled" : "Private setup mode"} icon={<Globe2 className="h-5 w-5" />} href="/search" />
             </section>
 
         {queryErrors.length > 0 && (

@@ -29,7 +29,7 @@ export const metadata: Metadata = {
 
 const packIcons = [ListChecks, CalendarDays, Tags]
 const planIcons = [Rocket, TrendingUp, ShieldCheck]
-const searchAllHref = "/marketplace"
+const searchAllHref = "/search"
 const sellHref = "/post-listing/start"
 
 // ── Nav ─────────────────────────────────────────────────────────────────────

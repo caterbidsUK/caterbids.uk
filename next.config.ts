@@ -13,6 +13,12 @@ const nextConfig: NextConfig = {
   },
   async redirects() {
     return [
+      // /marketplace retired — /search is the single browse page
+      {
+        source: "/marketplace",
+        destination: "/search",
+        permanent: true,
+      },
       // 8 near-identical "buying and selling" duplicates → canonical
       {
         source: "/blog/scaling-your-kitchen-buying-selling-catering-equipment-0ebdc4",

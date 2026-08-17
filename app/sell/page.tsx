@@ -3,7 +3,7 @@ import { sellIsLive } from "@/lib/launch-gates"
 
 export default function SellRedirectPage() {
   if (!sellIsLive()) {
-    redirect("/marketplace")
+    redirect("/search")
   }
 
   redirect("/post-listing/start")

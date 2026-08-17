@@ -4,7 +4,7 @@ import { ChevronRight, Menu, Search } from "lucide-react"
 import SiteFooter from "@/components/SiteFooter"
 import type { ReactNode } from "react"
 
-const marketplaceHref = "/marketplace"
+const marketplaceHref = "/search"
 const sellerEarlyAccessHref = "/#launch-list"
 
 const navLinks = [

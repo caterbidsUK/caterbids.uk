@@ -274,7 +274,7 @@ BANNED PHRASES — do not use these at all:
 - No em dashes anywhere in the article
 
 INTERNAL LINKS — use natural anchor text, never the raw path as visible text:
-- /marketplace — link when mentioning buying or browsing equipment
+- /search — link when mentioning buying or browsing equipment
 - /post-listing — link when mentioning listing or selling equipment
 - /pallet-delivery-guide — link when mentioning moving or delivery
 - /blog — link occasionally when suggesting more reading
@@ -293,7 +293,7 @@ HTML FORMAT — use ONLY these tags: h2, h3, p, ul, ol, li, strong, em, a
 - h2 for main section headings
 - h3 for sub-sections if needed
 - strong for key terms and important points within sentences
-- Links must use safe paths: <a href="/marketplace">text</a>
+- Links must use safe paths: <a href="/search">text</a>
 - No inline styles, no class attributes, no div or span tags
 
 Return a JSON object ONLY — no markdown, no explanation, no code fence:

@@ -67,7 +67,7 @@ type StepCard = {
   icon: ReactNode
 }
 
-const searchAllHref = "/marketplace"
+const searchAllHref = "/search"
 const sellHref = "/post-listing/start"
 
 const heroFeatureCards = [
@@ -320,7 +320,7 @@ function HeroSection({ accountHref, accountLabel, freeRemaining, freeCap }: { ac
               <ArrowRight className="h-7 w-7 transition group-hover:translate-x-1" strokeWidth={2.2} />
             </Link>
             <Link
-              href="/marketplace"
+              href={searchAllHref}
               className="group flex min-h-16 items-center justify-center gap-4 rounded-[1.7rem] border border-white/38 bg-white/7 px-8 text-xl font-black text-white shadow-[0_20px_65px_rgba(0,0,0,0.26)] backdrop-blur-md transition hover:border-[#FF6B00]/80 hover:bg-white/12 focus:outline-none focus:ring-4 focus:ring-white/20 sm:min-w-72"
             >
               <Search className="h-8 w-8" strokeWidth={2.1} />
