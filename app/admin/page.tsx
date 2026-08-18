@@ -144,7 +144,9 @@ export default async function AdminPage({
   // Pre-fetch test user IDs so every subsequent query can exclude them.
   // Done before the main Promise.all because the other queries depend on these IDs.
   const { data: testProfilesData } = await admin.from("profiles").select("id").eq("is_test", true)
-  const testUserIds: string[] = (testProfilesData || []).map((p: any) => p.id as string)
+  const testUserIds: string[] = (testProfilesData || [])
+    .map((p: any) => p.id as string)
+    .filter((id) => id !== context.userId)
   // PostgREST OR-filter string fragments for nullable FK columns.
   // Pattern: keep row when column IS NULL (not a user row) OR column NOT IN testIds.
   const tf = testUserIds.length > 0 ? testUserIds.join(",") : null

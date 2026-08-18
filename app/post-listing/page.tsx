@@ -766,7 +766,9 @@ function PostListingPage() {
   const [location, setLocation] = useState("")
   const [city, setCity] = useState("")
   const [category, _setCategory] = useState<string>(validCategoryParam ?? "")
-  const [subcategory, setSubcategory] = useState("Cooking Equipment")
+  const [subcategory, setSubcategory] = useState(
+    () => subcategoriesForCategory(validCategoryParam ?? "")[0] ?? "Cooking Equipment"
+  )
   const [equipmentType, setEquipmentType] = useState("")
   const [condition, setCondition] = useState("Used")
   const [powerType, setPowerType] = useState("Unknown")

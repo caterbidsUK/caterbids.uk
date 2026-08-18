@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
-import { createAdminClient } from "@/lib/supabase/admin"
+import { createPublicClient } from "@/lib/supabase/server"
 import ListingPage from "../ListingPageClient"
 
 type Props = {
@@ -15,8 +15,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   try {
     const { slug } = await params
-    const admin = createAdminClient()
-    const { data } = await (admin.from("listings" as any) as any)
+    const client = createPublicClient()
+    const { data } = await (client.from("listings" as any) as any)
       .select("title, description")
       .eq("slug", slug)
       .maybeSingle()
@@ -51,16 +51,56 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 }
 
+function toSchemaAvailability(status: string | null | undefined): string {
+  if (status === "live") return "https://schema.org/InStock"
+  if (status === "sold") return "https://schema.org/SoldOut"
+  return "https://schema.org/Discontinued"
+}
+
+function toSchemaCondition(condition: string | null | undefined): string {
+  if (condition === "New") return "https://schema.org/NewCondition"
+  if (condition === "Refurbished") return "https://schema.org/RefurbishedCondition"
+  if (condition === "Spares or Repair") return "https://schema.org/DamagedCondition"
+  return "https://schema.org/UsedCondition"
+}
+
 export default async function ListingSlugPage({ params }: Props) {
   const { slug } = await params
-  const admin    = createAdminClient()
-  const { data } = await (admin.from("listings" as any) as any)
-    .select("id")
+  const client = createPublicClient()
+  const { data } = await (client.from("listings" as any) as any)
+    .select("*")
     .eq("slug", slug)
     .neq("status", "deleted")
     .maybeSingle()
 
   if (!data?.id) notFound()
 
-  return <ListingPage listingId={data.id} />
+  const images: string[] = Array.isArray(data.images) ? data.images : []
+  const schemaImage = images.find((img: string) => img && !img.startsWith("data:"))
+  const numericPrice = (data.price as string | null)?.replace(/[£,\s]/g, "") ?? undefined
+
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: data.title ?? "",
+    description: data.description ?? "",
+    ...(schemaImage ? { image: schemaImage } : {}),
+    offers: {
+      "@type": "Offer",
+      priceCurrency: "GBP",
+      ...(numericPrice ? { price: numericPrice } : {}),
+      availability: toSchemaAvailability(data.status),
+      itemCondition: toSchemaCondition(data.condition),
+    },
+  }
+
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <ListingPage listingId={data.id} initialListing={data} />
+    </>
+  )
 }

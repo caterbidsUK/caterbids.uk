@@ -371,16 +371,16 @@ function logSupabaseListingMessageError(error: unknown) {
   console.warn("Supabase listing message warning:", error)
 }
 
-function ListingContent({ listingId: propId }: { listingId?: string }) {
+function ListingContent({ listingId: propId, initialListing }: { listingId?: string; initialListing?: Listing | null }) {
   const router = useRouter()
   const params = useSearchParams()
   const id = propId ?? params.get("id")
   const [showFeaturedSuccess, setShowFeaturedSuccess] = useState(params.get("featured") === "success")
 
-  const [listing, setListing] = useState<Listing | null>(null)
+  const [listing, setListing] = useState<Listing | null>(initialListing ?? null)
   const [myListings, setMyListings] = useState<Listing[]>([])
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!initialListing)
   const [liked, setLiked] = useState(false)
   const [editingListing, setEditingListing] = useState<Listing | null>(null)
   const [editImagePreviews, setEditImagePreviews] = useState<string[]>([])
@@ -3275,7 +3275,7 @@ function ListingContent({ listingId: propId }: { listingId?: string }) {
   )
 }
 
-export default function ListingPage({ listingId }: { listingId?: string } = {}) {
+export default function ListingPage({ listingId, initialListing }: { listingId?: string; initialListing?: Listing | null } = {}) {
   return (
     <Suspense
       fallback={
@@ -3284,7 +3284,7 @@ export default function ListingPage({ listingId }: { listingId?: string } = {}) 
         </div>
       }
     >
-      <ListingContent listingId={listingId} />
+      <ListingContent listingId={listingId} initialListing={initialListing} />
     </Suspense>
   )
 }
