@@ -717,7 +717,10 @@ function formatPrice(price: string) {
 function isMissingStorageBucketError(error: unknown) {
   if (!(error instanceof Error)) return false
   const message = error.message.toLowerCase()
-  return message.includes("bucket not found") || message.includes("storage bucket")
+  // Match Supabase's exact "Bucket not found" / NoSuchBucket response only.
+  // Do NOT match on "storage bucket" — that phrase appears in permission errors
+  // which should be surfaced to the seller, not silently swallowed as a fallback.
+  return message.includes("bucket not found") || message.includes("nosuchbucket")
 }
 
 function hasPositiveNumber(value: FormDataEntryValue | null) {
@@ -1099,7 +1102,13 @@ function PostListingPage() {
         try {
           return await resizeListingImage(file)
         } catch {
-          return fileToDataUrl(file)
+          // Canvas failed to decode this file (common with HEIC on some iOS versions).
+          // Sending the raw file as a data URI can exceed the server action body limit
+          // (a 3 MB HEIC becomes ~4 MB base64). Reject with a clear message so the
+          // seller is prompted to convert rather than silently failing on submit.
+          throw new Error(
+            `Could not process "${file.name}". If it's a HEIC photo, convert it to JPEG in your Photos app (share → save as JPEG) and try again.`
+          )
         }
       })
     )
@@ -2597,7 +2606,13 @@ function PostListingPage() {
         formData.set("founding_free_feature", "on")
       }
 
-      const result = await createListing(formData)
+      let result: Awaited<ReturnType<typeof createListing>>
+      try {
+        result = await createListing(formData)
+      } catch {
+        setPublishError("Something went wrong submitting your listing. Your photos and form data are still here — try again.")
+        return
+      }
       if (!result) return
 
       if (result.success) {
