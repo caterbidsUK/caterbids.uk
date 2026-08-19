@@ -1,7 +1,7 @@
 export function isFeaturedAndActive(item: Record<string, unknown>): boolean {
   if (!item.featured && !item.is_featured) return false
   const until = item.featured_until
-  if (!until) return true
+  if (!until) return false
   return new Date(String(until)).getTime() > Date.now()
 }
 

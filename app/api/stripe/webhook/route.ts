@@ -400,6 +400,32 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  if (metadata.type === "relist") {
+    const relistId = metadata.listingId || ""
+    if (!relistId) {
+      return NextResponse.json({ error: "Missing listingId in relist webhook" }, { status: 400 })
+    }
+    const relistUntil = new Date()
+    relistUntil.setDate(relistUntil.getDate() + 30)
+    try {
+      const supabase = createAdminClient()
+      const { error } = await supabase
+        .from("listings")
+        .update({
+          status: "live",
+          expires_at: relistUntil.toISOString(),
+          updated_at: new Date().toISOString(),
+        } as any)
+        .eq("id", relistId)
+      if (error) throw error
+      return NextResponse.json({ received: true, relisted: true })
+    } catch (error) {
+      Sentry.captureException(error, { tags: { webhook_stage: "relist" } })
+      console.error("Relist webhook failed:", error)
+      return NextResponse.json({ error: "Could not relist listing" }, { status: 500 })
+    }
+  }
+
   const listingId = metadata.listingId || ""
 
   if (!listingId) {

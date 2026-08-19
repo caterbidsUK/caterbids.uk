@@ -92,7 +92,7 @@ const heroFeatureCards = [
 function isCurrentFeatured(listing: Listing) {
   const featured = Boolean(listing.featured || listing.is_featured)
   if (!featured) return false
-  if (!listing.featured_until) return true
+  if (!listing.featured_until) return false
 
   const timestamp = new Date(listing.featured_until).getTime()
   return Number.isFinite(timestamp) ? timestamp > Date.now() : true

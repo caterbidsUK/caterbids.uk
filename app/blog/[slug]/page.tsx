@@ -108,7 +108,7 @@ type SidebarListingsData = { featured: SidebarListing[]; recent: SidebarListing[
 
 function isActiveFeatured(l: Pick<SidebarListing, "featured" | "is_featured" | "featured_until">): boolean {
   if (!Boolean(l.featured || l.is_featured)) return false
-  if (!l.featured_until) return true
+  if (!l.featured_until) return false
   const ts = new Date(l.featured_until).getTime()
   return Number.isFinite(ts) ? ts > Date.now() : true
 }
