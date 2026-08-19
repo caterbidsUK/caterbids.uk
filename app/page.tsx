@@ -122,13 +122,7 @@ function categoryCount(listings: Listing[], key: CategoryKey) {
       return text.includes("van") || text.includes("trailer") || text.includes("food truck")
     }
 
-    return (
-      text.includes("business") ||
-      text.includes("cafe") ||
-      text.includes("café") ||
-      text.includes("restaurant") ||
-      text.includes("takeaway")
-    )
+    return (listing.category || "").toLowerCase() === "catering businesses"
   }).length
 
   return count > 0 ? count : null
