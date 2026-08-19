@@ -446,6 +446,7 @@ export interface Database {
           featured: boolean | null
           is_featured: boolean | null
           featured_until: string | null
+          expires_at: string | null
           featured_type: string | null
           featured_at: string | null
           featured_by: string | null
@@ -556,6 +557,7 @@ export interface Database {
           featured?: boolean | null
           is_featured?: boolean | null
           featured_until?: string | null
+          expires_at?: string | null
           featured_type?: string | null
           featured_at?: string | null
           featured_by?: string | null
@@ -666,6 +668,7 @@ export interface Database {
           featured?: boolean | null
           is_featured?: boolean | null
           featured_until?: string | null
+          expires_at?: string | null
           featured_type?: string | null
           featured_at?: string | null
           featured_by?: string | null
