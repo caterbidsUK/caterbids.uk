@@ -2136,6 +2136,190 @@ function ListingContent({ listingId: propId, initialListing }: { listingId?: str
                 </p>
               </details>
 
+              {listing.category === "Catering Businesses" && listing.business_details && typeof listing.business_details === "object" && (() => {
+                const bd = listing.business_details as Record<string, unknown>
+                const confidential = Boolean(listing.is_confidential)
+                const rows: [string, string][] = []
+                if (!confidential && bd.trading_name) rows.push(["Trading name", String(bd.trading_name)])
+                if (bd.business_type) rows.push(["Business type", String(bd.business_type)])
+                if (bd.years_trading) rows.push(["Years trading", String(bd.years_trading)])
+                if (bd.reason_for_sale) rows.push(["Reason for sale", String(bd.reason_for_sale)])
+                if (bd.annual_turnover) rows.push(["Annual turnover", String(bd.annual_turnover)])
+                if (bd.annual_profit) rows.push(["Annual profit", String(bd.annual_profit)])
+                if (bd.avg_weekly_revenue) rows.push(["Avg. weekly revenue", String(bd.avg_weekly_revenue)])
+                if (bd.rent_or_own) rows.push(["Premises ownership", String(bd.rent_or_own)])
+                if (bd.monthly_rent) rows.push(["Monthly rent", String(bd.monthly_rent)])
+                if (bd.lease_remaining) rows.push(["Lease remaining", String(bd.lease_remaining)])
+                if (bd.premises_type) rows.push(["Premises type", String(bd.premises_type)])
+                if (bd.sq_ft) rows.push(["Floor area", `${bd.sq_ft} sq ft`])
+                if (bd.covers) rows.push(["Covers / seats", String(bd.covers)])
+                if (bd.location_type) rows.push(["Location type", String(bd.location_type)])
+                if (!confidential && bd.postcode) rows.push(["Postcode", String(bd.postcode)])
+                if (bd.staff_count) rows.push(["Staff", String(bd.staff_count)])
+                if (bd.opening_hours) rows.push(["Opening hours", String(bd.opening_hours)])
+                if (bd.cuisine_type) rows.push(["Cuisine", String(bd.cuisine_type)])
+                if (Array.isArray(bd.trading_days) && bd.trading_days.length) rows.push(["Trading days", (bd.trading_days as string[]).join(", ")])
+                if (Array.isArray(bd.licensing) && bd.licensing.length) rows.push(["Licences", (bd.licensing as string[]).join(", ")])
+                if (bd.equipment_included) rows.push(["Equipment included", String(bd.equipment_included)])
+                if (bd.stock_included) rows.push(["Stock included", String(bd.stock_included)])
+                if (bd.website_social_included) rows.push(["Website / social", String(bd.website_social_included)])
+                if (bd.supplier_contacts) rows.push(["Supplier contacts", String(bd.supplier_contacts)])
+                if (bd.training_offered) rows.push(["Handover training", String(bd.training_offered)])
+                return (
+                  <section className="premium-card rounded-3xl p-5">
+                    <p className="text-xs font-black uppercase tracking-[0.18em] text-[#FF6B00]">
+                      Business Details
+                    </p>
+                    <h2 className="mt-1 text-xl font-black text-white">
+                      {confidential ? "Confidential listing" : (bd.trading_name ? String(bd.trading_name) : "Business for sale")}
+                    </h2>
+                    {confidential && (
+                      <p className="mt-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-xs font-semibold text-white/60">
+                        This is a confidential listing. The trading name, address and postcode are shared directly with serious enquirers.
+                      </p>
+                    )}
+                    {rows.length > 0 && (
+                      <div className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
+                        {rows.map(([label, value]) => (
+                          <div key={label} className="rounded-2xl border border-white/10 bg-[#002E5D]/35 p-3">
+                            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-white/40">{label}</p>
+                            <p className="mt-1 font-bold text-white/82">{value}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {Boolean(bd.other_inclusions) && (
+                      <p className="mt-3 text-sm leading-relaxed text-white/70">
+                        <span className="font-black text-white/50 uppercase text-[10px] tracking-widest block mb-1">Other inclusions</span>
+                        {String(bd.other_inclusions)}
+                      </p>
+                    )}
+                  </section>
+                )
+              })()}
+
+              {listing.category === "Catering Vans & Trailers" && listing.trailer_details && typeof listing.trailer_details === "object" && (() => {
+                const td = listing.trailer_details as Record<string, unknown>
+                const rows: [string, string][] = []
+
+                if (td.price_basis) rows.push(["Price basis", String(td.price_basis)])
+                if (td.vat_status) rows.push(["VAT status", String(td.vat_status)])
+                if (td.year_built) rows.push(["Year built", String(td.year_built)])
+                if (td.reason_for_sale) rows.push(["Reason for sale", String(td.reason_for_sale)])
+
+                if (td.make_model) rows.push(["Make and model", String(td.make_model)])
+                if (td.registration_year) rows.push(["Registration year", String(td.registration_year)])
+                if (td.mileage) rows.push(["Mileage", `${Number(td.mileage).toLocaleString()} miles`])
+                if (td.fuel_type) rows.push(["Fuel type", String(td.fuel_type)])
+                if (td.mot_expiry) rows.push(["MOT expiry", String(td.mot_expiry)])
+                if (td.ulez_compliant) rows.push(["ULEZ compliant", String(td.ulez_compliant)])
+
+                if (td.axles) rows.push(["Axles", String(td.axles)])
+                if (td.braked) rows.push(["Braked", String(td.braked)])
+                if (td.hitch_type) rows.push(["Hitch type", String(td.hitch_type)])
+                if (td.towing_licence) rows.push(["Towing licence required", String(td.towing_licence)])
+
+                if (td.gross_weight_kg) rows.push(["Gross weight", `${td.gross_weight_kg} kg`])
+                if (td.unladen_weight_kg) rows.push(["Unladen weight", `${td.unladen_weight_kg} kg`])
+
+                if (td.external_length_m) rows.push(["External length", `${td.external_length_m} m`])
+                if (td.external_width_m) rows.push(["External width", `${td.external_width_m} m`])
+                if (td.external_height_m) rows.push(["External height", `${td.external_height_m} m`])
+                if (td.internal_length_m) rows.push(["Internal length", `${td.internal_length_m} m`])
+                if (td.hatch_count) rows.push(["Number of hatches", String(td.hatch_count)])
+                if (td.hatch_side) rows.push(["Hatch side", String(td.hatch_side)])
+                if (td.canopy) rows.push(["Canopy", String(td.canopy)])
+                if (td.access_door) rows.push(["Access door", String(td.access_door)])
+
+                if (Array.isArray(td.electrical_supply) && (td.electrical_supply as string[]).length > 0)
+                  rows.push(["Electrical supply", (td.electrical_supply as string[]).join(", ")])
+                if (td.generator_included) rows.push(["Generator included", String(td.generator_included)])
+                if (td.generator_detail) rows.push(["Generator", String(td.generator_detail)])
+                if (td.electrical_cert) rows.push(["Electrical certificate", String(td.electrical_cert)])
+                if (td.electrical_cert_expiry) rows.push(["Electrical cert expiry", String(td.electrical_cert_expiry)])
+                if (td.consumer_unit_rcd) rows.push(["Consumer unit RCD", String(td.consumer_unit_rcd)])
+
+                if (td.gas_used) rows.push(["Gas used", String(td.gas_used)])
+                if (td.bottle_type) rows.push(["Bottle type", String(td.bottle_type)])
+                if (td.bottle_count) rows.push(["Number of bottles", String(td.bottle_count)])
+                if (td.bottle_locker_vented) rows.push(["Bottle locker vented", String(td.bottle_locker_vented)])
+                if (td.gas_cert) rows.push(["Gas safety certificate", String(td.gas_cert)])
+                if (td.gas_cert_expiry) rows.push(["Gas cert expiry", String(td.gas_cert_expiry)])
+                if (td.gas_interlock) rows.push(["Gas interlock fitted", String(td.gas_interlock)])
+                if (td.gas_dropout_vents) rows.push(["Gas drop-out vents", String(td.gas_dropout_vents)])
+
+                if (td.hand_wash_basin) rows.push(["Hand wash basin", String(td.hand_wash_basin)])
+                if (td.sink_bowls) rows.push(["Sink bowls", String(td.sink_bowls)])
+                if (td.hot_water) rows.push(["Hot water", String(td.hot_water)])
+                if (td.fresh_water_litres) rows.push(["Fresh water capacity", `${td.fresh_water_litres} L`])
+                if (td.waste_water_litres) rows.push(["Waste water capacity", `${td.waste_water_litres} L`])
+                if (td.wall_floor_finish) rows.push(["Wall and floor finish", String(td.wall_floor_finish)])
+                if (td.extraction_canopy) rows.push(["Extraction canopy", String(td.extraction_canopy)])
+                if (td.extraction_condition) rows.push(["Extraction condition", String(td.extraction_condition)])
+
+                if (Array.isArray(td.documents_held) && (td.documents_held as string[]).length > 0)
+                  rows.push(["Documents held", (td.documents_held as string[]).join(", ")])
+                if (td.food_hygiene_rating) rows.push(["Food hygiene rating", String(td.food_hygiene_rating)])
+                if (td.la_registered) rows.push(["Registered with local authority", String(td.la_registered)])
+                if (td.fire_extinguisher) rows.push(["Fire extinguisher on board", String(td.fire_extinguisher)])
+                if (td.ready_to_trade) rows.push(["Ready to trade", String(td.ready_to_trade)])
+                if (td.business_included) rows.push(["Established business included", String(td.business_included)])
+                if (td.pitch_details) rows.push(["Pitch / trading location", String(td.pitch_details)])
+
+                if (td.viewing) rows.push(["Viewing", String(td.viewing)])
+                if (td.delivery_option) rows.push(["Delivery", String(td.delivery_option)])
+                if (td.delivery_radius_miles) rows.push(["Delivery radius", `${td.delivery_radius_miles} miles`])
+                if (td.handover_training) rows.push(["Handover training included", String(td.handover_training)])
+                if (td.part_exchange) rows.push(["Part exchange considered", String(td.part_exchange)])
+
+                const equipment = Array.isArray(td.equipment) ? td.equipment as Record<string, string>[] : []
+                const otherItems = td.other_items_included ? String(td.other_items_included) : ""
+
+                if (rows.length === 0 && equipment.length === 0 && !otherItems) return null
+
+                return (
+                  <section className="premium-card rounded-3xl p-5">
+                    <p className="text-xs font-black uppercase tracking-[0.18em] text-[#FF6B00]">
+                      Trailer Details
+                    </p>
+                    <h2 className="mt-1 text-xl font-black text-white">
+                      {td.make_model ? String(td.make_model) : (listing.subcategory || "Catering Unit")}
+                    </h2>
+                    {rows.length > 0 && (
+                      <div className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
+                        {rows.map(([label, value]) => (
+                          <div key={label} className="rounded-2xl border border-white/10 bg-[#002E5D]/35 p-3">
+                            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-white/40">{label}</p>
+                            <p className="mt-1 font-bold text-white/82">{value}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {equipment.length > 0 && (
+                      <div className="mt-4">
+                        <p className="text-[10px] font-black uppercase tracking-[0.14em] text-white/40 mb-2">Fitted equipment</p>
+                        <div className="space-y-2">
+                          {equipment.map((item, i) => (
+                            <div key={i} className="rounded-2xl border border-white/10 bg-[#002E5D]/35 p-3 text-sm">
+                              <p className="font-black text-white/90">{item.item}{item.make_model ? ` — ${item.make_model}` : ""}</p>
+                              <p className="mt-1 text-xs text-white/50">
+                                {[item.power_source, item.condition, item.included === "Yes" ? "included" : item.included === "No" ? "not included" : ""].filter(Boolean).join(" · ")}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {otherItems && (
+                      <p className="mt-3 text-sm leading-relaxed text-white/70">
+                        <span className="font-black text-white/50 uppercase text-[10px] tracking-widest block mb-1">Other items included</span>
+                        {otherItems}
+                      </p>
+                    )}
+                  </section>
+                )
+              })()}
+
               <details className="group rounded-3xl border border-white/12 bg-[#062747]/85 p-4 shadow-lg shadow-black/10">
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
                   <span className="flex items-center gap-3 text-lg font-black text-white">
@@ -3013,6 +3197,138 @@ function ListingContent({ listingId: propId, initialListing }: { listingId?: str
                   <p className="mt-3 text-sm leading-relaxed text-white/70">
                     <span className="font-black text-white/50 uppercase text-[10px] tracking-widest block mb-1">Other inclusions</span>
                     {String(bd.other_inclusions)}
+                  </p>
+                )}
+              </section>
+            )
+          })()}
+
+          {listing.category === "Catering Vans & Trailers" && listing.trailer_details && typeof listing.trailer_details === "object" && (() => {
+            const td = listing.trailer_details as Record<string, unknown>
+            const rows: [string, string][] = []
+
+            // Section 1 — Asset basics
+            if (td.price_basis) rows.push(["Price basis", String(td.price_basis)])
+            if (td.vat_status) rows.push(["VAT status", String(td.vat_status)])
+            if (td.year_built) rows.push(["Year built", String(td.year_built)])
+            if (td.reason_for_sale) rows.push(["Reason for sale", String(td.reason_for_sale)])
+
+            // Section 2 — Vehicle (van-type fields)
+            if (td.make_model) rows.push(["Make and model", String(td.make_model)])
+            if (td.registration_year) rows.push(["Registration year", String(td.registration_year)])
+            if (td.mileage) rows.push(["Mileage", `${Number(td.mileage).toLocaleString()} miles`])
+            if (td.fuel_type) rows.push(["Fuel type", String(td.fuel_type)])
+            if (td.mot_expiry) rows.push(["MOT expiry", String(td.mot_expiry)])
+            if (td.ulez_compliant) rows.push(["ULEZ compliant", String(td.ulez_compliant)])
+
+            // Section 2 — Chassis (trailer-type fields)
+            if (td.axles) rows.push(["Axles", String(td.axles)])
+            if (td.braked) rows.push(["Braked", String(td.braked)])
+            if (td.hitch_type) rows.push(["Hitch type", String(td.hitch_type)])
+            if (td.towing_licence) rows.push(["Towing licence required", String(td.towing_licence)])
+
+            // VIN omitted — public VIN is a theft and cloning risk
+            if (td.gross_weight_kg) rows.push(["Gross weight", `${td.gross_weight_kg} kg`])
+            if (td.unladen_weight_kg) rows.push(["Unladen weight", `${td.unladen_weight_kg} kg`])
+
+            // Section 3 — Size and access
+            if (td.external_length_m) rows.push(["External length", `${td.external_length_m} m`])
+            if (td.external_width_m) rows.push(["External width", `${td.external_width_m} m`])
+            if (td.external_height_m) rows.push(["External height", `${td.external_height_m} m`])
+            if (td.internal_length_m) rows.push(["Internal length", `${td.internal_length_m} m`])
+            if (td.hatch_count) rows.push(["Number of hatches", String(td.hatch_count)])
+            if (td.hatch_side) rows.push(["Hatch side", String(td.hatch_side)])
+            if (td.canopy) rows.push(["Canopy", String(td.canopy)])
+            if (td.access_door) rows.push(["Access door", String(td.access_door)])
+
+            // Section 4 — Electrical
+            if (Array.isArray(td.electrical_supply) && (td.electrical_supply as string[]).length > 0)
+              rows.push(["Electrical supply", (td.electrical_supply as string[]).join(", ")])
+            if (td.generator_included) rows.push(["Generator included", String(td.generator_included)])
+            if (td.generator_detail) rows.push(["Generator", String(td.generator_detail)])
+            if (td.electrical_cert) rows.push(["Electrical certificate", String(td.electrical_cert)])
+            if (td.electrical_cert_expiry) rows.push(["Electrical cert expiry", String(td.electrical_cert_expiry)])
+            if (td.consumer_unit_rcd) rows.push(["Consumer unit RCD", String(td.consumer_unit_rcd)])
+
+            // Section 5 — Gas
+            if (td.gas_used) rows.push(["Gas used", String(td.gas_used)])
+            if (td.bottle_type) rows.push(["Bottle type", String(td.bottle_type)])
+            if (td.bottle_count) rows.push(["Number of bottles", String(td.bottle_count)])
+            if (td.bottle_locker_vented) rows.push(["Bottle locker vented", String(td.bottle_locker_vented)])
+            if (td.gas_cert) rows.push(["Gas safety certificate", String(td.gas_cert)])
+            if (td.gas_cert_expiry) rows.push(["Gas cert expiry", String(td.gas_cert_expiry)])
+            if (td.gas_interlock) rows.push(["Gas interlock fitted", String(td.gas_interlock)])
+            if (td.gas_dropout_vents) rows.push(["Gas drop-out vents", String(td.gas_dropout_vents)])
+
+            // Section 6 — Water and hygiene
+            if (td.hand_wash_basin) rows.push(["Hand wash basin", String(td.hand_wash_basin)])
+            if (td.sink_bowls) rows.push(["Sink bowls", String(td.sink_bowls)])
+            if (td.hot_water) rows.push(["Hot water", String(td.hot_water)])
+            if (td.fresh_water_litres) rows.push(["Fresh water capacity", `${td.fresh_water_litres} L`])
+            if (td.waste_water_litres) rows.push(["Waste water capacity", `${td.waste_water_litres} L`])
+            if (td.wall_floor_finish) rows.push(["Wall and floor finish", String(td.wall_floor_finish)])
+            if (td.extraction_canopy) rows.push(["Extraction canopy", String(td.extraction_canopy)])
+            if (td.extraction_condition) rows.push(["Extraction condition", String(td.extraction_condition)])
+
+            // Section 8 — Compliance and documents
+            if (Array.isArray(td.documents_held) && (td.documents_held as string[]).length > 0)
+              rows.push(["Documents held", (td.documents_held as string[]).join(", ")])
+            if (td.food_hygiene_rating) rows.push(["Food hygiene rating", String(td.food_hygiene_rating)])
+            if (td.la_registered) rows.push(["Registered with local authority", String(td.la_registered)])
+            if (td.fire_extinguisher) rows.push(["Fire extinguisher on board", String(td.fire_extinguisher)])
+            if (td.ready_to_trade) rows.push(["Ready to trade", String(td.ready_to_trade)])
+            if (td.business_included) rows.push(["Established business included", String(td.business_included)])
+            if (td.pitch_details) rows.push(["Pitch / trading location", String(td.pitch_details)])
+
+            // Section 9 — Viewing and handover
+            if (td.viewing) rows.push(["Viewing", String(td.viewing)])
+            if (td.delivery_option) rows.push(["Delivery", String(td.delivery_option)])
+            if (td.delivery_radius_miles) rows.push(["Delivery radius", `${td.delivery_radius_miles} miles`])
+            if (td.handover_training) rows.push(["Handover training included", String(td.handover_training)])
+            if (td.part_exchange) rows.push(["Part exchange considered", String(td.part_exchange)])
+
+            const equipment = Array.isArray(td.equipment) ? td.equipment as Record<string, string>[] : []
+            const otherItems = td.other_items_included ? String(td.other_items_included) : ""
+
+            if (rows.length === 0 && equipment.length === 0 && !otherItems) return null
+
+            return (
+              <section className="premium-card rounded-3xl p-5">
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-[#FF6B00]">
+                  Trailer Details
+                </p>
+                <h2 className="mt-1 text-xl font-black text-white">
+                  {td.make_model ? String(td.make_model) : (listing.subcategory || "Catering Unit")}
+                </h2>
+                {rows.length > 0 && (
+                  <div className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
+                    {rows.map(([label, value]) => (
+                      <div key={label} className="rounded-2xl border border-white/10 bg-[#002E5D]/35 p-3">
+                        <p className="text-[10px] font-black uppercase tracking-[0.14em] text-white/40">{label}</p>
+                        <p className="mt-1 font-bold text-white/82">{value}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {equipment.length > 0 && (
+                  <div className="mt-4">
+                    <p className="text-[10px] font-black uppercase tracking-[0.14em] text-white/40 mb-2">Fitted equipment</p>
+                    <div className="space-y-2">
+                      {equipment.map((item, i) => (
+                        <div key={i} className="rounded-2xl border border-white/10 bg-[#002E5D]/35 p-3 text-sm">
+                          <p className="font-black text-white/90">{item.item}{item.make_model ? ` — ${item.make_model}` : ""}</p>
+                          <p className="mt-1 text-xs text-white/50">
+                            {[item.power_source, item.condition, item.included === "Yes" ? "included" : item.included === "No" ? "not included" : ""].filter(Boolean).join(" · ")}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {otherItems && (
+                  <p className="mt-3 text-sm leading-relaxed text-white/70">
+                    <span className="font-black text-white/50 uppercase text-[10px] tracking-widest block mb-1">Other items included</span>
+                    {otherItems}
                   </p>
                 )}
               </section>
