@@ -32,6 +32,7 @@ import {
   UserCircle,
 } from "lucide-react"
 import DeleteListingButton from "./DeleteListingButton"
+import RelistButton from "./RelistButton"
 import type { User } from "@supabase/supabase-js"
 import type { Database } from "@/types/supabase"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -85,6 +86,20 @@ const monthDateFormatter = new Intl.DateTimeFormat("en-GB", {
   year: "numeric",
   timeZone: "Europe/London",
 })
+
+const numericDateFormatter = new Intl.DateTimeFormat("en-GB", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  timeZone: "Europe/London",
+})
+
+function formatNumericDate(value?: string | null) {
+  if (!value) return ""
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return ""
+  return numericDateFormatter.format(parsed)
+}
 
 const draftListingStatuses = new Set(["draft", "pending_payment", "payment_pending"])
 const soldClosedListingStatuses = new Set(["sold", "closed", "archived", "removed", "expired"])
@@ -1028,6 +1043,11 @@ function RecentListings({ listings }: { listings: Listing[] }) {
                       {listing.title}
                     </h3>
                   </Link>
+                  {listing.status === "live" && listing.expires_at && (
+                    <p className="mt-0.5 text-xs font-bold text-[#A7B5C9]">
+                      Expires {formatNumericDate(listing.expires_at)}
+                    </p>
+                  )}
                   <p className="mt-1 text-sm font-black text-[#FF9A4A]">{displayPrice(listing.price)}</p>
                   <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold text-[#A7B5C9]">
                     <span>{listing.category || "Catering Equipment"}</span>
@@ -1040,7 +1060,9 @@ function RecentListings({ listings }: { listings: Listing[] }) {
                   <span className={`rounded-full px-3 py-1 text-xs font-black ${statusClasses(listing.status)}`}>
                     {formatStatus(listing.status)}
                   </span>
-                  {canEdit && (
+                  {listing.status === "expired" ? (
+                    <RelistButton listingId={listing.id} />
+                  ) : canEdit ? (
                     <div className="flex items-center gap-2">
                       <Link
                         href={`/account/listings/${listing.id}/edit`}
@@ -1051,13 +1073,13 @@ function RecentListings({ listings }: { listings: Listing[] }) {
                       </Link>
                       <DeleteListingButton listingId={listing.id} />
                     </div>
-                  )}
+                  ) : null}
                 </div>
               </div>
             )
           })}
           <Link
-            href="#my-listings"
+            href="/listing"
             className="mt-4 flex justify-center rounded-2xl border border-white/15 px-4 py-3 text-sm font-black text-white hover:bg-white/8"
           >
             View all my listings

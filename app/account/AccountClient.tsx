@@ -112,6 +112,8 @@ export default function AccountClient({
   const [verificationMessage, setVerificationMessage] = useState("")
   const [verificationError, setVerificationError] = useState("")
   const [verificationBusy, setVerificationBusy] = useState<"" | "email" | "phone">("")
+  const [relistLoadingId, setRelistLoadingId] = useState<string | null>(null)
+  const [relistError, setRelistError] = useState("")
   const profileTrust = displayProfile as Profile & {
     is_email_verified?: boolean | null
     is_phone_verified?: boolean | null
@@ -237,7 +239,7 @@ export default function AccountClient({
     }
   }, [userId])
 
-  type SellerListing = { id: string; slug?: string | null; title: string; featured: boolean | null; is_featured: boolean | null; featured_until: string | null }
+  type SellerListing = { id: string; slug?: string | null; title: string; featured: boolean | null; is_featured: boolean | null; featured_until: string | null; status?: string | null; expires_at?: string | null }
   const [sellerListings, setSellerListings] = useState<SellerListing[]>([])
 
   useEffect(() => {
@@ -245,7 +247,7 @@ export default function AccountClient({
     const supabase = createClient()
     supabase
       .from("listings" as never)
-      .select("id, slug, title, featured, is_featured, featured_until")
+      .select("id, slug, title, featured, is_featured, featured_until, status, expires_at")
       .eq("seller_id", userId)
       .order("created_at", { ascending: false })
       .limit(20)
@@ -368,6 +370,24 @@ export default function AccountClient({
           : stat
       )
     )
+  }
+
+  async function handleRelist(listingId: string) {
+    setRelistLoadingId(listingId)
+    setRelistError("")
+    try {
+      const response = await fetch("/api/stripe/create-relist-checkout-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ listingId }),
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok || !result.url) throw new Error(result.error || "Could not start checkout.")
+      window.location.href = result.url
+    } catch (error) {
+      setRelistError(error instanceof Error ? error.message : "Could not start checkout.")
+      setRelistLoadingId(null)
+    }
   }
 
   return (
@@ -726,13 +746,42 @@ export default function AccountClient({
             <div className="space-y-2">
               {sellerListings.map((item) => {
                 const active = isFeaturedAndActive(item as Record<string, unknown>)
+                const isExpired = item.status === "expired"
+                const listingHref = item.slug ? `/listing/${item.slug}` : `/listing?id=${encodeURIComponent(item.id)}`
+
+                if (isExpired) {
+                  return (
+                    <div
+                      key={item.id}
+                      className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm"
+                    >
+                      <span className="min-w-0 flex-1 truncate font-bold text-white/50">{item.title}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRelist(item.id)}
+                        disabled={relistLoadingId === item.id}
+                        className="shrink-0 rounded-xl bg-[#FF6B00] px-3 py-1.5 text-xs font-black text-white disabled:opacity-60"
+                      >
+                        {relistLoadingId === item.id ? "Loading..." : "Relist for £5"}
+                      </button>
+                    </div>
+                  )
+                }
+
                 return (
                   <a
                     key={item.id}
-                    href={item.slug ? `/listing/${item.slug}` : `/listing?id=${encodeURIComponent(item.id)}`}
+                    href={listingHref}
                     className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm hover:bg-white/8"
                   >
-                    <span className="min-w-0 flex-1 truncate font-bold text-white">{item.title}</span>
+                    <div className="min-w-0 flex-1">
+                      <span className="block truncate font-bold text-white">{item.title}</span>
+                      {item.status === "live" && item.expires_at && (
+                        <span className="block text-[11px] text-white/45">
+                          Expires {formatUKDate(item.expires_at)}
+                        </span>
+                      )}
+                    </div>
                     {active ? (
                       <span className="flex shrink-0 items-center gap-1 rounded-full border-2 border-[#FF6B00] bg-[#0a2a4a] px-2 py-1 shadow-[0_0_8px_rgba(255,107,0,0.3)]">
                         <Bell size={9} className="fill-[#FF6B00] text-[#FF6B00]" />
@@ -745,6 +794,11 @@ export default function AccountClient({
                 )
               })}
             </div>
+            {relistError && (
+              <p className="mt-3 rounded-2xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm font-bold text-red-100">
+                {relistError}
+              </p>
+            )}
           </section>
         )}
 
