@@ -560,7 +560,7 @@ function BottomCta() {
     <section className="mt-6 rounded-[2rem] border border-[#FF6B00]/30 bg-[radial-gradient(circle_at_top_right,rgba(255,107,0,0.25),transparent_34%),linear-gradient(135deg,#062747,#001A35)] p-6 shadow-2xl sm:p-8">
       <h2 className="text-3xl font-black tracking-[-0.035em]">Ready to Sell Your Equipment?</h2>
       <p className="mt-3 text-base font-semibold leading-relaxed text-[#A7B5C9]">
-        List now, reach serious buyers and turn your unused equipment into cash - fast.
+        Free to list while the first hundred listings are running, then from £5 a listing, and no final value fee at any point, so what a seller makes is what they keep.
       </p>
       <div className="mt-6 grid gap-3 sm:grid-cols-3">
         <Link href="/post-listing/start" className="inline-flex min-h-14 items-center justify-center rounded-2xl bg-[#FF6B00] px-5 text-sm font-black text-white transition hover:brightness-110">
