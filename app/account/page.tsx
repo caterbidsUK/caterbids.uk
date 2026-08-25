@@ -3,7 +3,6 @@ import Image from "next/image"
 import SiteLogo from "@/components/SiteLogo"
 import Link from "next/link"
 import { cookies } from "next/headers"
-import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import {
   BadgeCheck,
@@ -200,12 +199,6 @@ function profileIsPhoneVerified(profile: Profile) {
 
 function profilePhoneNumber(profile: Profile) {
   return profile.phone_number || profile.phone || ""
-}
-
-function accountTypeForProfile(profile: Profile) {
-  if (profile.account_type === "seller") return "seller" as const
-  if (profile.role === "seller" || profile.role === "dealer") return "seller" as const
-  return "buyer" as const
 }
 
 function profileSellerBadge(profile: Profile) {
@@ -413,53 +406,6 @@ async function loadDashboardData(user: DashboardUser): Promise<DashboardData> {
     savedSearchesCount: savedSearchesResult.count || 0,
     sellerOrders: sellerOrdersResult.data || [],
   }
-}
-
-async function updateAccountType(formData: FormData) {
-  "use server"
-
-  const accountType = String(formData.get("account_type") || "").trim()
-  if (accountType !== "buyer" && accountType !== "seller") {
-    throw new Error("Choose buyer or seller.")
-  }
-
-  const supabase = await createClient()
-  const user = await getCurrentUser(supabase)
-  if (!user) redirect("/login?next=/account")
-
-  const admin = createAdminClient()
-  const { data: profile } = await admin
-    .from("profiles")
-    .select("role,email")
-    .eq("id", user.id)
-    .maybeSingle()
-
-  const currentRole = String(profile?.role || "").toLowerCase()
-  const email = String(user.email || profile?.email || "").trim().toLowerCase()
-  const protectedAdmin = isProtectedSuperAdminEmail(email)
-  const nextRole =
-    protectedAdmin || ["admin", "super_admin", "owner"].includes(currentRole)
-      ? currentRole || "super_admin"
-      : accountType === "seller"
-        ? "seller"
-        : "user"
-
-  const { error } = await admin
-    .from("profiles")
-    .upsert(
-      {
-        id: user.id,
-        email,
-        account_type: accountType,
-        role: nextRole,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "id" }
-    )
-
-  if (error) throw new Error(error.message)
-
-  revalidatePath("/account")
 }
 
 
@@ -746,145 +692,10 @@ function StatCard({
   )
 }
 
-function AccountTypePanel({ accountType }: { accountType: "buyer" | "seller" }) {
-  const options = [
-    {
-      value: "buyer",
-      title: "Buyer account",
-      text: "Save listings, message sellers and track enquiries.",
-      icon: Heart,
-    },
-    {
-      value: "seller",
-      title: "Seller account",
-      text: "Create listings, manage enquiries and build seller trust.",
-      icon: PackageCheck,
-    },
-  ] as const
-
-  return (
-    <section className="rounded-[2rem] border border-white/10 bg-[#082D50]/90 p-4 shadow-[0_18px_60px_rgba(0,0,0,0.25)] md:p-5">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-[#FF6B00]">Account type</p>
-          <h2 className="mt-1 text-xl font-black text-white">
-            {accountType === "seller" ? "Seller dashboard enabled" : "Buyer dashboard enabled"}
-          </h2>
-          <p className="mt-1 text-sm font-semibold text-[#A7B5C9]">
-            Choose how you mainly use CaterBidsUK. You can switch any time.
-          </p>
-        </div>
-      </div>
-      <div className="mt-4 grid gap-3 md:grid-cols-2">
-        {options.map((option) => {
-          const Icon = option.icon
-          const active = accountType === option.value
-          return (
-            <form key={option.value} action={updateAccountType}>
-              <input type="hidden" name="account_type" value={option.value} />
-              <button
-                type="submit"
-                className={`flex min-h-24 w-full items-center gap-4 rounded-3xl border p-4 text-left transition ${
-                  active
-                    ? "border-[#FF6B00]/55 bg-[#FF6B00]/12"
-                    : "border-white/10 bg-white/[0.04] hover:border-white/20 hover:bg-white/[0.07]"
-                }`}
-                aria-pressed={active}
-              >
-                <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${active ? "bg-[#FF6B00] text-white" : "bg-white/10 text-white/70"}`}>
-                  <Icon className="h-6 w-6" />
-                </span>
-                <span>
-                  <span className="block font-black text-white">{option.title}</span>
-                  <span className="mt-1 block text-sm font-semibold text-[#A7B5C9]">{option.text}</span>
-                </span>
-              </button>
-            </form>
-          )
-        })}
-      </div>
-    </section>
-  )
-}
-
 function statusToneClasses(tone: "good" | "wait" | "todo") {
   if (tone === "good") return "border-emerald-300/20 bg-emerald-400/10 text-emerald-200"
   if (tone === "wait") return "border-amber-300/20 bg-amber-400/10 text-amber-100"
   return "border-white/10 bg-white/6 text-white/65"
-}
-
-function BuyerVerificationPanel({
-  profile,
-  emailVerified,
-  phoneVerified,
-}: {
-  profile: Profile
-  emailVerified: boolean
-  phoneVerified: boolean
-}) {
-  const rows = [
-    {
-      title: "Email verification",
-      detail: emailVerified ? "Email confirmation is complete." : "Check your inbox for your login code or confirmation link.",
-      status: emailVerified ? "Verified" : "Required",
-      tone: emailVerified ? ("good" as const) : ("todo" as const),
-      icon: Mail,
-    },
-    {
-      title: "Phone verification",
-      detail: phoneVerified ? profilePhoneNumber(profile) || "Mobile number verified." : "SMS verification is required for higher-trust account status.",
-      status: phoneVerified ? "Verified" : "Not verified",
-      tone: phoneVerified ? ("good" as const) : ("todo" as const),
-      icon: Smartphone,
-    },
-  ]
-
-  return (
-    <section className="rounded-[2rem] border border-white/10 bg-gradient-to-br from-[#082D50] to-[#031B35] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.28)] md:p-6">
-      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div className="flex items-start gap-4">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#FF6B00]/15 text-[#FF9A4A] ring-1 ring-[#FF6B00]/25">
-            <ShieldCheck className="h-6 w-6" />
-          </div>
-          <div>
-            <p className="text-xs font-black uppercase tracking-[0.2em] text-[#FF6B00]">Account verification</p>
-            <h2 className="mt-1 text-2xl font-black text-white">Buyer Trust Status</h2>
-            <p className="mt-2 max-w-2xl text-sm font-semibold leading-relaxed text-[#A7B5C9]">
-              Keep your account secure before messaging sellers and saving listings.
-            </p>
-          </div>
-        </div>
-        <Link
-          href="/settings#verification"
-          className="inline-flex items-center justify-center rounded-2xl bg-[#FF6B00] px-5 py-3 text-sm font-black text-white shadow-lg shadow-[#FF6B00]/20 transition hover:bg-[#ff7b1f]"
-        >
-          Manage Verification
-        </Link>
-      </div>
-
-      <div className="mt-5 grid gap-3 md:grid-cols-2">
-        {rows.map((row) => {
-          const Icon = row.icon
-          return (
-            <article key={row.title} className="rounded-3xl border border-white/10 bg-white/[0.04] p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex gap-3">
-                  <Icon className="mt-1 h-5 w-5 shrink-0 text-[#FF6B00]" />
-                  <div>
-                    <h3 className="font-black text-white">{row.title}</h3>
-                    <p className="mt-1 text-sm font-semibold text-[#A7B5C9]">{row.detail}</p>
-                  </div>
-                </div>
-                <span className={`shrink-0 rounded-full border px-3 py-1 text-xs font-black ${statusToneClasses(row.tone)}`}>
-                  {row.status}
-                </span>
-              </div>
-            </article>
-          )
-        })}
-      </div>
-    </section>
-  )
 }
 
 function SellerVerificationPanel({
@@ -902,7 +713,7 @@ function SellerVerificationPanel({
   const rows = [
     {
       title: "Email verification",
-      detail: emailVerified ? "Supabase email confirmation is complete." : "Confirm your account email.",
+      detail: emailVerified ? "Email confirmation is complete." : "Confirm your account email.",
       status: emailVerified ? "Verified" : "Required",
       tone: emailVerified ? ("good" as const) : ("todo" as const),
       icon: Mail,
@@ -947,9 +758,9 @@ function SellerVerificationPanel({
           </div>
           <div>
             <p className="text-xs font-black uppercase tracking-[0.2em] text-[#FF6B00]">Verification Centre</p>
-            <h2 className="mt-1 text-2xl font-black text-white">Seller Verification</h2>
+            <h2 className="mt-1 text-2xl font-black text-white">Verification Centre</h2>
             <p className="mt-2 max-w-2xl text-sm font-semibold leading-relaxed text-[#A7B5C9]">
-              Verify your contact details and seller profile to help buyers purchase with confidence on CaterBidsUK.
+              Verify your contact details and identity to help buyers and sellers transact with confidence on CaterBidsUK.
             </p>
           </div>
         </div>
@@ -1090,6 +901,47 @@ function RecentListings({ listings }: { listings: Listing[] }) {
   )
 }
 
+function SavedItems({ favouritesCount }: { favouritesCount: number }) {
+  return (
+    <section className="rounded-[2rem] border border-white/10 bg-[#082D50]/90 p-4 shadow-[0_18px_60px_rgba(0,0,0,0.25)] md:p-5">
+      <div className="flex items-center justify-between gap-4">
+        <h2 className="text-xl font-black text-white">Saved Items</h2>
+        <Link href="/favourites" className="text-sm font-black text-[#FF6B00] hover:text-[#ff9a4a]">
+          View all saved
+        </Link>
+      </div>
+      {favouritesCount === 0 ? (
+        <div className="mt-6 rounded-3xl border border-dashed border-white/15 bg-white/[0.04] p-8 text-center">
+          <Heart className="mx-auto h-10 w-10 text-white/30" />
+          <h3 className="mt-4 text-xl font-black text-white">No saved items yet</h3>
+          <p className="mx-auto mt-2 max-w-md text-sm font-semibold text-[#A7B5C9]">
+            Browse the marketplace and save listings to keep track of equipment you are interested in.
+          </p>
+          <Link
+            href="/search"
+            className="mt-5 inline-flex rounded-2xl bg-[#FF6B00] px-5 py-3 text-sm font-black text-white shadow-lg shadow-[#FF6B00]/20"
+          >
+            Browse the marketplace
+          </Link>
+        </div>
+      ) : (
+        <div className="mt-5 rounded-3xl border border-white/10 bg-white/[0.04] p-6 text-center">
+          <p className="text-4xl font-black text-white">{favouritesCount}</p>
+          <p className="mt-2 text-sm font-bold text-[#A7B5C9]">
+            {favouritesCount === 1 ? "saved listing" : "saved listings"}
+          </p>
+          <Link
+            href="/favourites"
+            className="mt-4 inline-flex rounded-2xl border border-white/20 px-5 py-3 text-sm font-black text-white hover:bg-white/10"
+          >
+            View saved items
+          </Link>
+        </div>
+      )}
+    </section>
+  )
+}
+
 function RecentMessages({ conversations }: { conversations: Conversation[] }) {
   const recentConversations = conversations.slice(0, 3)
 
@@ -1156,24 +1008,22 @@ function RecentMessages({ conversations }: { conversations: Conversation[] }) {
 function QuickActions({
   savedSearchesCount,
   favouritesCount,
-  accountType,
 }: {
   savedSearchesCount: number
   favouritesCount: number
-  accountType: "buyer" | "seller"
 }) {
-  const sellerActions = [
+  const actions = [
     {
       title: "Add New Listing",
       text: "List your equipment, van or business",
       href: "/post-listing/start",
-      icon: MessageSquare,
+      icon: PlusCircle,
     },
     {
-      title: "Manage Listings",
-      text: "Edit, review or relist your items",
-      href: "#my-listings",
-      icon: PackageCheck,
+      title: "Saved Items",
+      text: `${favouritesCount} saved listing${favouritesCount === 1 ? "" : "s"}`,
+      href: "/favourites",
+      icon: Heart,
     },
     {
       title: "Verification Centre",
@@ -1194,39 +1044,6 @@ function QuickActions({
       icon: Settings,
     },
   ]
-  const buyerActions = [
-    {
-      title: "Saved Items",
-      text: `${favouritesCount} saved listing${favouritesCount === 1 ? "" : "s"}`,
-      href: "/favourites",
-      icon: Heart,
-    },
-    {
-      title: "Messages",
-      text: "View your buyer and seller enquiries",
-      href: "/messages",
-      icon: MessageSquare,
-    },
-    {
-      title: "Verification Centre",
-      text: "Check email and phone status",
-      href: "/settings#verification",
-      icon: ShieldCheck,
-    },
-    {
-      title: "Saved Searches",
-      text: `${savedSearchesCount} saved search${savedSearchesCount === 1 ? "" : "es"}`,
-      href: "/saved-searches",
-      icon: Search,
-    },
-    {
-      title: "Account Settings",
-      text: "Edit profile and notification preferences",
-      href: "/settings",
-      icon: Settings,
-    },
-  ]
-  const actions = accountType === "seller" ? sellerActions : buyerActions
 
   return (
     <section className="rounded-[2rem] border border-white/10 bg-[#082D50]/90 p-4 shadow-[0_18px_60px_rgba(0,0,0,0.25)] md:p-5">
@@ -1320,7 +1137,6 @@ export default async function AccountPage() {
     unreadMessagesCount,
     favouritesCount,
     savedSearchesCount,
-    sellerOrders,
   } = dashboardData
   const dashboardUser = dashboardData.user
   const displayName = profileDisplayName(profile, dashboardUser)
@@ -1329,12 +1145,7 @@ export default async function AccountPage() {
   const badge = profileSellerBadge(profile)
   const emailVerified = profileIsEmailVerified(profile, dashboardUser)
   const phoneVerified = profileIsPhoneVerified(profile)
-  const accountType = accountTypeForProfile(profile)
   const showAdminLink = isAdminAccount(profile, displayEmail)
-  const completedSellerOrders = sellerOrders.filter(isCompletedOrder)
-  const totalSales = completedSellerOrders.reduce((total, order) => total + (order.total_price || 0), 0)
-  const draftListingsCount = listings.filter((listing) => draftListingStatuses.has(String(listing.status || "").toLowerCase())).length
-  const soldClosedListingsCount = listings.filter((listing) => soldClosedListingStatuses.has(String(listing.status || "").toLowerCase())).length
   const verificationStepsComplete = [emailVerified, phoneVerified].filter(Boolean).length
 
   return (
@@ -1385,9 +1196,6 @@ export default async function AccountPage() {
                       Phone not verified
                     </span>
                   )}
-                  <span className="inline-flex items-center gap-1 rounded-full border border-[#FF6B00]/25 bg-[#FF6B00]/10 px-3 py-1 text-xs font-black capitalize text-[#FFB077]">
-                    {accountType} account
-                  </span>
                 </div>
               </div>
               <div className="grid gap-3 sm:min-w-64">
@@ -1400,111 +1208,61 @@ export default async function AccountPage() {
                     Open Admin Dashboard
                   </Link>
                 )}
-                {accountType === "seller" ? (
-                  <Link
-                    href="/post-listing/start"
-                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#FF6B00] px-5 py-4 text-sm font-black text-white shadow-lg shadow-[#FF6B00]/25 transition hover:bg-[#ff7b1f]"
-                  >
-                    <PlusCircle className="h-5 w-5" />
-                    Add New Listing
-                  </Link>
-                ) : (
-                  <Link
-                    href="/favourites"
-                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#FF6B00] px-5 py-4 text-sm font-black text-white shadow-lg shadow-[#FF6B00]/25 transition hover:bg-[#ff7b1f]"
-                  >
-                    <Heart className="h-5 w-5" />
-                    View Saved Listings
-                  </Link>
-                )}
+                <Link
+                  href="/post-listing/start"
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#FF6B00] px-5 py-4 text-sm font-black text-white shadow-lg shadow-[#FF6B00]/25 transition hover:bg-[#ff7b1f]"
+                >
+                  <PlusCircle className="h-5 w-5" />
+                  Add New Listing
+                </Link>
               </div>
               </div>
             </section>
 
             <PlanUsageStrip />
 
-            <AccountTypePanel accountType={accountType} />
-
             <section className="grid grid-cols-2 gap-3 md:gap-4 xl:grid-cols-4">
-              {accountType === "seller" ? (
-                <>
-                  <StatCard
-                    title="Active Listings"
-                    value={String(activeListingsCount)}
-                    detail={activeListingsCount === 1 ? "Live marketplace listing" : "Live marketplace listings"}
-                    icon={Tag}
-                    tone="blue"
-                  />
-                  <StatCard
-                    title="Draft Listings"
-                    value={String(draftListingsCount)}
-                    detail="Listings not yet live"
-                    icon={PackageCheck}
-                    tone="purple"
-                  />
-                  <StatCard
-                    title="Sold / Closed"
-                    value={String(soldClosedListingsCount)}
-                    detail={`${formatCurrency(totalSales)} completed sales`}
-                    icon={ShoppingBag}
-                    tone="green"
-                  />
-                  <StatCard
-                    title="Messages"
-                    value={String(conversationsCount)}
-                    detail={`${unreadMessagesCount} unread`}
-                    icon={MessageSquare}
-                    tone="orange"
-                  />
-                </>
-              ) : (
-                <>
-                  <StatCard
-                    title="Saved Listings"
-                    value={String(favouritesCount)}
-                    detail={favouritesCount === 1 ? "Saved marketplace listing" : "Saved marketplace listings"}
-                    icon={Heart}
-                    tone="blue"
-                  />
-                  <StatCard
-                    title="Recent Enquiries"
-                    value={String(conversationsCount)}
-                    detail={`${unreadMessagesCount} unread message${unreadMessagesCount === 1 ? "" : "s"}`}
-                    icon={MessageSquare}
-                    tone="orange"
-                  />
-                  <StatCard
-                    title="Account Verification"
-                    value={`${verificationStepsComplete}/2`}
-                    detail={phoneVerified ? "Email and phone checked" : "Phone not verified"}
-                    icon={ShieldCheck}
-                    tone="green"
-                  />
-                  <StatCard
-                    title="Saved Searches"
-                    value={String(savedSearchesCount)}
-                    detail="Search alerts and saved criteria"
-                    icon={Search}
-                    tone="purple"
-                  />
-                </>
-              )}
+              <StatCard
+                title="Active Listings"
+                value={String(activeListingsCount)}
+                detail={activeListingsCount === 1 ? "Live marketplace listing" : "Live marketplace listings"}
+                icon={Tag}
+                tone="blue"
+              />
+              <StatCard
+                title="Messages"
+                value={String(conversationsCount)}
+                detail={`${unreadMessagesCount} unread`}
+                icon={MessageSquare}
+                tone="orange"
+              />
+              <StatCard
+                title="Saved Items"
+                value={String(favouritesCount)}
+                detail={favouritesCount === 1 ? "Saved marketplace listing" : "Saved marketplace listings"}
+                icon={Heart}
+                tone="purple"
+              />
+              <StatCard
+                title="Verification"
+                value={`${verificationStepsComplete}/2`}
+                detail={phoneVerified ? "Email and phone checked" : "Phone not verified"}
+                icon={ShieldCheck}
+                tone="green"
+              />
             </section>
 
-            {accountType === "seller" ? (
-              <SellerVerificationPanel profile={profile} emailVerified={emailVerified} phoneVerified={phoneVerified} />
-            ) : (
-              <BuyerVerificationPanel profile={profile} emailVerified={emailVerified} phoneVerified={phoneVerified} />
-            )}
+            <SellerVerificationPanel profile={profile} emailVerified={emailVerified} phoneVerified={phoneVerified} />
 
-            {accountType === "seller" && <RecentListings listings={listings} />}
+            <RecentListings listings={listings} />
+
+            <SavedItems favouritesCount={favouritesCount} />
 
             <section className="grid gap-6 xl:grid-cols-[1fr_0.8fr]">
               <RecentMessages conversations={conversations} />
               <QuickActions
                 savedSearchesCount={savedSearchesCount}
                 favouritesCount={favouritesCount}
-                accountType={accountType}
               />
             </section>
 
