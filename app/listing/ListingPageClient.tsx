@@ -1891,7 +1891,7 @@ function ListingContent({ listingId: propId, initialListing }: { listingId?: str
                 }}
               >
                 {activeImage ? (
-                  <div className="h-full w-full overflow-hidden rounded-[1.6rem] bg-white/5">
+                  <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-[1.6rem] bg-white/5">
                     <img
                       src={activeImage}
                       alt={listing.title || "CaterBidsUK listing image"}
