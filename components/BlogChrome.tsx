@@ -5,13 +5,13 @@ import SiteFooter from "@/components/SiteFooter"
 import type { ReactNode } from "react"
 
 const marketplaceHref = "/search"
-const sellerEarlyAccessHref = "/#launch-list"
+const sellHref = "/post-listing/start"
 
 const navLinks = [
   ["Home", "/"],
   ["Marketplace", marketplaceHref],
   ["Blog", "/blog"],
-  ["Sell Equipment", sellerEarlyAccessHref],
+  ["Sell", sellHref],
 ] as const
 
 export function BlogHeader() {
@@ -45,10 +45,10 @@ export function BlogHeader() {
             Login
           </Link>
           <Link
-            href={sellerEarlyAccessHref}
+            href={sellHref}
             className="inline-flex h-11 items-center justify-center rounded-2xl bg-[#FF6B00] px-5 text-sm font-black text-white shadow-[0_16px_36px_rgba(255,107,0,0.28)] transition hover:brightness-110 focus:outline-none focus:ring-4 focus:ring-[#FF6B00]/25"
           >
-            Start Free Listing
+            Sell My Equipment
           </Link>
         </div>
 
@@ -66,10 +66,10 @@ export function BlogHeader() {
             <div className="mt-2 grid gap-2 border-t border-white/10 pt-3">
               <MobileBlogNavLink href="/login">Login</MobileBlogNavLink>
               <Link
-                href={sellerEarlyAccessHref}
+                href={sellHref}
                 className="flex min-h-12 items-center justify-center rounded-2xl bg-[#FF6B00] px-4 text-sm font-black text-white transition hover:brightness-110 focus:outline-none focus:ring-4 focus:ring-[#FF6B00]/25"
               >
-                Start Free Listing
+                Sell My Equipment
               </Link>
             </div>
           </div>
