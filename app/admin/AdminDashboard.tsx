@@ -1303,6 +1303,18 @@ function ListingCard({
                 Run urgent SQL
               </button>
             )}
+            {listing.seller_id && (
+              <>
+                <Link
+                  href={`/admin?tab=users#user-${listing.seller_id}`}
+                  className={ADMIN_ACTION_LINK}
+                >
+                  <UserCog className="h-4 w-4" />
+                  View user
+                </Link>
+                <MessageUserButton userId={listing.seller_id} />
+              </>
+            )}
           </div>
         </div>
       </div>
