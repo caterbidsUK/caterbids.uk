@@ -1062,7 +1062,31 @@ function PostListingPage() {
     router.push(`/login?next=${encodeURIComponent("/post-listing/start")}`)
   }
 
-  function resizeImage(file: File, maxSize = 900, quality = 0.82) {
+  function isHeicFile(file: File) {
+    return (
+      file.type === "image/heic" ||
+      file.type === "image/heif" ||
+      (file.type === "" &&
+        (file.name.toLowerCase().endsWith(".heic") || file.name.toLowerCase().endsWith(".heif")))
+    )
+  }
+
+  async function resizeImage(file: File, maxSize = 900, quality = 0.82): Promise<string> {
+    // HEIC/HEIF cannot be decoded by the browser canvas. Convert to JPEG first
+    // using heic2any (WebAssembly). The import is dynamic so the ~1 MB WASM
+    // bundle only loads when a HEIC file is actually selected.
+    let imageFile = file
+    if (isHeicFile(file)) {
+      const { default: heic2any } = await import("heic2any")
+      const raw = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.9 })
+      const blob = Array.isArray(raw) ? raw[0] : raw
+      imageFile = new File(
+        [blob],
+        file.name.replace(/\.heic$/i, ".jpg").replace(/\.heif$/i, ".jpg"),
+        { type: "image/jpeg" }
+      )
+    }
+
     return new Promise<string>((resolve, reject) => {
       const reader = new FileReader()
       reader.onerror = () => reject(reader.error)
@@ -1086,7 +1110,7 @@ function PostListingPage() {
         }
         image.src = reader.result as string
       }
-      reader.readAsDataURL(file)
+      reader.readAsDataURL(imageFile)
     })
   }
 
@@ -1176,12 +1200,21 @@ function PostListingPage() {
     const selected = allowed.slice(0, remainingSlots)
     if (selected.length === 0) return
 
+    const hasHeic = selected.some(isHeicFile)
     const newFiles = [...imageFiles, ...selected]
     setImageFiles(newFiles)
     setUploadedImageUrls([])
     setAiError("")
     clearQuickListResult()
-    setImagePreviews(await buildImagePreviews(newFiles))
+    try {
+      if (hasHeic) setAiNotice("Converting photo, please wait...")
+      setImagePreviews(await buildImagePreviews(newFiles))
+      if (hasHeic) setAiNotice("")
+    } catch (err) {
+      if (hasHeic) setAiNotice("")
+      setAiError(err instanceof Error ? err.message : "Could not process one or more photos.")
+      return
+    }
     e.target.value = ""
     if (specPlateFile && userId) {
       void lookupSpecsWithCaterBot({ autoApplyEmpty: true, imageFiles: newFiles })
@@ -1253,11 +1286,14 @@ function PostListingPage() {
     setAiError("")
     clearQuickListResult()
 
+    const heicSpec = isHeicFile(file)
+    if (heicSpec) setAiNotice("Converting photo, please wait...")
     try {
       setSpecPlatePreview(await resizeListingImage(file))
     } catch {
       setSpecPlatePreview(await fileToDataUrl(file))
     }
+    if (heicSpec) setAiNotice("")
 
     try {
       const { width, height } = await inspectImage(file)
