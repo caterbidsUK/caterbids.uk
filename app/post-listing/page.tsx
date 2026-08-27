@@ -4039,6 +4039,38 @@ function PostListingPage() {
                 </label>
               </div>
 
+              <div className="rounded-2xl border border-white/12 bg-white/[0.06] px-4 py-3 text-sm">
+                <span className="font-black text-white">Total shipping weight: </span>
+                {weightKg ? (
+                  <span className="font-semibold text-white">
+                    {weightKg} kg ({Math.round(Number(weightKg) - 20)} kg item + 20 kg pallet)
+                  </span>
+                ) : (
+                  <span className="font-semibold text-white/40">Not yet set — enter total pallet weight below.</span>
+                )}
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {[
+                  { label: "Pallet length cm", name: "length_cm", value: lengthCm, setValue: setLengthCm },
+                  { label: "Pallet width cm", name: "width_cm", value: widthCm, setValue: setWidthCm },
+                  { label: "Pallet height cm", name: "height_cm", value: heightCm, setValue: setHeightCm },
+                  { label: "Total weight kg (item + pallet)", name: "weight_kg", value: weightKg, setValue: setWeightKg },
+                ].map((field) => (
+                  <label key={field.name} className="block">
+                    <span className="mb-1 block text-sm font-black">{field.label}</span>
+                    <input
+                      name={field.name}
+                      value={field.value}
+                      onChange={(event) => field.setValue(event.target.value)}
+                      type="number"
+                      min="0"
+                      placeholder="Seller to confirm"
+                      className="w-full rounded-2xl border border-white/20 bg-white/[0.08] px-4 py-3 text-sm font-semibold text-white placeholder:text-white/35 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                    />
+                  </label>
+                ))}
+              </div>
+
               <p className="rounded-2xl border border-white/12 bg-white/[0.06] px-4 py-3 text-xs font-semibold text-white/70">
                 All standard pallets sit on the <strong className="text-white">SAME 1.2m &times; 1m base</strong> — you&apos;re choosing by how <strong className="text-white">TALL</strong> and <strong className="text-white">HEAVY</strong> your item is, not the floor size. Measure after wrapping, round up, and if between two sizes pick the bigger one to avoid surcharges.
               </p>
@@ -4147,38 +4179,6 @@ function PostListingPage() {
                   className="w-full rounded-2xl border border-white/20 bg-white/[0.08] px-4 py-3 text-sm font-semibold text-white placeholder:text-white/35 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
                 />
               </label>
-
-              <input type="hidden" name="weight_kg" value={weightKg} />
-              <div className="rounded-2xl border border-white/12 bg-white/[0.06] px-4 py-3 text-sm">
-                <span className="font-black text-white">Total shipping weight: </span>
-                {weightKg ? (
-                  <span className="font-semibold text-white">
-                    {weightKg} kg ({Math.round(Number(weightKg) - 20)} kg item + 20 kg pallet)
-                  </span>
-                ) : (
-                  <span className="font-semibold text-white/40">Not yet set — confirm item weight in Equipment Specifications below.</span>
-                )}
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {[
-                  { label: "Pallet length cm", name: "length_cm", value: lengthCm, setValue: setLengthCm },
-                  { label: "Pallet width cm", name: "width_cm", value: widthCm, setValue: setWidthCm },
-                  { label: "Pallet height cm", name: "height_cm", value: heightCm, setValue: setHeightCm },
-                ].map((field) => (
-                  <label key={field.name} className="block">
-                    <span className="mb-1 block text-sm font-black">{field.label}</span>
-                    <input
-                      name={field.name}
-                      value={field.value}
-                      onChange={(event) => field.setValue(event.target.value)}
-                      type="number"
-                      min="0"
-                      placeholder="Seller to confirm"
-                      className="w-full rounded-2xl border border-white/20 bg-white/[0.08] px-4 py-3 text-sm font-semibold text-white placeholder:text-white/35 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
-                    />
-                  </label>
-                ))}
-              </div>
 
               <div className="grid gap-2 sm:grid-cols-2">
                 {[
