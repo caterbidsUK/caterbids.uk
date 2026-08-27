@@ -853,7 +853,7 @@ function PostListingPage() {
   const [shippingSpecGcNumber, setShippingSpecGcNumber] = useState("")
   const [shippingSpecCategory, setShippingSpecCategory] = useState<(typeof SHIPPING_SPEC_CATEGORIES)[number]>("Griddle")
   const [shippingSpecPowerType, setShippingSpecPowerType] =
-    useState<(typeof SHIPPING_POWER_TYPES)[number]>("Electric")
+    useState<(typeof SHIPPING_POWER_TYPES)[number]>("Not sure")
   const [shippingSpecPhase, setShippingSpecPhase] = useState("")
   const [shippingSpecVoltage, setShippingSpecVoltage] = useState("")
   const [shippingSpecCurrent, setShippingSpecCurrent] = useState("")
@@ -875,6 +875,7 @@ function PostListingPage() {
   } | null>(null)
   const [quickListApplied, setQuickListApplied] = useState(false)
   const [publishError, setPublishError] = useState("")
+  const [publishErrorLink, setPublishErrorLink] = useState<{ href: string; label: string } | null>(null)
   const [overageRequired, setOverageRequired] = useState(false)
   const [isOverageLoading, setIsOverageLoading] = useState(false)
   const [paymentNotice, setPaymentNotice] = useState("")
@@ -2486,6 +2487,7 @@ function PostListingPage() {
   function handlePublish(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setPublishError("")
+    setPublishErrorLink(null)
 
     if (!userId) {
       requireLogin()
@@ -2519,6 +2521,16 @@ function PostListingPage() {
 
     if (formData.get("listing_info_confirmed") !== "on") {
       setPublishError("Confirm the listing information is accurate.")
+      return
+    }
+
+    if (formData.get("seller_owns_item_confirmed") !== "on") {
+      setPublishError("Confirm that you own the item and have the right to sell it.")
+      return
+    }
+
+    if (formData.get("terms_confirmed") !== "on") {
+      setPublishError("You must agree to the CaterBidsUK Terms & Conditions to publish.")
       return
     }
 
@@ -2676,7 +2688,9 @@ function PostListingPage() {
       }
 
       if (result.redirectTo) {
-        router.push(result.redirectTo)
+        // Show the error on screen with a link; never navigate away silently.
+        setPublishError(result.error)
+        setPublishErrorLink({ href: result.redirectTo, label: "View pricing options" })
         return
       }
 
@@ -4365,7 +4379,6 @@ function PostListingPage() {
               <input
                 name="seller_owns_item_confirmed"
                 type="checkbox"
-                required
                 checked={ownershipConfirmed}
                 onChange={(e) => setOwnershipConfirmed(e.target.checked)}
                 className="mt-0.5 h-4 w-4 accent-[#FF6B00]"
@@ -4376,7 +4389,6 @@ function PostListingPage() {
               <input
                 name="terms_confirmed"
                 type="checkbox"
-                required
                 className="mt-0.5 h-4 w-4 accent-[#FF6B00]"
               />
               <span>
@@ -4502,9 +4514,17 @@ function PostListingPage() {
           ) : null}
 
           {publishError && (
-            <p className="mt-4 rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-bold text-orange-800">
-              {publishError}
-            </p>
+            <div className="mt-4 rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-bold text-orange-800">
+              <p>{publishError}</p>
+              {publishErrorLink && (
+                <a
+                  href={publishErrorLink.href}
+                  className="mt-2 inline-block underline hover:text-orange-900"
+                >
+                  {publishErrorLink.label} →
+                </a>
+              )}
+            </div>
           )}
 
           {overageRequired && (

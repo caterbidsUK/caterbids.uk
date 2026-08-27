@@ -180,7 +180,7 @@ function parseImageUrls(value: FormDataEntryValue | null) {
 
 export async function createListing(
   formData: FormData
-): Promise<{ success: false; error: string; code?: string; redirectTo?: string } | { success: true; listingId: string; redirectTo: string } | void> {
+): Promise<{ success: false; error: string; code?: string; redirectTo?: string; listingId?: string } | { success: true; listingId: string; redirectTo: string } | void> {
   const supabase = await createClient()
 
   // Get current user
@@ -335,6 +335,7 @@ export async function createListing(
   let paidEntitlementToUse: SellerListingEntitlement | null = null
   let isFoundingMember = false
   let useFreeSlot = false
+  let paymentRequired = false
 
   try {
     const admin = createAdminClient()
@@ -424,13 +425,7 @@ export async function createListing(
               }
             }
           }
-          return {
-            success: false,
-            error:
-              'Your free listing allowance has been used. Choose a listing pack or monthly plan before publishing.',
-            code: 'PAYMENT_REQUIRED',
-            redirectTo: '/pricing?payment_required=1',
-          }
+          paymentRequired = true
         }
       }
     }
@@ -538,7 +533,7 @@ export async function createListing(
     images: input.images || [],
     seller_id: user.id,
     user_id: user.id,
-    status: 'live',
+    status: paymentRequired ? 'payment_pending' : 'live',
     trailer_details: input.category === 'Catering Vans & Trailers' ? (input.trailer_details || null) : null,
     business_details: input.category === 'Catering Businesses' ? (input.business_details || null) : null,
     is_confidential: input.category === 'Catering Businesses' ? (input.is_confidential ?? false) : false,
@@ -569,6 +564,18 @@ export async function createListing(
       success: false,
       error: error.message || 'Could not publish listing.',
       code: error.code,
+    }
+  }
+
+  // Listing was saved as payment_pending because no free slot or paid entitlement
+  // was available. Tell the seller where to find the draft and how to pay.
+  if (paymentRequired && createdListing?.id) {
+    return {
+      success: false,
+      error: 'Your listing has been saved as a draft. Choose a listing pack or plan to publish it.',
+      code: 'PAYMENT_REQUIRED',
+      redirectTo: '/pricing?payment_required=1',
+      listingId: createdListing.id,
     }
   }
 

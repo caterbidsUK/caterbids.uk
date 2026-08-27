@@ -32,6 +32,7 @@ import {
 } from "lucide-react"
 import DeleteListingButton from "./DeleteListingButton"
 import RelistButton from "./RelistButton"
+import PublishPendingButton from "./PublishPendingButton"
 import type { User } from "@supabase/supabase-js"
 import type { Database } from "@/types/supabase"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -873,6 +874,20 @@ function RecentListings({ listings }: { listings: Listing[] }) {
                   </span>
                   {listing.status === "expired" ? (
                     <RelistButton listingId={listing.id} />
+                  ) : listing.status === "payment_pending" ? (
+                    <div className="flex flex-col items-end gap-2">
+                      <PublishPendingButton listingId={listing.id} />
+                      <div className="flex items-center gap-2">
+                        <Link
+                          href={`/account/listings/${listing.id}/edit`}
+                          className="flex items-center gap-1 rounded-xl border border-white/20 bg-white/10 px-2.5 py-1.5 text-xs font-black text-white transition hover:bg-white/20"
+                        >
+                          <Pencil className="h-3 w-3" />
+                          Edit
+                        </Link>
+                        <DeleteListingButton listingId={listing.id} />
+                      </div>
+                    </div>
                   ) : canEdit ? (
                     <div className="flex items-center gap-2">
                       <Link

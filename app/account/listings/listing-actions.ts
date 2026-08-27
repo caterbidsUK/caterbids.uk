@@ -1,8 +1,10 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentUser } from '@/lib/supabase/auth'
 import { revalidatePath } from 'next/cache'
+import { entitlementHasAllowance, type SellerListingEntitlement } from '@/lib/pricing'
 
 function formatPrice(raw: string): string {
   if (!raw) return ''
@@ -175,4 +177,118 @@ export async function sellerUpdateListing(
   revalidatePath('/account')
   revalidatePath(`/listing`)
   return { success: true }
+}
+
+// ── PUBLISH PENDING ──────────────────────────────────────────────────────────
+// Activates a payment_pending listing by consuming a paid entitlement or a
+// free listing slot. The listing and entitlement are updated in sequence;
+// the listing goes live first so a failed entitlement write is recoverable
+// by admin, but not the reverse (entitlement spent, listing still pending).
+export async function publishPendingListing(
+  listingId: string
+): Promise<{ success: true } | { success: false; error: string; redirectTo?: string }> {
+  const supabase = await createClient()
+  const user = await getCurrentUser(supabase)
+  if (!user) return { success: false, error: 'You must be logged in.' }
+
+  const { data: existing, error: fetchError } = await supabase
+    .from('listings')
+    .select('id, seller_id, user_id, status')
+    .eq('id', listingId)
+    .maybeSingle()
+
+  if (fetchError || !existing) return { success: false, error: 'Listing not found.' }
+  const isOwner = existing.seller_id === user.id || existing.user_id === user.id
+  if (!isOwner) return { success: false, error: 'Listing not found.' }
+  if (existing.status !== 'payment_pending') {
+    return { success: false, error: 'This listing is not waiting to be published.' }
+  }
+
+  const admin = createAdminClient()
+  const ownerCol = existing.seller_id === user.id ? 'seller_id' : 'user_id'
+
+  // ── Try paid entitlement first ────────────────────────────────────────────
+  const { data: entitlements } = await admin
+    .from('seller_listing_entitlements')
+    .select('id, plan_name, listing_count_total, listing_count_used, monthly, expires_at, active')
+    .eq('seller_id', user.id)
+    .eq('active', true)
+    .order('expires_at', { ascending: true })
+
+  const usableEntitlement = ((entitlements ?? []) as SellerListingEntitlement[])
+    .find(entitlementHasAllowance)
+
+  if (usableEntitlement) {
+    const { error: listingErr } = await admin
+      .from('listings')
+      .update({ status: 'live', updated_at: new Date().toISOString() })
+      .eq('id', listingId)
+      .eq(ownerCol, user.id)
+
+    if (listingErr) return { success: false, error: 'Could not publish listing. Please try again.' }
+
+    const newUsed = usableEntitlement.listing_count_used + 1
+    await admin
+      .from('seller_listing_entitlements')
+      .update({
+        listing_count_used: newUsed,
+        active: newUsed < usableEntitlement.listing_count_total,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', usableEntitlement.id)
+
+    revalidatePath('/account')
+    revalidatePath('/listing')
+    return { success: true }
+  }
+
+  // ── Try free listing slot ─────────────────────────────────────────────────
+  const { data: settingsRow } = await (admin.from('payment_settings' as never) as any)
+    .select('free_listing_mode')
+    .limit(1)
+    .maybeSingle()
+
+  if (settingsRow?.free_listing_mode) {
+    const { data: eligible } = await (admin as any).rpc('can_claim_free_listing', {
+      p_seller_id: user.id,
+    })
+
+    if (eligible) {
+      const { error: listingErr } = await admin
+        .from('listings')
+        .update({ status: 'live', updated_at: new Date().toISOString() })
+        .eq('id', listingId)
+        .eq(ownerCol, user.id)
+
+      if (listingErr) return { success: false, error: 'Could not publish listing. Please try again.' }
+
+      const { data: claimGranted } = await (admin as any).rpc('claim_free_listing', {
+        p_seller_id: user.id,
+        p_listing_id: listingId,
+      })
+
+      if (!claimGranted) {
+        // Race: revert listing to payment_pending
+        await admin
+          .from('listings')
+          .update({ status: 'payment_pending', updated_at: new Date().toISOString() })
+          .eq('id', listingId)
+        return {
+          success: false,
+          error: 'The last free listing slot was just taken. Choose a listing pack to publish.',
+          redirectTo: '/pricing?payment_required=1',
+        }
+      }
+
+      revalidatePath('/account')
+      revalidatePath('/listing')
+      return { success: true }
+    }
+  }
+
+  return {
+    success: false,
+    error: 'You need a listing pack or plan to publish. Your draft is saved.',
+    redirectTo: '/pricing?payment_required=1',
+  }
 }
