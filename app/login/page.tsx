@@ -258,24 +258,36 @@ function LoginContent() {
     setLoadingProvider("verify-otp")
 
     try {
-      const { data, error: verifyError } = await supabase.auth.verifyOtp({
-        email: trimmedEmail,
-        token,
-        type: "email",
-      })
+      const attemptTypes = ["email", "signup", "magiclink"] as const
+      let lastData: Awaited<ReturnType<typeof supabase.auth.verifyOtp>>["data"] | null = null
+      let firstError: Awaited<ReturnType<typeof supabase.auth.verifyOtp>>["error"] | null = null
 
-      console.log("[verifyEmailOtp] result:", {
-        ok: !verifyError,
-        hasSession: Boolean(data?.session),
-        error: verifyError?.message ?? null,
-      })
+      for (const type of attemptTypes) {
+        const { data: attemptData, error: attemptError } = await supabase.auth.verifyOtp({
+          email: trimmedEmail,
+          token,
+          type,
+        })
+        console.log(`[verifyEmailOtp] attempt ${type}:`, {
+          ok: !attemptError,
+          hasSession: Boolean(attemptData?.session),
+          error: attemptError ?? null,
+        })
+        if (firstError === null) firstError = attemptError
+        if (!attemptError && attemptData?.session) {
+          lastData = attemptData
+          break
+        }
+      }
+
+      const verifyError = lastData ? null : firstError
 
       if (verifyError) {
         setError(verifyError.message || "The login code was not accepted.")
         return
       }
 
-      if (!data.session) {
+      if (!lastData?.session) {
         setError("The login code was accepted, but the session could not start. Please try again.")
         return
       }
