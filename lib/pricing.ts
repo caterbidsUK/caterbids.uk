@@ -69,7 +69,7 @@ export const SELLER_PLANS: SellerPlan[] = [
     listing_count: 1,
     duration_days: 30,
     monthly: false,
-    features: ["30 days live", "Up to 10 photos", "Buyer messages included"],
+    features: ["30 days live", "Up to 6 photos", "Buyer messages included"],
     active: true,
     overage_price: null,
   },

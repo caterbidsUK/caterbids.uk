@@ -3,9 +3,9 @@ import Link from "next/link"
 import SiteFooter from "@/components/SiteFooter"
 
 export const metadata: Metadata = {
-  title: "How It Works — Buy & Sell Catering Equipment Free | CaterBids UK",
+  title: "How It Works: Buy and Sell Catering Equipment | CaterBids UK",
   description:
-    "Search used catering equipment listings, save favourites and list your own kit for free — CaterBids UK brings buyers and sellers together in one place.",
+    "Search new and used catering equipment listings, save favourites and list your kit. CaterBids UK brings buyers and sellers together in one place.",
 }
 
 export default function HowItWorksPage() {
@@ -17,14 +17,14 @@ export default function HowItWorksPage() {
           Back to CaterBidsUK
         </Link>
         <p className="mt-8 text-xs font-black uppercase tracking-[0.28em] text-[#FF6B00]">How It Works</p>
-        <h1 className="mt-2 text-3xl font-black">Search, compare, list for free</h1>
+        <h1 className="mt-2 text-3xl font-black">Search, compare, list your kit</h1>
         <p className="mt-3 text-sm font-black uppercase tracking-[0.18em] text-[#FF6B00]">
-          The UK Marketplace for Catering Equipment — BUY • SELL • SAVE
+          The UK Marketplace for Catering Equipment
         </p>
         <div className="mt-5 space-y-4 text-white/70">
           <p>Search CaterBidsUK listings and live marketplace results in one place.</p>
           <p>Save listings and searches with a free account so you can come back later.</p>
-          <p>List your own catering equipment, vans or trailers for free during public beta.</p>
+          <p>List your catering equipment, vans or trailers. Your first listing is free, then £5 for 30 days.</p>
         </div>
       </section>
     </main>

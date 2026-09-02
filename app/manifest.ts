@@ -4,7 +4,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "CaterBidsUK",
     short_name: "CaterBids",
-    description: "The UK Marketplace for Catering Equipment — BUY • SELL • SAVE",
+    description: "The UK marketplace for new and used catering equipment, vans and hospitality businesses.",
     start_url: "/",
     display: "standalone",
     background_color: "#001225",

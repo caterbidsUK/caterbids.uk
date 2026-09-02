@@ -7,7 +7,7 @@ import { ArrowLeft, ClipboardCheck } from "lucide-react"
 export const metadata: Metadata = {
   title: "Pallet Delivery Guide for Commercial Catering Equipment | CaterBids UK",
   description:
-    "Step-by-step guide to preparing large commercial catering equipment for safe pallet collection — wrapping, labelling, weights and what to expect on the day.",
+    "Step-by-step guide to preparing large commercial catering equipment for safe pallet collection. Wrapping, labelling, weights and what to expect on the day.",
 }
 
 export default function PalletDeliveryGuidePage() {

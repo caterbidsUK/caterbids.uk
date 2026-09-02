@@ -5,6 +5,7 @@ import Link from "next/link"
 import { Tag, Utensils, Truck, Building2 } from "lucide-react"
 import { createPublicClient } from "@/lib/supabase/server"
 import { MARKETPLACE_CATEGORIES, CATERING_CATEGORIES } from "@/lib/categories"
+import { getFreeListingsRemaining } from "@/lib/counters"
 
 const PER_PAGE = 24
 
@@ -18,20 +19,20 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
 
   const base = {
     description:
-      "Browse used commercial catering equipment, vans, trailers and catering businesses for sale across the UK — ovens, fridges, coffee machines and more. No middleman.",
+      "Browse new and used commercial catering equipment, vans, trailers and catering businesses for sale across the UK. Ovens, fridges, coffee machines and more. No middleman.",
   }
 
   if (pageNum <= 1) {
     return {
       ...base,
-      title: "Used Catering Equipment for Sale UK | CaterBids Marketplace",
+      title: "New and Used Catering Equipment for Sale UK | CaterBids",
       alternates: { canonical: "/marketplace" },
     }
   }
 
   return {
     ...base,
-    title: `Used Catering Equipment for Sale UK — Page ${pageNum} | CaterBids`,
+    title: `Catering Equipment for Sale UK, Page ${pageNum} | CaterBids`,
     alternates: { canonical: `/marketplace?page=${pageNum}` },
   }
 }
@@ -88,6 +89,8 @@ export default async function MarketplacePage({ searchParams }: Props) {
   const from = (pageNum - 1) * PER_PAGE
   const to = from + PER_PAGE - 1
 
+  const { remaining: freeRemaining } = await getFreeListingsRemaining()
+
   const supabase = createPublicClient()
   const { data, count, error } = await supabase
     .from("listings")
@@ -124,9 +127,9 @@ export default async function MarketplacePage({ searchParams }: Props) {
         {/* Hero */}
         <section className="mb-10">
           <p className="text-xs font-black uppercase tracking-[0.22em] text-[#FF6B00]">CaterBids UK</p>
-          <h1 className="mt-1 text-4xl font-black sm:text-5xl">Used Catering Equipment</h1>
+          <h1 className="mt-1 text-4xl font-black sm:text-5xl">New and Used Catering Equipment</h1>
           <p className="mt-3 max-w-2xl text-white/65">
-            {total > 0 ? `${total} live listing${total === 1 ? "" : "s"}` : "Listings"} — ovens, fridges, vans, coffee machines and more.
+            {total > 0 ? `${total} live listing${total === 1 ? "" : "s"}` : "Listings"}. Ovens, fridges, vans, coffee machines and more.
             Buy direct from sellers across the UK.
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
@@ -134,7 +137,7 @@ export default async function MarketplacePage({ searchParams }: Props) {
               href="/post-listing/start"
               className="premium-button inline-flex rounded-2xl px-5 py-2.5 text-sm font-black"
             >
-              List yours for free
+              {freeRemaining > 0 ? "List yours for free" : "List yours from £5"}
             </Link>
             <Link
               href="/search"
@@ -197,7 +200,7 @@ export default async function MarketplacePage({ searchParams }: Props) {
                 href="/post-listing/start"
                 className="premium-button mt-5 inline-flex rounded-2xl px-5 py-2.5 text-sm font-black"
               >
-                List yours for free
+                {freeRemaining > 0 ? "List yours for free" : "List yours from £5"}
               </Link>
             </div>
           ) : (

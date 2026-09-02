@@ -25,14 +25,14 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://caterbids.uk"),
   title: "CaterBidsUK | The UK Marketplace for Catering Equipment",
   description:
-    "Buy, sell and save on catering equipment, vans and hospitality assets with CaterBidsUK — BUY • SELL • SAVE.",
+    "Buy, sell and save on new and used catering equipment, vans and hospitality assets across the UK.",
   icons: {
     shortcut: "/favicon.ico",
     icon: [{ url: "/favicon.ico" }, { url: "/icon.png", type: "image/png", sizes: "512x512" }],
     apple: [{ url: "/apple-touch-icon.png", sizes: "180x180" }],
   },
   openGraph: {
-    title: "CaterBidsUK — The UK Marketplace for Catering Equipment",
+    title: "CaterBidsUK | The UK Marketplace for Catering Equipment",
     description: "BUY • SELL • SAVE on catering equipment, vans and hospitality assets.",
     siteName: "CaterBidsUK",
     images: ["/images/caterbids-hero-showroom.png"],

@@ -1,7 +1,7 @@
 import Image from "next/image"
 import Link from "next/link"
 import { ArrowRight, ChevronLeft, ChevronRight, Menu, Store, Truck, Utensils } from "lucide-react"
-import SiteLogo from "@/components/SiteLogo"
+import SiteLogoWithBadge from "@/components/SiteLogoWithBadge"
 import SiteFooter from "@/components/SiteFooter"
 import { createClient } from "@/lib/supabase/server"
 
@@ -41,7 +41,7 @@ export default async function PostListingStartPage() {
       <header className="sticky top-0 z-50 border-b border-white/10 bg-[#001225]/95 backdrop-blur-xl">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-10">
           <Link href="/" aria-label="CaterBidsUK home">
-            <SiteLogo size="sm" />
+            <SiteLogoWithBadge size="sm" />
           </Link>
 
           <nav className="hidden items-center gap-6 text-sm font-black text-white/80 lg:flex" aria-label="Primary">
@@ -103,7 +103,7 @@ export default async function PostListingStartPage() {
               What are you selling?
             </h1>
             <p className="mt-2 text-base font-semibold text-white/55">
-              Choose a category to begin. All listings are free during our launch period.
+              Choose a category to begin. Your first listing is free, then £5 for 30 days.
             </p>
           </div>
 

@@ -2,7 +2,7 @@
 "use client"
 
 import Link from "next/link"
-import SiteLogo from "@/components/SiteLogo"
+import SiteLogoWithBadge from "@/components/SiteLogoWithBadge"
 import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react"
 import {
@@ -45,6 +45,7 @@ type InboxConversation = ConversationRow & {
 type MessagesClientProps = {
   initialConversationId?: string
   mobileThreadMode?: boolean
+  freeRemaining?: number
 }
 
 const WHATSAPP_CONNECTED = process.env.NEXT_PUBLIC_WHATSAPP_MESSAGING_ENABLED === "true"
@@ -213,11 +214,11 @@ function SearchHeaderForm({ compact = false }: { compact?: boolean }) {
   )
 }
 
-function DesktopHeader() {
+function DesktopHeader({ freeRemaining }: { freeRemaining: number }) {
   return (
     <header className="hidden border-b border-white/10 bg-[#061F3B]/95 px-6 py-4 lg:block">
       <div className="mx-auto flex max-w-[1500px] items-center gap-8">
-        <Link href="/"><SiteLogo size="sm" priority /></Link>
+        <Link href="/"><SiteLogoWithBadge size="sm" priority /></Link>
         <div className="min-w-[360px] max-w-[520px] flex-1">
           <SearchHeaderForm />
         </div>
@@ -242,7 +243,7 @@ function DesktopHeader() {
             href="/post-listing/start"
             className="rounded-2xl bg-[#FF6B00] px-5 py-3 text-sm font-black text-white shadow-lg shadow-[#FF6B00]/25 transition hover:bg-[#ff7f24]"
           >
-            Sell for free
+            {freeRemaining > 0 ? "Sell for free" : "Sell from £5"}
           </Link>
         </nav>
       </div>
@@ -1125,7 +1126,7 @@ function MobileInbox({
   )
 }
 
-export default function MessagesClient({ initialConversationId, mobileThreadMode = false }: MessagesClientProps) {
+export default function MessagesClient({ initialConversationId, mobileThreadMode = false, freeRemaining = 0 }: MessagesClientProps) {
   const router = useRouter()
   const supabase = useMemo(() => createClient(), [])
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
@@ -1433,7 +1434,7 @@ export default function MessagesClient({ initialConversationId, mobileThreadMode
   if (!authChecked) {
     return (
       <div className="min-h-screen bg-[#04182E] text-white">
-        <DesktopHeader />
+        <DesktopHeader freeRemaining={freeRemaining} />
         <div className="flex min-h-[70vh] items-center justify-center">
           <Loader2 className="mr-3 h-6 w-6 animate-spin text-[#FF6B00]" />
           <span className="text-lg font-black">Loading messages...</span>
@@ -1464,7 +1465,7 @@ export default function MessagesClient({ initialConversationId, mobileThreadMode
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(255,107,0,0.12),_transparent_34%),linear-gradient(135deg,#04182E_0%,#061F3B_48%,#001A35_100%)] text-white">
-      <DesktopHeader />
+      <DesktopHeader freeRemaining={freeRemaining} />
       <MobileTopBar unreadCount={counts.unread} onCompose={() => setNewMessageModalOpen(true)} />
 
       <MobileInbox

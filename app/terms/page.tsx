@@ -6,7 +6,7 @@ import SiteFooter from "@/components/SiteFooter"
 export const metadata: Metadata = {
   title: "Terms & Conditions | CaterBids.uk",
   description:
-    "Terms and conditions governing use of CaterBids.uk — the UK marketplace for used catering equipment. Operated by Colt Price trading as CaterBids.uk.",
+    "Terms and conditions governing use of CaterBids.uk, the UK marketplace for new and used catering equipment. Operated by Colt Price trading as CaterBids.uk.",
 }
 
 export default function TermsPage() {

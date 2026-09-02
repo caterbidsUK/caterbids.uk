@@ -24,7 +24,7 @@ import SellerPlanCheckoutButton from "./SellerPlanCheckoutButton"
 export const metadata: Metadata = {
   title: "CaterBidsUK Seller Pricing",
   description:
-    "Simple pricing for UK catering equipment sellers. First 100 listings free, no seller success fees and no final value fees.",
+    "Simple pricing for UK catering equipment sellers. Your first listing is free, then £5 for 30 days. No commission and no final value fees.",
 }
 
 const packIcons = [ListChecks, CalendarDays, Tags]
@@ -45,7 +45,7 @@ function PricingNav({
     <header className="sticky top-0 z-50 border-b border-white/10 bg-[#001225]/95 backdrop-blur-xl">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-10">
         <Link href="/" aria-label="CaterBidsUK home">
-          <SiteLogo size="sm" />
+          <SiteLogo size="xl" />
         </Link>
 
         <nav className="hidden items-center gap-6 text-sm font-black text-white/80 lg:flex" aria-label="Primary">
@@ -59,7 +59,7 @@ function PricingNav({
             href={sellHref}
             className="rounded-2xl bg-[#FF6B00] px-4 py-2.5 text-white shadow-[0_12px_30px_rgba(255,107,0,0.28)] transition hover:brightness-110"
           >
-            Start Free Listing
+            List Your Equipment
           </Link>
         </nav>
 
@@ -301,7 +301,7 @@ export default async function SellerPricingPage() {
           CaterBidsUK Seller Pricing
         </h1>
         <p className="mx-auto mt-4 max-w-2xl text-xl font-semibold text-white/75">
-          Simple, transparent pricing for UK catering equipment sellers. No final value fees — ever.
+          Simple, transparent pricing for UK catering equipment sellers. No commission and no final value fees, ever.
         </p>
       </section>
 
@@ -313,12 +313,10 @@ export default async function SellerPricingPage() {
           </div>
           <div>
             <p className="mt-4 text-4xl font-black uppercase tracking-[-0.05em] md:mt-0 lg:text-5xl">
-              {freeRemaining > 0
-                ? `${freeRemaining} of ${freeCap} free listings left`
-                : `All ${freeCap} free listing slots taken`}
+              Your first listing is free
             </p>
             <p className="mt-2 text-xl font-black text-[#001A35]">
-              No seller success fees • Keep 100% of your sale
+              {freeRemaining} of {freeCap} launch listings left • Then £5 for 30 days • No commission
             </p>
           </div>
         </div>
@@ -400,7 +398,7 @@ export default async function SellerPricingPage() {
             <span className="text-[#FF6B00]">
               <Tags className="h-10 w-10" />
             </span>
-            List for free on CaterBidsUK
+            {freeRemaining > 0 ? "List for free on CaterBidsUK" : "List on CaterBidsUK from £5"}
           </span>
           <span className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-[#FF6B00] text-3xl font-black">
             →

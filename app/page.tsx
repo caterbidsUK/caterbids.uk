@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 import SiteFooter from "@/components/SiteFooter"
-import SiteLogo from "@/components/SiteLogo"
+import SiteLogoWithBadge from "@/components/SiteLogoWithBadge"
 import MobileMenu from "@/components/MobileMenu"
 import Image from "next/image"
 import Link from "next/link"
@@ -35,7 +35,7 @@ export const metadata: Metadata = {
   description:
     "Buy, sell and save on catering equipment, vans and hospitality assets with CaterBidsUK.",
   openGraph: {
-    title: "CaterBidsUK — The UK Marketplace for Catering Equipment",
+    title: "CaterBidsUK | The UK Marketplace for Catering Equipment",
     description: "BUY • SELL • SAVE on catering equipment, vans and hospitality assets.",
     images: ["/images/caterbids-hero-showroom.png"],
   },
@@ -254,14 +254,7 @@ function LaunchStrip({ freeRemaining, freeCap }: { freeRemaining: number; freeCa
   return (
     <div className="w-full bg-[#FF6B00] px-4 py-2 text-center">
       <p className="text-sm font-black text-white">
-        {freeRemaining > 0 ? (
-          <>
-            {freeRemaining} of {freeCap} free listings left
-            <span className="hidden sm:inline"> — no fees, no catch.</span>
-          </>
-        ) : (
-          `All ${freeCap} free listing slots have been claimed.`
-        )}
+        {freeRemaining} of {freeCap} free listings left. One per account, then £5 for 30 days.
       </p>
     </div>
   )
@@ -286,23 +279,17 @@ function HeroSection({ accountHref, accountLabel, freeRemaining, freeCap }: { ac
 
         <div className="pt-11 sm:pt-16 lg:max-w-4xl lg:pt-24">
           <div className="mb-5">
-            <p className="mb-2 text-[0.65rem] font-black uppercase tracking-[0.3em] text-[#FF6B00]">
-              Limited time launch offer
+            <p className="text-[0.65rem] font-black uppercase tracking-[0.3em] text-[#FF6B00]">
+              BUY · SELL · SAVE
             </p>
-            <div className="flex items-baseline gap-3">
-              <span className="text-[2.8rem] font-black leading-none tracking-tight text-[#FF6B00]">
-                {freeRemaining > 0 ? freeRemaining : 0}
-              </span>
-              <span className="text-base font-semibold text-white/90">
-                {freeRemaining > 0 ? `of ${freeCap} free listings left` : `of ${freeCap} slots taken`}
-              </span>
-            </div>
           </div>
           <h1 className="max-w-4xl text-[4.15rem] font-black leading-[0.96] tracking-[-0.075em] text-white sm:text-[5.8rem] lg:text-[6.7rem]">
-            The UK Marketplace for <span className="text-[#FF6B00]">Catering Equipment</span>
+            Dealers buy your kit cheap.
+            <br />
+            <span className="text-[#FF6B00]">Sell it yourself instead.</span>
           </h1>
           <p className="mt-6 max-w-2xl text-2xl font-semibold leading-snug text-white/82 sm:text-3xl">
-            Buy direct from other UK catering businesses. No commission, no middleman.
+            Set your own price and sell direct to UK catering businesses. New and used, no commission, no final value fee.
           </p>
 
           <div className="mt-9 grid gap-4 sm:flex sm:flex-wrap">
@@ -310,7 +297,7 @@ function HeroSection({ accountHref, accountLabel, freeRemaining, freeCap }: { ac
               href={sellHref}
               className="group flex min-h-16 items-center justify-center gap-4 rounded-[1.7rem] bg-[#FF6B00] px-8 text-xl font-black text-white shadow-[0_24px_70px_rgba(255,107,0,0.34)] transition hover:brightness-110 focus:outline-none focus:ring-4 focus:ring-[#FF6B00]/35 sm:min-w-72"
             >
-              Start Free Listing
+              List Your Equipment
               <ArrowRight className="h-7 w-7 transition group-hover:translate-x-1" strokeWidth={2.2} />
             </Link>
             <Link
@@ -347,7 +334,7 @@ function SiteHeader({ accountHref, accountLabel }: { accountHref: string; accoun
   return (
     <header className="flex items-center justify-between gap-4">
       <Link href="/" aria-label="CaterBidsUK home">
-        <SiteLogo size="lg" priority />
+        <SiteLogoWithBadge size="xl" priority />
       </Link>
 
       <nav className="hidden items-center gap-7 text-sm font-black text-white/86 lg:flex" aria-label="Primary">
@@ -373,7 +360,7 @@ function SiteHeader({ accountHref, accountLabel }: { accountHref: string; accoun
           href={sellHref}
           className="rounded-2xl bg-[#FF6B00] px-5 py-3 text-white shadow-[0_18px_44px_rgba(255,107,0,0.28)] transition hover:brightness-110"
         >
-          Start Free Listing
+          List Your Equipment
         </Link>
       </nav>
 

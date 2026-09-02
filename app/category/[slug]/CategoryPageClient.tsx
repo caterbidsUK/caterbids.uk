@@ -13,6 +13,7 @@ import type { Database } from "@/types/supabase"
 type Listing = Database["public"]["Tables"]["listings"]["Row"]
 type CategoryPageProps = {
   params: Promise<{ slug: string }>
+  freeRemaining: number
 }
 
 const LOCAL_LISTINGS_KEY = "caterbids_listings"
@@ -90,7 +91,7 @@ function categoryMatchesListing(item: Listing, category: CaterBidsCategory) {
   )
 }
 
-export default function CategoryPageClient({ params }: CategoryPageProps) {
+export default function CategoryPageClient({ params, freeRemaining }: CategoryPageProps) {
   const router = useRouter()
   const { slug } = use(params)
   const category = categoryBySlug(slug)
@@ -197,7 +198,7 @@ export default function CategoryPageClient({ params }: CategoryPageProps) {
             Back
           </button>
           <Link href="/post-listing/start" className="premium-button rounded-2xl px-4 py-2 text-sm font-black">
-            List yours for free
+            {freeRemaining > 0 ? "List yours for free" : "List yours from £5"}
           </Link>
         </div>
 
@@ -287,7 +288,7 @@ export default function CategoryPageClient({ params }: CategoryPageProps) {
               </p>
               <Link href="/post-listing/start" className="premium-button mt-5 inline-flex items-center gap-2 rounded-2xl px-5 py-3 font-black">
                 <Plus className="h-4 w-4" />
-                List yours for free
+                {freeRemaining > 0 ? "List yours for free" : "List yours from £5"}
               </Link>
             </div>
           ) : (

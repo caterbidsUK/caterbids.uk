@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { categoryBySlug } from "@/lib/categories"
 import CategoryPageClient from "./CategoryPageClient"
+import { getFreeListingsRemaining } from "@/lib/counters"
 
 type Props = {
   params: Promise<{ slug: string }>
@@ -18,11 +19,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 
   return {
-    title: `Used ${category.title} for Sale | CaterBids UK`,
-    description: `Browse used ${category.title.toLowerCase()} listings for sale across the UK — ${category.description.replace(/\.$/, "")} on CaterBids.`,
+    title: `New and Used ${category.title} for Sale | CaterBids UK`,
+    description: `Browse new and used ${category.title.toLowerCase()} listings for sale across the UK. ${category.description.replace(/\.$/, "")} on CaterBids.`,
   }
 }
 
-export default function CategoryPage({ params }: Props) {
-  return <CategoryPageClient params={params} />
+export default async function CategoryPage({ params }: Props) {
+  const { remaining: freeRemaining } = await getFreeListingsRemaining()
+  return <CategoryPageClient params={params} freeRemaining={freeRemaining} />
 }
