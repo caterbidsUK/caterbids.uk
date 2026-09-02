@@ -56,7 +56,7 @@ export default function FoundingMemberCheckoutButton({
         disabled={loading || soldOut}
         className="w-full rounded-2xl bg-[#FF6B00] px-4 py-3 text-sm font-black text-white shadow-lg shadow-[#FF6B00]/25 transition hover:bg-[#e85f00] disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {soldOut ? "Sold out" : loading ? "Opening checkout…" : "Claim your membership — £249"}
+        {soldOut ? "Sold out" : loading ? "Opening checkout…" : "Claim your membership: £249"}
       </button>
       {error && <p className="text-sm font-bold text-red-700">{error}</p>}
     </div>

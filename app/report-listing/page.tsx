@@ -128,7 +128,7 @@ export default function ReportListingPage() {
 
             <label className="grid gap-1">
               <span className="text-xs font-bold uppercase tracking-[0.14em] text-white/45">
-                Your email <span className="normal-case font-medium">(optional — for follow-up)</span>
+                Your email <span className="normal-case font-medium">(optional, for follow-up)</span>
               </span>
               <input
                 name="reporterEmail"

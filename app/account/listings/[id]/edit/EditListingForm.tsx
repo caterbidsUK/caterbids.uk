@@ -570,7 +570,7 @@ export default function EditListingForm({ listing }: { listing: Listing }) {
             <h2 className="text-xl font-black text-[#002E5D]">Remove this listing?</h2>
             <p className="mt-3 text-sm font-semibold text-slate-600">
               This will remove your listing from the site. Buyers will no longer be able to find it.
-              This cannot be undone by you — contact support if you need it restored.
+              This cannot be undone by you. Contact support if you need it restored.
             </p>
             <p className="mt-2 text-sm font-semibold text-slate-600">
               Any listing credit or free listing slot you used will not be refunded.

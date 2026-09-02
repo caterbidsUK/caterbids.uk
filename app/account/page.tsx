@@ -1,6 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
 import Image from "next/image"
-import SiteLogo from "@/components/SiteLogo"
+import SiteLogoWithBadge from "@/components/SiteLogoWithBadge"
 import Link from "next/link"
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
@@ -459,7 +459,7 @@ function TopNavigation({ displayName, showAdminLink }: { displayName: string; sh
     <header className="sticky top-0 z-40 border-b border-white/10 bg-[#001A35]/95 text-white shadow-[0_18px_50px_rgba(0,0,0,0.35)] backdrop-blur-xl">
       <div className="mx-auto flex max-w-[1600px] items-center gap-4 px-4 py-4 lg:px-6">
         <Link href="/" className="focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/70">
-          <SiteLogo size="sm" priority />
+          <SiteLogoWithBadge size="sm" priority />
         </Link>
 
         <nav className="ml-auto hidden items-center gap-6 text-sm font-bold lg:flex">

@@ -40,6 +40,13 @@ body {
   text-rendering: geometricPrecision;
 }
 
+/* Mobile bottom nav clearance — keeps content above the floating nav bar at all scroll positions */
+@media (max-width: 1023px) {
+  body {
+    padding-bottom: calc(6rem + env(safe-area-inset-bottom));
+  }
+}
+
 * {
   box-sizing: border-box;
 }

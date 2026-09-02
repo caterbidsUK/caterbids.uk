@@ -101,7 +101,7 @@ export default function SiteFooter() {
         {/* Copyright bar */}
         <div className="mt-10 flex flex-col gap-2 border-t border-white/10 pt-6 text-xs font-semibold text-white/38 sm:flex-row sm:items-center sm:justify-between">
           <p>© 2026 CaterBidsUK. All rights reserved.</p>
-          <p className="text-white/30">CaterBids is currently in beta — we&apos;re improving the platform daily.</p>
+          <p className="text-white/30">CaterBids is currently in beta. We&apos;re improving the platform daily.</p>
           <p>BUY • SELL • SAVE</p>
         </div>
       </div>

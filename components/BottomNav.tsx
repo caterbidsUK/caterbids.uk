@@ -21,8 +21,6 @@ export default function BottomNav() {
 
   return (
     <>
-    {/* In-flow spacer: reserves space so the fixed nav never overlaps page content */}
-    <div className="lg:hidden shrink-0" style={{ height: "calc(8.5rem + env(safe-area-inset-bottom))" }} aria-hidden="true" />
     <nav
       className="fixed bottom-0 left-0 right-0 z-50 lg:hidden"
       aria-label="Mobile navigation"
@@ -49,11 +47,11 @@ export default function BottomNav() {
                 aria-current={active ? "page" : undefined}
                 className="flex flex-1 flex-col items-center justify-center gap-1 py-3"
               >
-                <Home size={24} strokeWidth={active ? 2.5 : 1.75} className={active ? "text-[#FF6B00]" : "text-white/45"} />
-                <span className={`text-[11px] tracking-wide ${active ? "font-bold text-[#FF6B00]" : "font-medium text-white/45"}`}>
+                <Home size={24} strokeWidth={active ? 2.5 : 1.75} className={active ? "text-white" : "text-white/45"} />
+                <span className={`text-[11px] tracking-wide ${active ? "font-bold text-white" : "font-medium text-white/45"}`}>
                   Home
                 </span>
-                <span className={`h-0.5 w-4 rounded-full transition-opacity ${active ? "bg-[#FF6B00]" : "bg-transparent"}`} />
+                <span className={`h-0.5 w-4 rounded-full transition-opacity ${active ? "bg-white" : "bg-transparent"}`} />
               </Link>
             )
           })()}
@@ -67,36 +65,30 @@ export default function BottomNav() {
                 aria-current={active ? "page" : undefined}
                 className="flex flex-1 flex-col items-center justify-center gap-1 py-3"
               >
-                <Search size={24} strokeWidth={active ? 2.5 : 1.75} className={active ? "text-[#FF6B00]" : "text-white/45"} />
-                <span className={`text-[11px] tracking-wide ${active ? "font-bold text-[#FF6B00]" : "font-medium text-white/45"}`}>
+                <Search size={24} strokeWidth={active ? 2.5 : 1.75} className={active ? "text-white" : "text-white/45"} />
+                <span className={`text-[11px] tracking-wide ${active ? "font-bold text-white" : "font-medium text-white/45"}`}>
                   Search
                 </span>
-                <span className={`h-0.5 w-4 rounded-full transition-opacity ${active ? "bg-[#FF6B00]" : "bg-transparent"}`} />
+                <span className={`h-0.5 w-4 rounded-full transition-opacity ${active ? "bg-white" : "bg-transparent"}`} />
               </Link>
             )
           })()}
 
-          {/* ── Sell (centre hero) ──
-              Circle is absolute (doesn't affect label flow). Ghost spacer (h-6)
-              stands in for the icon slot so "Sell" label aligns with the other tabs.
-          */}
-          <Link
-            href="/post-listing/start"
-            aria-label="Sell — post a listing"
-            className="relative flex flex-1 flex-col items-center justify-center gap-1 py-3"
-          >
-            {/* Raised glowing orange circle — absolutely positioned, doesn't affect label flow */}
-            <span
-              className="absolute top-0 -translate-y-8 flex h-[64px] w-[64px] items-center justify-center rounded-full bg-[#FF6B00]"
-              style={{ boxShadow: "0 0 22px rgba(255,107,0,0.70), 0 0 55px rgba(255,107,0,0.35), 0 6px 16px rgba(0,0,0,0.50)" }}
-            >
-              <Bell size={26} strokeWidth={2.5} className="text-white" />
-            </span>
-            {/* Ghost spacer: same height as icon slot (h-6 = 24px) so "Sell" label sits on the same baseline as other tabs */}
-            <span className="h-6 w-px shrink-0" aria-hidden="true" />
-            <span className="text-[10px] font-bold tracking-wide text-[#FF6B00]">Sell</span>
-            <span className="h-0.5 w-4 shrink-0" aria-hidden="true" />
-          </Link>
+          {/* ── Sell ── */}
+          {(() => {
+            const active = isActive("/post-listing")
+            return (
+              <Link
+                href="/post-listing/start"
+                aria-label="Post a listing"
+                className="flex flex-1 flex-col items-center justify-center gap-1 py-3"
+              >
+                <Bell size={24} strokeWidth={2.5} fill="#FF6B00" className="text-[#FF6B00]" />
+                <span className="text-[11px] tracking-wide font-black text-[#FF6B00]">Sell</span>
+                <span className={`h-0.5 w-4 rounded-full transition-opacity ${active ? "bg-[#FF6B00]" : "bg-transparent"}`} />
+              </Link>
+            )
+          })()}
 
           {/* ── Account ── */}
           {(() => {
@@ -107,11 +99,11 @@ export default function BottomNav() {
                 aria-current={active ? "page" : undefined}
                 className="flex flex-1 flex-col items-center justify-center gap-1 py-3"
               >
-                <User size={24} strokeWidth={active ? 2.5 : 1.75} className={active ? "text-[#FF6B00]" : "text-white/45"} />
-                <span className={`text-[11px] tracking-wide ${active ? "font-bold text-[#FF6B00]" : "font-medium text-white/45"}`}>
+                <User size={24} strokeWidth={active ? 2.5 : 1.75} className={active ? "text-white" : "text-white/45"} />
+                <span className={`text-[11px] tracking-wide ${active ? "font-bold text-white" : "font-medium text-white/45"}`}>
                   Account
                 </span>
-                <span className={`h-0.5 w-4 rounded-full transition-opacity ${active ? "bg-[#FF6B00]" : "bg-transparent"}`} />
+                <span className={`h-0.5 w-4 rounded-full transition-opacity ${active ? "bg-white" : "bg-transparent"}`} />
               </Link>
             )
           })()}

@@ -1,5 +1,5 @@
 import Link from "next/link"
-import SiteLogo from "@/components/SiteLogo"
+import SiteLogoWithBadge from "@/components/SiteLogoWithBadge"
 import { ChevronRight, Menu, Search } from "lucide-react"
 import SiteFooter from "@/components/SiteFooter"
 import type { ReactNode } from "react"
@@ -19,7 +19,7 @@ export function BlogHeader() {
     <header className="sticky top-0 z-40 border-b border-white/10 bg-[#001A35]/95 shadow-[0_18px_70px_rgba(0,0,0,0.24)] backdrop-blur-xl">
       <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-3 sm:px-6 lg:px-8">
         <Link href="/" aria-label="CaterBidsUK home">
-          <SiteLogo size="sm" priority />
+          <SiteLogoWithBadge size="sm" priority />
         </Link>
 
         <nav className="ml-auto hidden items-center gap-5 text-sm font-black text-white/78 xl:flex" aria-label="Blog navigation">

@@ -271,7 +271,7 @@ export default function OrdersClient({
                     <p className="mt-1 font-black capitalize">{statusLabel(deliveryStatus)}</p>
                     {!isPalletDelivery && (
                       <p className="mt-2 text-xs text-white/55">
-                        Collection only — arrange collection with the buyer or seller directly.
+                        Collection only. Arrange collection with the buyer or seller directly.
                       </p>
                     )}
                     {deliveryOrder?.courier_provider && (

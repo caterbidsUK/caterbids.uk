@@ -2,7 +2,7 @@
 
 import Image from "next/image"
 import Link from "next/link"
-import SiteLogo from "@/components/SiteLogo"
+import SiteLogoWithBadge from "@/components/SiteLogoWithBadge"
 import { createClient } from '@/lib/supabase/client'
 import { getCurrentUser } from '@/lib/supabase/auth'
 import { parseListingPrice } from "@/lib/price"
@@ -1803,7 +1803,7 @@ function ListingContent({ listingId: propId, initialListing }: { listingId?: str
               <ArrowLeft className="h-5 w-5" />
             </button>
 
-            <SiteLogo size="sm" priority />
+            <SiteLogoWithBadge size="sm" priority />
 
             {/* Desktop nav — hidden on mobile (bottom nav handles mobile) */}
             <nav className="ml-auto hidden items-center gap-5 text-sm font-bold text-white/80 lg:flex" aria-label="Primary">

@@ -1017,7 +1017,7 @@ function SettingsClient({ initialProfile }: { initialProfile: Profile | null }) 
               <p>This will permanently delete your CaterBids account. Here&apos;s what happens:</p>
               <ul className="mt-2 list-disc space-y-1 pl-5">
                 <li>Your <strong className="text-white">live listings are removed</strong> from the marketplace immediately.</li>
-                <li>Your <strong className="text-white">messages are anonymised</strong> — the other party keeps their conversation history.</li>
+                <li>Your <strong className="text-white">messages are anonymised</strong>. The other party keeps their conversation history.</li>
                 <li><strong className="text-white">Order records are kept</strong> for legal purposes (UK law requires 6 years for financial records), but your personal details are removed.</li>
                 <li>Your account is <strong className="text-white">disabled immediately</strong> and permanently purged after 30 days.</li>
               </ul>

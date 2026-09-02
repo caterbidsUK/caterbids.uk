@@ -1,7 +1,7 @@
 "use client"
 
 import SiteFooter from "@/components/SiteFooter"
-import SiteLogo from "@/components/SiteLogo"
+import SiteLogoWithBadge from "@/components/SiteLogoWithBadge"
 import { createClient } from '@/lib/supabase/client'
 import { getCurrentUser } from '@/lib/supabase/auth'
 import Link from "next/link"
@@ -610,7 +610,7 @@ function SearchContent({ initialListings = [] }: { initialListings: Listing[] })
             href="/"
             className="flex shrink-0 items-center rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6B00]"
           >
-            <SiteLogo size="sm" priority />
+            <SiteLogoWithBadge size="sm" priority />
           </Link>
 
           <nav className="ml-auto hidden items-center gap-1 text-sm font-bold text-white/80 lg:flex">
@@ -641,7 +641,7 @@ function SearchContent({ initialListings = [] }: { initialListings: Listing[] })
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm lg:hidden" role="dialog" aria-modal="true">
           <div className="ml-auto flex h-full w-[82vw] max-w-sm flex-col border-l border-white/10 bg-[#062747] p-5 shadow-2xl">
             <div className="flex items-center justify-between">
-              <SiteLogo size="sm" />
+              <SiteLogoWithBadge size="sm" />
               <button
                 type="button"
                 onClick={() => setMobileMenuOpen(false)}

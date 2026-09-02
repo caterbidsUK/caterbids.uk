@@ -3,7 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import NextImage from "next/image"
-import SiteLogo from "@/components/SiteLogo"
+import SiteLogoWithBadge from "@/components/SiteLogoWithBadge"
 import { useEffect, useRef, useState, useTransition, type Dispatch, type SetStateAction } from "react"
 import { Bell, CheckCircle2, ClipboardCheck, ImagePlus, Loader2, PackageCheck, ScanSearch, Star, UploadCloud, X } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
@@ -2874,7 +2874,7 @@ function PostListingPage() {
             <span className="hidden sm:inline">Account</span>
           </button>
 
-          <SiteLogo size="lg" priority />
+          <SiteLogoWithBadge size="lg" priority />
           <h1 className="mt-5 text-4xl font-black tracking-[-0.055em] text-white sm:text-5xl">List your item</h1>
           <p className="mt-2 text-base font-semibold text-white/72 sm:text-lg">Upload photos, add details, and publish.</p>
         </header>
@@ -4262,16 +4262,6 @@ function PostListingPage() {
               <p className="mt-1 whitespace-pre-line text-sm font-semibold leading-relaxed text-[#002E5D]">
                 {buildDescriptionFromSuggestion(quickListResult)}
               </p>
-            </div>
-          )}
-          {quickListResult?._diag && (
-            <div className="mt-3 rounded-xl border border-red-300 bg-red-50 p-3 font-mono text-xs text-red-900">
-              <p className="mb-2 font-black text-red-600">TEMP DIAGNOSTIC — remove later</p>
-              <p><span className="font-bold">ai_dimensions:</span> {quickListResult._diag.ai_dimensions || "(empty)"}</p>
-              <p><span className="font-bold">source_valid:</span> {String(quickListResult._diag.source_valid)}</p>
-              <p><span className="font-bold">source_url:</span> {quickListResult._diag.source_url || "(none)"}</p>
-              <p><span className="font-bold">source_found_dimensions:</span> {quickListResult._diag.source_found_dimensions || "(empty)"}</p>
-              <p><span className="font-bold">final_dimensions:</span> {quickListResult._diag.final_dimensions || "(empty)"}</p>
             </div>
           )}
         </details>
