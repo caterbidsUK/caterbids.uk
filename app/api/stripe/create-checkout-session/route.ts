@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/supabase/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createDeliveryOrderBeforePayment } from "@/lib/delivery/deliveryOrders"
 import { resolveFullUkPostcode } from "@/lib/delivery/postcodes"
+import { parseListingPrice } from "@/lib/price"
 
 type CheckoutRequestBody = {
   listingId?: string
@@ -212,9 +213,10 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const listingPrice = Number((listing as any)?.price || 0)
-    if (listingPrice <= 0) {
-      return NextResponse.json({ error: "This listing does not have a valid price." }, { status: 400 })
+    const listingPrice = parseListingPrice((listing as any)?.price)
+    if (listingPrice === null) {
+      console.error("[checkout] Invalid listing price", { raw: (listing as any)?.price })
+      return NextResponse.json({ error: "Listing price is invalid" }, { status: 400 })
     }
     const itemAmount = Math.round(listingPrice * 100)
 
@@ -398,6 +400,7 @@ export async function POST(req: NextRequest) {
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
       payment_method_types: ["card"],
+      customer_email: buyer?.email || undefined,
       line_items: lineItems,
       success_url: `${siteUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}${deliveryOrderId ? `&delivery_order_id=${deliveryOrderId}` : ""}`,
       cancel_url: `${siteUrl}${returnUrl || "/"}`,

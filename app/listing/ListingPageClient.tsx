@@ -5,6 +5,7 @@ import Link from "next/link"
 import SiteLogo from "@/components/SiteLogo"
 import { createClient } from '@/lib/supabase/client'
 import { getCurrentUser } from '@/lib/supabase/auth'
+import { parseListingPrice } from "@/lib/price"
 import { useEffect, useRef, useState, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import {
@@ -1654,6 +1655,7 @@ function ListingContent({ listingId: propId, initialListing }: { listingId?: str
   const checkoutSellerId = isUuid(safeListingId(listing.seller_id || listing.user_id))
     ? safeListingId(listing.seller_id || listing.user_id)
     : ""
+  const parsedPrice = parseListingPrice(listing.price)
   const fullCollectionPostcode = resolveFullUkPostcode(
     listing.collection_postcode,
     listing.collection_full_address,
@@ -1907,9 +1909,11 @@ function ListingContent({ listingId: propId, initialListing }: { listingId?: str
 
                 <div className="pointer-events-none absolute inset-x-2 bottom-2 h-28 rounded-b-[1.6rem] bg-gradient-to-t from-[#001A35]/90 to-transparent" />
 
-                <div className="absolute bottom-5 left-5 rounded-2xl bg-[#FF6B00] px-4 py-3 text-2xl font-black text-white shadow-xl shadow-[#FF6B00]/25">
-                  {formatPrice(listing.price)}
-                </div>
+                {parsedPrice !== null && (
+                  <div className="absolute bottom-5 left-5 rounded-2xl bg-[#FF6B00] px-4 py-3 text-2xl font-black text-white shadow-xl shadow-[#FF6B00]/25">
+                    {formatPrice(listing.price)}
+                  </div>
+                )}
 
                 {listingImages.length > 0 && (
                   <div className="absolute bottom-5 right-5 rounded-2xl bg-[#001A35]/85 px-4 py-2 text-sm font-black text-white shadow-lg backdrop-blur">
@@ -2022,7 +2026,11 @@ function ListingContent({ listingId: propId, initialListing }: { listingId?: str
               <div className="mt-5 grid grid-cols-2 gap-3">
                 <div className="rounded-3xl border border-white/10 bg-white/[0.06] p-4">
                   <p className="text-xs font-bold text-white/55">Price</p>
-                  <p className="mt-1 text-xl font-black text-white">{formatPrice(listing.price)}</p>
+                  {parsedPrice !== null ? (
+                    <p className="mt-1 text-xl font-black text-white">{formatPrice(listing.price)}</p>
+                  ) : (
+                    <p className="mt-1 text-sm font-bold text-white/60">Contact seller</p>
+                  )}
                 </div>
                 <div className="rounded-3xl border border-white/10 bg-white/[0.06] p-4">
                   <p className="text-xs font-bold text-white/55">Delivery</p>
@@ -2583,7 +2591,11 @@ function ListingContent({ listingId: propId, initialListing }: { listingId?: str
                     <Tag className="h-5 w-5" />
                   </div>
                   <p className="text-xs font-bold text-white/55">Price</p>
-                  <p className="mt-1 text-xl font-black text-white">{formatPrice(listing.price)}</p>
+                  {parsedPrice !== null ? (
+                    <p className="mt-1 text-xl font-black text-white">{formatPrice(listing.price)}</p>
+                  ) : (
+                    <p className="mt-1 text-sm font-bold text-white/60">Contact seller</p>
+                  )}
                 </div>
                 <div className="rounded-3xl border border-white/10 bg-white/[0.06] p-4">
                   <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-green-500/18 text-green-200">
@@ -2812,15 +2824,21 @@ function ListingContent({ listingId: propId, initialListing }: { listingId?: str
             )}
 
             {!isListingOwner && !isSoldListing ? (
-              <BuyCheckoutBox
-                listingId={safeListingId(listing.id)}
-                sellerId={checkoutSellerId}
-                title={listing.title}
-                price={listingPriceNumber(listing.price)}
-                selectedDelivery={selectedDelivery}
-                deliveryAvailable={hasDeliveryOption}
-                onMessageSeller={messageSeller}
-              />
+              parsedPrice === null ? (
+                <div className="rounded-3xl border border-white/10 bg-white/[0.06] p-5">
+                  <p className="text-sm font-bold text-white/70">Price needs confirming, contact the seller</p>
+                </div>
+              ) : (
+                <BuyCheckoutBox
+                  listingId={safeListingId(listing.id)}
+                  sellerId={checkoutSellerId}
+                  title={listing.title}
+                  price={parsedPrice}
+                  selectedDelivery={selectedDelivery}
+                  deliveryAvailable={hasDeliveryOption}
+                  onMessageSeller={messageSeller}
+                />
+              )
             ) : isSoldListing ? (
               <div className="rounded-3xl border border-red-500/20 bg-red-500/10 p-5">
                 <h3 className="text-xl font-black text-red-100">This item has sold</h3>

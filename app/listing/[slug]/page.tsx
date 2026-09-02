@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import { createPublicClient } from "@/lib/supabase/server"
 import ListingPage from "../ListingPageClient"
+import { parseListingPrice } from "@/lib/price"
 
 type Props = {
   params: Promise<{ slug: string }>
@@ -77,7 +78,7 @@ export default async function ListingSlugPage({ params }: Props) {
 
   const images: string[] = Array.isArray(data.images) ? data.images : []
   const schemaImage = images.find((img: string) => img && !img.startsWith("data:"))
-  const numericPrice = (data.price as string | null)?.replace(/[£,\s]/g, "") ?? undefined
+  const numericPrice = parseListingPrice(data.price)
 
   const jsonLd = {
     "@context": "https://schema.org",
