@@ -19,8 +19,19 @@ export default function LiveChat({ enabled }: { enabled: boolean }) {
     // Guard against double-injection (React strict mode double-invokes effects)
     if (document.getElementById("tawk-to")) return
 
-    // Must run post-hydration only — Tawk_API globals must exist before the script
+    // Must run post-hydration only — Tawk_API globals must exist before the script.
+    // customStyle is read at script-load time; it must be set here, before the <script> appends.
+    // yOffset 130: nav pill is 80px tall + 16px margin + up to 34px safe-area inset.
     ;(window as any).Tawk_API = (window as any).Tawk_API || {}
+    ;(window as any).Tawk_API.customStyle = {
+      visibility: {
+        mobile: {
+          position: "br",
+          xOffset: 12,
+          yOffset: 130,
+        },
+      },
+    }
     ;(window as any).Tawk_LoadStart = new Date()
 
     const script = document.createElement("script")
