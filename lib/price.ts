@@ -22,3 +22,12 @@ export function parseListingPrice(raw: unknown): number | null {
   if (!Number.isFinite(n) || n <= 0 || n > 1_000_000) return null
   return n
 }
+
+// Canonical price string used as the price segment of a duplicate-detection key.
+// Normalises both stored DB prices and pasted strings to the same format so
+// "£1,200", "1200", and "£1200" all produce the same key.
+export function priceKey(raw: string | null | undefined): string {
+  const n = parseListingPrice(raw ?? '')
+  if (n === null) return (raw ?? '').toLowerCase().trim()
+  return `£${n % 1 === 0 ? n : n.toFixed(2)}`
+}

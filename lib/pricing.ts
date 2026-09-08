@@ -61,6 +61,8 @@ export const DEFAULT_PAYMENT_SETTINGS: PaymentSettings = {
   updated_at: null,
 }
 
+export const TRADE_PLAN_NAME = "Trade Plan" as const
+
 export const SELLER_PLANS: SellerPlan[] = [
   {
     name: "Single Listing",
@@ -118,7 +120,7 @@ export const SELLER_PLANS: SellerPlan[] = [
     overage_price: null,
   },
   {
-    name: "Trade Plan",
+    name: TRADE_PLAN_NAME,
     type: "subscription",
     price: 49.99,
     listing_count: 30,

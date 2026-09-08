@@ -193,7 +193,7 @@ export async function publishPendingListing(
 
   const { data: existing, error: fetchError } = await supabase
     .from('listings')
-    .select('id, seller_id, user_id, status')
+    .select('id, seller_id, user_id, status, images, image_url')
     .eq('id', listingId)
     .maybeSingle()
 
@@ -202,6 +202,12 @@ export async function publishPendingListing(
   if (!isOwner) return { success: false, error: 'Listing not found.' }
   if (existing.status !== 'payment_pending') {
     return { success: false, error: 'This listing is not waiting to be published.' }
+  }
+  const hasPhoto =
+    (Array.isArray(existing.images) && existing.images.length > 0) ||
+    Boolean(existing.image_url)
+  if (!hasPhoto) {
+    return { success: false, error: 'Add at least one photo before publishing.' }
   }
 
   const admin = createAdminClient()

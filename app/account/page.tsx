@@ -28,6 +28,7 @@ import {
   Smartphone,
   Tag,
   Truck,
+  Upload,
   UserCircle,
 } from "lucide-react"
 import DeleteListingButton from "./DeleteListingButton"
@@ -440,6 +441,7 @@ function TopNavigation({ displayName, showAdminLink }: { displayName: string; sh
       title: "Seller tools",
       items: [
         ["Add New Listing", "/post-listing/start"],
+        ["Bulk Upload", "/account/bulk-upload"],
         ["Seller Profile", "/settings#profile"],
         ["Business Details", "/settings#profile"],
         ["Verification Centre", "/settings#verification"],
@@ -551,6 +553,7 @@ function Sidebar({
   ]
   const sellerItems = [
     { label: "Add New Listing", href: "/post-listing/start", icon: PlusCircle },
+    { label: "Bulk Upload", href: "/account/bulk-upload", icon: Upload },
     { label: "Seller Profile", href: "/settings#profile", icon: UserCircle },
     { label: "Business Details", href: "/settings#profile", icon: Building2 },
     { label: "Verification Centre", href: "/settings#verification", icon: ShieldCheck },
