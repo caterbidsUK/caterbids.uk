@@ -6,6 +6,7 @@ import { getCurrentUser } from '@/lib/supabase/auth'
 import { getSellerCredits } from '@/lib/entitlements/usage'
 import { TRADE_PLAN_NAME } from '@/lib/pricing'
 import { parseListingPrice, priceKey } from '@/lib/price'
+import { subcategoriesForCategory } from '@/lib/categories'
 
 export type BulkListingRow = {
   title: string
@@ -95,6 +96,7 @@ export async function createBulkListings(
     const rawPrice = (row.price ?? '').trim()
     const location = (row.location ?? '').trim()
     const category = (row.category ?? '').trim() || 'Catering Equipment'
+    const subcategory = (row.subcategory ?? '').trim() || null
 
     // Validate all required fields before touching the DB.
     const errors: string[] = []
@@ -105,6 +107,9 @@ export async function createBulkListings(
       errors.push('Ambiguous price — write it as 15 or 15000')
     }
     if (!location) errors.push('Missing: location')
+    if (subcategoriesForCategory(category).length > 0 && !subcategory) {
+      errors.push('Missing subcategory')
+    }
 
     if (errors.length) {
       results.push({
@@ -134,7 +139,7 @@ export async function createBulkListings(
       price,
       location,
       category,
-      subcategory: row.subcategory || null,
+      subcategory,
       condition: row.condition || null,
       description: row.description || null,
       user_id: user.id,

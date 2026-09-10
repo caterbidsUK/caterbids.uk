@@ -212,7 +212,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
     dateModified: post.updated_at || post.published_at || post.created_at,
     author: {
       "@type": "Organization",
-      name: "CaterBidsUK Team",
+      name: "The CaterBids Team",
     },
     publisher: {
       "@type": "Organization",
@@ -360,7 +360,7 @@ function ArticleHero({ post, excerpt, postUrl }: { post: BlogPost; excerpt: stri
                 <UserCheck className="h-6 w-6" aria-hidden="true" />
               </div>
               <div>
-                <p className="text-sm font-black text-white">Written by CaterBidsUK Team</p>
+                <p className="text-sm font-black text-white">Written by The CaterBids Team</p>
                 <p className="text-xs font-semibold text-[#A7B5C9]">Catering Equipment Marketplace Specialists</p>
               </div>
             </div>

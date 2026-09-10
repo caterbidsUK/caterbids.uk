@@ -3360,10 +3360,12 @@ function PostListingPage() {
                   <span className="mb-1 block text-sm font-black">Type</span>
                   <select
                     name="subcategory"
+                    required
                     className="w-full rounded-2xl border border-white/20 bg-white/[0.08] px-4 py-3 text-sm font-semibold text-white focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
                     value={subcategory}
                     onChange={(e) => setSubcategory(e.target.value)}
                   >
+                    <option value="" disabled>— Select subcategory —</option>
                     {subcategoriesForCategory(category).map((item) => (
                       <option key={item}>{item}</option>
                     ))}
@@ -3376,7 +3378,7 @@ function PostListingPage() {
               const level3 = categoryByTitle(subcategory)?.subcategories ?? []
               return level3.length > 0 ? (
                 <label className="block">
-                  <span className="mb-1 block text-sm font-black">Subcategory</span>
+                  <span className="mb-1 block text-sm font-black">Subcategory <span className="text-[#FF6B00]">*</span></span>
                   <select
                     name="equipment_type"
                     className="w-full rounded-2xl border border-white/20 bg-white/[0.08] px-4 py-3 text-sm font-semibold text-white focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"

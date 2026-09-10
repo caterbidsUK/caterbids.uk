@@ -418,8 +418,8 @@ Conveyor Toaster,£120,Manchester,Cooking Equipment,Good
 6-Burner Gas Range,£800,London,Cooking Equipment,Used`}</pre>
         </div>
         <ul className="mt-3 space-y-1 text-xs text-white/45">
-          <li>• <strong className="text-white/65">Required:</strong> title, price, location</li>
-          <li>• <strong className="text-white/65">Optional:</strong> category, subcategory, condition, description</li>
+          <li>• <strong className="text-white/65">Required:</strong> title, price, location, subcategory (for categories that have one)</li>
+          <li>• <strong className="text-white/65">Optional:</strong> category, condition, description</li>
           <li>• Price: write as a plain number or with £ — e.g. 350 or £350. Avoid EU format: 15.000 is ambiguous.</li>
           <li>• Category defaults to &quot;Catering Equipment&quot; if blank</li>
           <li>• Maximum 100 rows per paste — excess rows are ignored</li>

@@ -2,6 +2,8 @@ import type { MetadataRoute } from "next"
 import { CATERING_CATEGORIES, MARKETPLACE_CATEGORIES } from "@/lib/categories"
 import { createAdminClient } from "@/lib/supabase/admin"
 
+export const revalidate = 3600 // regenerate at most once per hour so new posts appear without a redeploy
+
 const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://caterbids.uk"
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {

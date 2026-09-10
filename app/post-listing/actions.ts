@@ -5,6 +5,7 @@ import { getCurrentUser } from '@/lib/supabase/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { runEquipmentSpecPipeline } from '@/lib/equipment-specs/pipeline'
 import { entitlementHasAllowance, normalisePaymentSettings, type SellerListingEntitlement } from '@/lib/pricing'
+import { subcategoriesForCategory } from '@/lib/categories'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
@@ -290,6 +291,14 @@ export async function createListing(
     return {
       success: false,
       error: 'Please add title, price and location.',
+      code: 'VALIDATION_ERROR',
+    }
+  }
+
+  if (subcategoriesForCategory(input.category).length > 0 && !input.subcategory) {
+    return {
+      success: false,
+      error: 'Please choose a subcategory.',
       code: 'VALIDATION_ERROR',
     }
   }
