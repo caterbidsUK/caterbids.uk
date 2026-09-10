@@ -327,7 +327,7 @@ export async function createListing(
   // Check for duplicate: exact match on title, price, location, category, user_id (case insensitive for text fields)
   const { data: existing } = await supabase
     .from('listings')
-    .select('id')
+    .select('id, slug')
     .eq('user_id', user.id)
     .ilike('title', input.title)
     .ilike('price', input.price)
@@ -337,7 +337,9 @@ export async function createListing(
 
   if (existing) {
     console.warn('This listing already exists.')
-    redirect(`/account?published=existing&listing=${existing.id}`)
+    const existingAny = existing as Record<string, unknown>
+    const slugParam = existingAny.slug ? `&listingSlug=${encodeURIComponent(String(existingAny.slug))}` : ''
+    redirect(`/account?published=existing&listing=${existing.id}${slugParam}`)
   }
 
   const listingId = crypto.randomUUID()

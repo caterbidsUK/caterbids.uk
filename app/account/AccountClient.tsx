@@ -143,6 +143,7 @@ export default function AccountClient({
   })
   const publishedState = searchParams.get("published")
   const publishedListingId = searchParams.get("listing")
+  const publishedListingSlug = searchParams.get("listingSlug")
   const showPublishedNotice = Boolean(publishedState)
 
   useEffect(() => {
@@ -450,7 +451,7 @@ export default function AccountClient({
                   </Link>
                   {publishedListingId && (
                     <Link
-                      href={`/listing?id=${encodeURIComponent(publishedListingId)}`}
+                      href={publishedListingSlug ? `/listing/${publishedListingSlug}` : `/listing?id=${encodeURIComponent(publishedListingId)}`}
                       className="rounded-2xl border border-white/15 bg-white/8 px-4 py-2 text-center text-sm font-black text-white"
                     >
                       View public listing

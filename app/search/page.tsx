@@ -12,6 +12,10 @@ export const metadata = {
   alternates: {
     canonical: "https://www.caterbids.uk/search",
   },
+  robots: {
+    index: false,
+    follow: true,
+  },
 }
 
 export default async function SearchPage() {

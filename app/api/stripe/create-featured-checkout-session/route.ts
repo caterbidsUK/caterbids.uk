@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     admin.from("payment_settings" as never).select("*").limit(1).maybeSingle(),
     admin
       .from("listings")
-      .select("id, user_id, seller_id, featured, is_featured, featured_until")
+      .select("id, user_id, seller_id, slug, featured, is_featured, featured_until")
       .eq("id", listingId)
       .maybeSingle(),
   ])
@@ -61,6 +61,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Featured boost price is not configured." }, { status: 400 })
   }
 
+  const listingSlug = listingAny.slug as string | null
+  const listingPath = listingSlug ? `/listing/${listingSlug}` : `/listing?id=${encodeURIComponent(listingId)}`
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
 
   const session = await stripe.checkout.sessions.create({
@@ -86,8 +88,8 @@ export async function POST(req: NextRequest) {
       listingId,
       durationDays: String(durationDays),
     },
-    success_url: `${siteUrl}/listing?id=${encodeURIComponent(listingId)}&featured=success`,
-    cancel_url: `${siteUrl}/listing?id=${encodeURIComponent(listingId)}`,
+    success_url: `${siteUrl}${listingPath}${listingPath.includes("?") ? "&" : "?"}featured=success`,
+    cancel_url: `${siteUrl}${listingPath}`,
   })
 
   return NextResponse.json({ url: session.url })

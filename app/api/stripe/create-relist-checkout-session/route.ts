@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
   const admin = createAdminClient()
   const { data: listing } = await admin
     .from("listings")
-    .select("id, user_id, seller_id")
+    .select("id, user_id, seller_id, slug")
     .eq("id", listingId)
     .maybeSingle()
 
@@ -36,6 +36,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "You can only relist your own listings." }, { status: 403 })
   }
 
+  const listingSlug = (listing as Record<string, unknown>).slug as string | null
+  const listingPath = listingSlug ? `/listing/${listingSlug}` : `/listing?id=${encodeURIComponent(listingId)}`
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
 
   const session = await stripe.checkout.sessions.create({
@@ -60,8 +62,8 @@ export async function POST(req: NextRequest) {
       listingId,
       userId: user.id,
     },
-    success_url: `${siteUrl}/listing?id=${encodeURIComponent(listingId)}&relist=success`,
-    cancel_url: `${siteUrl}/listing?id=${encodeURIComponent(listingId)}`,
+    success_url: `${siteUrl}${listingPath}${listingPath.includes("?") ? "&" : "?"}relist=success`,
+    cancel_url: `${siteUrl}${listingPath}`,
   })
 
   return NextResponse.json({ url: session.url })
