@@ -76,8 +76,14 @@ export default async function ListingSlugPage({ params }: Props) {
 
   if (!data?.id) notFound()
 
-  const images: string[] = Array.isArray(data.images) ? data.images : []
-  const schemaImage = images.find((img: string) => img && !img.startsWith("data:"))
+  const rawImages: string[] = Array.isArray(data.images) ? data.images : []
+  const schemaImages: string[] = rawImages.filter(
+    (img: string) => typeof img === "string" && img.startsWith("http")
+  )
+  if (schemaImages.length === 0 &&
+      typeof data.image_url === "string" && data.image_url.startsWith("http")) {
+    schemaImages.push(data.image_url)
+  }
   const numericPrice = parseListingPrice(data.price)
 
   const jsonLd = {
@@ -85,7 +91,7 @@ export default async function ListingSlugPage({ params }: Props) {
     "@type": "Product",
     name: data.title ?? "",
     description: data.description ?? "",
-    ...(schemaImage ? { image: schemaImage } : {}),
+    ...(schemaImages.length > 0 ? { image: schemaImages } : {}),
     offers: {
       "@type": "Offer",
       priceCurrency: "GBP",
