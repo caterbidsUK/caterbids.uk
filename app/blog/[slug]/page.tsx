@@ -17,7 +17,6 @@ import {
   Search,
   ShieldCheck,
   Sparkles,
-  Star,
   Tag,
   Truck,
   UserCheck,
@@ -560,7 +559,7 @@ function BottomCta() {
     <section className="mt-6 rounded-[2rem] border border-[#FF6B00]/30 bg-[radial-gradient(circle_at_top_right,rgba(255,107,0,0.25),transparent_34%),linear-gradient(135deg,#062747,#001A35)] p-6 shadow-2xl sm:p-8">
       <h2 className="text-3xl font-black tracking-[-0.035em]">Ready to Sell Your Equipment?</h2>
       <p className="mt-3 text-base font-semibold leading-relaxed text-[#A7B5C9]">
-        Free to list while the first hundred listings are running, then from £5 a listing, and no final value fee at any point, so what a seller makes is what they keep.
+        Every account gets one free listing, then £5 a listing for 30 days, and no final value fee at any point, so what a seller makes is what they keep.
       </p>
       <div className="mt-6 grid gap-3 sm:grid-cols-3">
         <Link href="/post-listing/start" className="inline-flex min-h-14 items-center justify-center rounded-2xl bg-[#FF6B00] px-5 text-sm font-black text-white transition hover:brightness-110">
@@ -581,14 +580,13 @@ function TrustStrip() {
   const items = [
     ["Seller Verification", "Sellers verify their email and phone number before listing.", ShieldCheck],
     ["Secure Messaging", "Chat safely within our platform.", MessageCircle],
-    ["Buyer Protection", "Built-in tools to keep transactions safe.", Star],
     ["UK Focused", "Built for the UK catering industry.", MapPin],
     ["Expert Support", "Our team is here to help you succeed.", CheckCircle2],
   ] as const
 
   return (
     <section className="border-y border-white/10 bg-[#001A35] px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mx-auto grid max-w-7xl gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="mx-auto grid max-w-7xl gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {items.map(([title, text, Icon]) => (
           <div key={title} className="rounded-2xl border border-white/12 bg-white/8 p-4">
             <Icon className="h-6 w-6 text-[#FF6B00]" aria-hidden="true" />
