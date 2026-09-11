@@ -11,7 +11,7 @@ const INTERVAL_MS = 5000
 const FADE_MS = 200
 
 function useVisibleCount() {
-  const [count, setCount] = useState(1)
+  const [count, setCount] = useState(Infinity)
   useEffect(() => {
     const update = () => {
       if (window.matchMedia("(min-width: 1024px)").matches) setCount(3)

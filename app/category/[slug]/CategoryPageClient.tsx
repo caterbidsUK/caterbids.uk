@@ -14,6 +14,7 @@ type Listing = Database["public"]["Tables"]["listings"]["Row"]
 type CategoryPageProps = {
   params: Promise<{ slug: string }>
   freeRemaining: number
+  initialListings: Listing[]
 }
 
 const LOCAL_LISTINGS_KEY = "caterbids_listings"
@@ -91,7 +92,7 @@ function categoryMatchesListing(item: Listing, category: CaterBidsCategory) {
   )
 }
 
-export default function CategoryPageClient({ params, freeRemaining }: CategoryPageProps) {
+export default function CategoryPageClient({ params, freeRemaining, initialListings }: CategoryPageProps) {
   const router = useRouter()
   const { slug } = use(params)
   const category = categoryBySlug(slug)
@@ -107,8 +108,8 @@ export default function CategoryPageClient({ params, freeRemaining }: CategoryPa
       router.push("/")
     }
   }
-  const [listings, setListings] = useState<Listing[]>([])
-  const [loadingListings, setLoadingListings] = useState(true)
+  const [listings, setListings] = useState<Listing[]>(initialListings)
+  const [loadingListings, setLoadingListings] = useState(initialListings.length === 0)
   const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null)
 
   const filteredListings = useMemo(() => {
@@ -139,7 +140,7 @@ export default function CategoryPageClient({ params, freeRemaining }: CategoryPa
     const selectedCategory = category
 
     async function loadListings() {
-      setLoadingListings(true)
+      if (initialListings.length === 0) setLoadingListings(true)
       const supabase = createClient()
 
       const { data, error } = await supabase

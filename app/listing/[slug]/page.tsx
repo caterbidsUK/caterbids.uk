@@ -1,8 +1,54 @@
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
+import Link from "next/link"
 import { createPublicClient } from "@/lib/supabase/server"
 import ListingPage from "../ListingPageClient"
 import { parseListingPrice } from "@/lib/price"
+
+type RelatedListing = {
+  id: string
+  slug: string | null
+  title: string | null
+  price: string | null
+  images: string[] | null
+  image_url: string | null
+  subcategory: string | null
+  condition: string | null
+  location: string | null
+  city: string | null
+}
+
+function RelatedCard({ listing }: { listing: RelatedListing }) {
+  const imgs = Array.isArray(listing.images)
+    ? listing.images.filter((u): u is string => typeof u === "string" && Boolean(u))
+    : []
+  const thumb = imgs[0] ?? listing.image_url ?? null
+  const href = listing.slug ? `/listing/${listing.slug}` : null
+  if (!href) return null
+  return (
+    <Link href={href} className="group block overflow-hidden rounded-2xl border border-white/10 bg-[#001633] transition hover:border-[#FF6B00]/40">
+      <div className="relative flex h-44 items-center justify-center bg-[#001B35]">
+        {thumb ? (
+          <img src={thumb} alt={listing.title ?? ""} className="h-full w-full object-contain transition group-hover:scale-[1.02]" />
+        ) : (
+          <div className="h-10 w-10 rounded-full bg-white/10" />
+        )}
+      </div>
+      <div className="p-3">
+        {listing.subcategory && (
+          <span className="mb-1.5 inline-block rounded-full border border-white/10 bg-white/[0.08] px-2 py-0.5 text-[10px] font-bold text-white/60">
+            {listing.subcategory}
+          </span>
+        )}
+        <p className="line-clamp-2 text-sm font-bold leading-snug text-white">{listing.title}</p>
+        <p className="mt-1.5 text-base font-black text-[#FF6B00]">
+          {listing.price ? (listing.price.startsWith("£") ? listing.price : `£${listing.price}`) : ""}
+        </p>
+        <p className="mt-0.5 text-xs text-white/45">{listing.city || listing.location || "UK"}</p>
+      </div>
+    </Link>
+  )
+}
 
 type Props = {
   params: Promise<{ slug: string }>
@@ -75,6 +121,54 @@ export default async function ListingSlugPage({ params }: Props) {
     .maybeSingle()
 
   if (!data?.id) notFound()
+  if (data.status === "removed" || data.status === "payment_pending") notFound()
+
+  // Related listings: subcategory first, then category fallback to reach 3
+  const listingSubcategory: string | null = data.subcategory ?? null
+  const listingCategory: string | null = data.category ?? null
+  const listingUserId: string | null = data.user_id ?? null
+
+  let related: RelatedListing[] = []
+  try {
+    if (listingSubcategory) {
+      const { data: bySub } = await (client.from("listings" as any) as any)
+        .select("id, slug, title, price, images, image_url, subcategory, condition, location, city")
+        .eq("status", "live")
+        .eq("subcategory", listingSubcategory)
+        .neq("slug", slug)
+        .limit(6)
+      related = (bySub || []) as RelatedListing[]
+    }
+    if (related.length < 3 && listingCategory) {
+      const existingIds = related.map((r) => r.id)
+      let fallback = (client.from("listings" as any) as any)
+        .select("id, slug, title, price, images, image_url, subcategory, condition, location, city")
+        .eq("status", "live")
+        .eq("category", listingCategory)
+        .neq("slug", slug)
+        .limit(6 - related.length)
+      if (existingIds.length > 0) fallback = fallback.not("id", "in", `(${existingIds.join(",")})`)
+      const { data: byCat } = await fallback
+      related = [...related, ...((byCat || []) as RelatedListing[])]
+    }
+  } catch {
+    related = []
+  }
+
+  let sellerListings: RelatedListing[] = []
+  try {
+    if (listingUserId) {
+      const { data: byUser } = await (client.from("listings" as any) as any)
+        .select("id, slug, title, price, images, image_url, subcategory, condition, location, city")
+        .eq("status", "live")
+        .eq("user_id", listingUserId)
+        .neq("slug", slug)
+        .limit(3)
+      sellerListings = (byUser || []) as RelatedListing[]
+    }
+  } catch {
+    sellerListings = []
+  }
 
   const rawImages: string[] = Array.isArray(data.images) ? data.images : []
   const schemaImages: string[] = rawImages.filter(
@@ -101,6 +195,8 @@ export default async function ListingSlugPage({ params }: Props) {
     },
   }
 
+  const relatedLabel = listingSubcategory || listingCategory || "listings"
+
   return (
     <>
       <script
@@ -108,6 +204,22 @@ export default async function ListingSlugPage({ params }: Props) {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
       <ListingPage listingId={data.id} initialListing={data} />
+      {related.length > 0 && (
+        <section className="mx-auto max-w-5xl px-4 pb-12 pt-2 sm:px-6">
+          <h2 className="mb-4 text-lg font-black text-white">More {relatedLabel}</h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {related.map((r) => <RelatedCard key={r.id} listing={r} />)}
+          </div>
+        </section>
+      )}
+      {sellerListings.length > 0 && (
+        <section className="mx-auto max-w-5xl px-4 pb-16 pt-2 sm:px-6">
+          <h2 className="mb-4 text-lg font-black text-white">More from this seller</h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {sellerListings.map((r) => <RelatedCard key={r.id} listing={r} />)}
+          </div>
+        </section>
+      )}
     </>
   )
 }

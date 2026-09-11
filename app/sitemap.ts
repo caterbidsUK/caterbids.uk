@@ -26,16 +26,36 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${baseUrl}/legal/prohibited-items`, changeFrequency: "yearly",  priority: 0.3 },
   ]
 
-  const categoryPages: MetadataRoute.Sitemap = [
-    ...MARKETPLACE_CATEGORIES,
-    ...CATERING_CATEGORIES,
-  ].map((cat) => ({
-    url: `${baseUrl}/category/${cat.slug}`,
-    changeFrequency: "daily" as const,
-    priority: 0.6,
-  }))
-
   const admin = createAdminClient()
+
+  // Only include category pages that have at least one live listing
+  const allCategories = [...MARKETPLACE_CATEGORIES, ...CATERING_CATEGORIES]
+  let activeSlugs = new Set(allCategories.map((c) => c.slug)) // default: include all
+  try {
+    const { data: catRows } = await (admin.from("listings" as any) as any)
+      .select("category, subcategory")
+      .eq("status", "live")
+    const rows = (catRows || []) as Array<{ category: string | null; subcategory: string | null }>
+    activeSlugs = new Set<string>()
+    for (const cat of allCategories) {
+      const hasMatch = rows.some((row) => {
+        if (cat.marketplaceType) return row.category === cat.title
+        const keyword = cat.title.split(/[\s,&]+/).filter(Boolean)[0]?.toLowerCase() ?? ""
+        return keyword ? (row.subcategory ?? "").toLowerCase().includes(keyword) : false
+      })
+      if (hasMatch) activeSlugs.add(cat.slug)
+    }
+  } catch (err) {
+    console.error("sitemap: category live-listings query failed:", err)
+  }
+
+  const categoryPages: MetadataRoute.Sitemap = allCategories
+    .filter((cat) => activeSlugs.has(cat.slug))
+    .map((cat) => ({
+      url: `${baseUrl}/category/${cat.slug}`,
+      changeFrequency: "daily" as const,
+      priority: 0.6,
+    }))
 
   // Blog posts — published only, excluding test-category posts
   let blogEntries: MetadataRoute.Sitemap = []
