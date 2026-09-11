@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
-import { permanentRedirect } from "next/navigation"
+import { permanentRedirect, notFound } from "next/navigation"
 import { createAdminClient } from "@/lib/supabase/admin"
 import ListingPageClient from "./ListingPageClient"
 
@@ -65,22 +65,26 @@ export default async function ListingPage({ searchParams }: Props) {
   const id = Array.isArray(params.id) ? params.id[0] : params.id
 
   if (id) {
-    let slug: string | null = null
+    // undefined = DB call failed (fall through); null = row not found (404); object = found
+    let found: { slug?: string | null } | null | undefined = undefined
     try {
       const admin = createAdminClient()
       const { data } = await (admin.from("listings" as any) as any)
-        .select("slug")
+        .select("id, slug")
         .eq("id", id)
         .maybeSingle()
-      slug = (data as { slug?: string | null } | null)?.slug ?? null
+      found = data as { slug?: string | null } | null
     } catch {
       // DB lookup failed — fall through and let the client component handle it
     }
 
-    if (slug) {
+    if (found === null) notFound() // id supplied but no such listing exists
+
+    if (found?.slug) {
       const featuredParam = params.featured === "success" ? "?featured=success" : ""
-      permanentRedirect(`/listing/${slug}${featuredParam}`)
+      permanentRedirect(`/listing/${found.slug}${featuredParam}`)
     }
+    // found is an object with no slug → listing exists, client component handles it by id
   }
 
   return (
