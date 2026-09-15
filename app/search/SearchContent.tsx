@@ -255,16 +255,20 @@ function sortListings<T extends { created_at?: string | null; price?: string | n
   })
 }
 
+function sanitize(value: string): string {
+  return value.replace(/[\r\n\t]/g, "").replace(/  +/g, " ").trim()
+}
+
 /* ─────────────────────────────────────────────────────────────────────────── */
 
 function SearchContent({ initialListings = [] }: { initialListings: Listing[] }) {
   const params = useSearchParams()
   const router = useRouter()
 
-  const query = params.get("q") || ""
-  const categoryParam = params.get("category") || "All Categories"
-  const locationParam = params.get("location") || "All UK"
-  const initialCity = params.get("city") || (locationParam !== "All UK" ? locationParam : "")
+  const query = sanitize(params.get("q") || "")
+  const categoryParam = sanitize(params.get("category") || "All Categories")
+  const locationParam = sanitize(params.get("location") || "All UK")
+  const initialCity = sanitize(params.get("city") || (locationParam !== "All UK" ? locationParam : ""))
   const initialCondition = (params.get("condition") || "all") as ConditionFilter
 
   const [listings, setListings] = useState<Listing[]>(initialListings)
@@ -317,16 +321,21 @@ function SearchContent({ initialListings = [] }: { initialListings: Listing[] })
     nextCategory?: CategoryFilter
     nextCondition?: ConditionFilter
   } = {}) {
-    const searchParams = new URLSearchParams()
+    const sp = new URLSearchParams()
     const activeCategory = categoryBySlug(nextCategory)
-    const cleanQuery = nextQuery.trim()
-    const cleanCity = nextCity.trim()
-    searchParams.set("q", cleanQuery || "all")
-    searchParams.set("category", activeCategory?.title || "All Categories")
-    searchParams.set("location", cleanCity || locationParam || "All UK")
-    if (nextCondition !== "all") searchParams.set("condition", nextCondition)
-    if (cleanCity) searchParams.set("city", cleanCity)
-    return `/search?${searchParams.toString()}`
+    const cleanQuery = sanitize(nextQuery)
+    const cleanCity = sanitize(nextCity)
+    const categoryTitle = sanitize(activeCategory?.title || "")
+    const cleanLocation = sanitize(cleanCity || locationParam || "All UK")
+
+    if (cleanQuery && cleanQuery !== "all") sp.set("q", cleanQuery)
+    if (categoryTitle && categoryTitle !== "All Categories") sp.set("category", categoryTitle)
+    if (cleanLocation && cleanLocation !== "All UK") sp.set("location", cleanLocation)
+    if (nextCondition !== "all") sp.set("condition", nextCondition)
+    if (cleanCity) sp.set("city", cleanCity)
+
+    const qs = sp.toString()
+    return qs ? `/search?${qs}` : "/search"
   }
 
   function submitSearchForm(event: React.FormEvent<HTMLFormElement>) {
@@ -342,7 +351,7 @@ function SearchContent({ initialListings = [] }: { initialListings: Listing[] })
     setActiveFilter("all")
     setConditionFilter("all")
     setCity("")
-    router.push("/search?q=all&category=All%20Categories&location=All%20UK")
+    router.push("/search")
   }
 
   async function toggleFavourite(item: SavedFavourite) {
@@ -654,7 +663,7 @@ function SearchContent({ initialListings = [] }: { initialListings: Listing[] })
             <div className="mt-8 grid gap-2 text-base font-bold">
               {[
                 ["Home", "/"],
-                ["Browse Equipment", "/search?q=all&category=All%20Categories&location=All%20UK"],
+                ["Browse Equipment", "/search"],
                 ["Sell an Item", "/post-listing/start"],
                 ["Saved Items", "/favourites"],
                 ["Account", "/account"],
@@ -1117,7 +1126,7 @@ function SearchContent({ initialListings = [] }: { initialListings: Listing[] })
         <div className="mx-auto flex max-w-3xl items-end justify-around px-3 pb-4 pt-3">
           <MobileNavLink href="/" icon={<Home className="h-5 w-5" />} label="Home" />
           <MobileNavLink
-            href="/search?q=all&category=All%20Categories&location=All%20UK"
+            href="/search"
             icon={<Search className="h-5 w-5" />}
             label="Search"
             active
