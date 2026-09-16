@@ -1,9 +1,22 @@
 import type { Metadata } from "next"
-import { notFound } from "next/navigation"
+import { notFound, permanentRedirect } from "next/navigation"
 import Link from "next/link"
 import { createPublicClient } from "@/lib/supabase/server"
 import ListingPage from "../ListingPageClient"
 import { parseListingPrice } from "@/lib/price"
+import { CATERING_CATEGORIES, MARKETPLACE_CATEGORIES } from "@/lib/categories"
+
+function listingCategoryPath(category: string | null, subcategory: string | null): string {
+  const all = [...MARKETPLACE_CATEGORIES, ...CATERING_CATEGORIES]
+  const marketplace = all.find(c => c.marketplaceType && c.title === category)
+  if (marketplace) return `/category/${marketplace.slug}`
+  const keyword = (category || "").split(/[\s,&]+/).filter(Boolean)[0]?.toLowerCase() ?? ""
+  const catering = all.find(
+    c => !c.marketplaceType && keyword && (subcategory || "").toLowerCase().includes(keyword)
+  )
+  if (catering) return `/category/${catering.slug}`
+  return "/search"
+}
 
 type RelatedListing = {
   id: string
@@ -117,11 +130,15 @@ export default async function ListingSlugPage({ params }: Props) {
   const { data } = await (client.from("listings" as any) as any)
     .select("*")
     .eq("slug", slug)
-    .neq("status", "deleted")
     .maybeSingle()
 
   if (!data?.id) notFound()
-  if (data.status === "removed" || data.status === "payment_pending") notFound()
+
+  if (data.status === "removed" || data.status === "deleted") {
+    permanentRedirect(listingCategoryPath(data.category ?? null, data.subcategory ?? null))
+  }
+
+  if (data.status === "payment_pending") notFound()
 
   // Related listings: subcategory first, then category fallback to reach 3
   const listingSubcategory: string | null = data.subcategory ?? null

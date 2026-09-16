@@ -60,32 +60,33 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
   }
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 export default async function ListingPage({ searchParams }: Props) {
   const params = await searchParams
   const id = Array.isArray(params.id) ? params.id[0] : params.id
 
-  if (id) {
-    // undefined = DB call failed (fall through); null = row not found (404); object = found
-    let found: { slug?: string | null } | null | undefined = undefined
-    try {
-      const admin = createAdminClient()
-      const { data } = await (admin.from("listings" as any) as any)
-        .select("id, slug")
-        .eq("id", id)
-        .maybeSingle()
-      found = data as { slug?: string | null } | null
-    } catch {
-      // DB lookup failed — fall through and let the client component handle it
-    }
+  if (!id || !UUID_RE.test(id)) notFound()
 
-    if (found === null) notFound() // id supplied but no such listing exists
-
-    if (found?.slug) {
-      const featuredParam = params.featured === "success" ? "?featured=success" : ""
-      permanentRedirect(`/listing/${found.slug}${featuredParam}`)
-    }
-    // found is an object with no slug → listing exists, client component handles it by id
+  let found: { slug?: string | null } | null | undefined = undefined
+  try {
+    const admin = createAdminClient()
+    const { data } = await (admin.from("listings" as any) as any)
+      .select("id, slug")
+      .eq("id", id)
+      .maybeSingle()
+    found = data as { slug?: string | null } | null
+  } catch {
+    // DB lookup failed
   }
+
+  if (found == null) notFound() // null (no row) or undefined (DB error) — both 404
+
+  if (found?.slug) {
+    const featuredParam = params.featured === "success" ? "?featured=success" : ""
+    permanentRedirect(`/listing/${found.slug}${featuredParam}`)
+  }
+  // found is an object with no slug → listing exists, client component handles it by id
 
   return (
     <Suspense
