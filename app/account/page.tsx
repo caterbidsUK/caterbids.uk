@@ -725,7 +725,7 @@ function SellerVerificationPanel({
     {
       title: "Phone verification",
       detail: phoneVerified ? profilePhoneNumber(profile) || "Mobile number verified." : "Verify a UK mobile number by SMS.",
-      status: phoneVerified ? "Verified" : "Required",
+      status: phoneVerified ? "Verified" : "Optional",
       tone: phoneVerified ? ("good" as const) : ("todo" as const),
       icon: Smartphone,
     },

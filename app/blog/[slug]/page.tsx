@@ -578,7 +578,7 @@ function BottomCta() {
 
 function TrustStrip() {
   const items = [
-    ["Seller Verification", "Sellers verify their email and phone number before listing.", ShieldCheck],
+    ["Seller Verification", "Sellers verify their email address before listing.", ShieldCheck],
     ["Secure Messaging", "Chat safely within our platform.", MessageCircle],
     ["UK Focused", "Built for the UK catering industry.", MapPin],
     ["Expert Support", "Our team is here to help you succeed.", CheckCircle2],
